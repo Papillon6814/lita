@@ -5,9 +5,8 @@
 ## v0.1 に必要（優先順）
 
 - [ ] **B-10 約30秒の待ち時間の扱いを決める** — ストリーミングがないため生成中は無音になる。UI を作る前に product としての答えを出す（D-19）
-- [ ] **B-02 Slack の権限要件の検証** — `search.messages` が有料プラン必須かを確認する（未検証）。必須なら `conversations.history` + 自分の user_id フィルタへフォールバックする設計にする
-- [ ] **B-03 Slack App の作成と PKCE 有効化** — 本人の手作業。`pkce_enabled: true`、redirect_urls に `lita://oauth`、user scopes を確定。**PKCE の有効化は取り消せない一方向の操作**である点に注意
 - [ ] **B-04 Voice プロファイルのスキーマ確定** — PoC の出力を叩き台に、各フィールドへ `description` を付けて固める（D-18）
+- [ ] **B-12 貼り付け／ファイル取り込みの UI** — 文章を20件ほど受け取って Voice の材料にする。v0.1 の入口（D-20）
 - [ ] **B-11 未ログイン・利用上限の実地再現** — 現在は stderr の文字列マッチで分類しており脆い。より確かな判定手段がないか確かめる
 - [ ] **B-05 Tauri v2 スキャフォールド** — `tauri-plugin-deep-link`、SQLite、keyring を含む最小構成
 - [ ] **B-06 SQLite スキーマ設計** — Voice / VoiceSource / Brief / Draft / Platform
@@ -16,6 +15,7 @@
 
 ## v0.2 以降（意図的に保留）
 
+- [ ] **B-03 Slack ボタン連携（PKCE + `lita://oauth`）**（2026-09-22 に v0.1 から延期）。着手前に、公開配布と カスタム URI スキームの両立、および `search:read` の取得可否を実機で確かめること
 - [ ] B-20 記事 URL を文体ソースにする（2026-09-22 保留）
 - [ ] B-21 note / Medium 向けの長文出力（2026-09-22 保留）
 - [ ] B-22 複数 Voice の使い分け（2026-09-22 保留）
@@ -27,5 +27,6 @@
 ## 完了
 
 - [x] **B-00 リポジトリ初期化と PM 運用の土台** — 2026-09-22 完了。LICENSE / README / .gitignore / `.claude/agents/lita-pm.md` / `docs/pm/` を作成
+- [x] **B-02 Slack の権限要件の検証** — 2026-09-22 完了。Slack 側はほぼ塞がっていること、および Voice に必要な発言数が数十件で足りることを確認。v0.1 のスコープ変更（D-20）に至った
 - [x] **B-01 Codex 呼び出しの PoC** — 2026-09-22 完了。型付き JSON の受け取り、非リポジトリでの実行、プリフライトすべて確認。制約を3つ発見（検証記録参照）
 - [x] **B-09 GitHub への push と公開** — 2026-09-22 完了。https://github.com/Papillon6814/lita を public + MIT で公開
