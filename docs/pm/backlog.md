@@ -12,7 +12,6 @@
 - [ ] **B-06 SQLite スキーマ設計** — Voice / VoiceSource / Brief / Draft / Platform
 - [ ] **B-07 ブリーフ入力 → 生成 → 承認 → コピーの UI**
 - [ ] **B-08 送信内容の可視化** — 何が OpenAI に送られるかを生成前に見せる
-- [ ] **B-09 GitHub への push と公開**
 
 ## v0.2 以降（意図的に保留）
 
@@ -27,3 +26,4 @@
 ## 完了
 
 - [x] **B-00 リポジトリ初期化と PM 運用の土台** — 2026-09-22 完了。LICENSE / README / .gitignore / `.claude/agents/lita-pm.md` / `docs/pm/` を作成
+- [x] **B-09 GitHub への push と公開** — 2026-09-22 完了。https://github.com/Papillon6814/lita を public + MIT で公開

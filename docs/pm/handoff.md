@@ -10,6 +10,7 @@
 2. 技術選定を確定（Tauri v2 / Codex CLI サブプロセス / SQLite / Slack PKCE / MIT / 英語 UI）
 3. リポジトリを初期化し、PM エージェントと状態ファイルの運用を敷いた
 4. Notion に仕様ページを作成（正）
+5. リポジトリを public + MIT で公開（https://github.com/Papillon6814/lita）
 
 ## 次の一手（この順で）
 
