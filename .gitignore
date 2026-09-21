@@ -1,0 +1,30 @@
+# Build
+/dist
+/build
+**/target/
+*.app
+*.dmg
+
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Local data — never commit user content or credentials
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+/data/
+.env
+.env.*
+!.env.example
+*.pem
+auth.json
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Tauri
+src-tauri/gen/
