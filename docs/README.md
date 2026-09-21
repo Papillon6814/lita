@@ -11,6 +11,8 @@
 | Where | What it holds |
 | --- | --- |
 | Notion "Lita" | Product spec, decision table, risks, open questions |
+| Notion "Lita — 技術仕様" | Codex invocation, Slack PKCE flow, data model, Voice schema |
+| Notion "Lita — 引き継ぎメモ" | Cross-session progress and the next move |
 | `docs/pm/state.md` | Where the project is right now |
 | `docs/pm/decisions.md` | Decision log — issue, decision, rationale, date |
 | `docs/pm/backlog.md` | What is not done yet, in priority order |

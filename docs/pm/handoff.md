@@ -23,3 +23,9 @@
 - コード変更は必ず worktree + feature branch で行う（main 直コミット禁止）
 - 決定を変えるときは Notion の決定事項表と `docs/pm/decisions.md` の両方を更新する
 - Codex のトークンには絶対に触らない。`codex` を起動するだけ
+
+## Notion（正）へのリンク
+
+- 仕様本体: https://www.notion.so/3e29cda8bea1809e9077d080a350d218
+- 技術仕様: https://www.notion.so/3e29cda8bea18131a10dc9037e9fa189
+- 引き継ぎメモ: https://www.notion.so/3e29cda8bea1810caf0ec83deebc4302
