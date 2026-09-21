@@ -28,8 +28,10 @@ recorded in `docs/pm/decisions.md`.
 2. **Never commit user content or secrets.** `*.sqlite`, `auth.json`, and `.env`
    are gitignored; keep it that way.
 3. **Local-first.** No Lita-operated server, no telemetry, no account system.
-4. **Scope discipline.** v0.1 is: Slack connect → one Voice → brief → X post →
-   approve → copy. Anything else goes in the backlog.
+4. **Scope discipline.** v0.1 is: paste writing → one Voice → brief → X post →
+   approve → copy. Anything else goes in the backlog. Slack was deliberately
+   cut from v0.1 — see `docs/pm/2026-09-22-slack-scopes.md` before proposing it
+   back.
 
 ## Calling Codex from Lita
 

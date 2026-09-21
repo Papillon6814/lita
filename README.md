@@ -18,22 +18,26 @@ ChatGPT login stays where it is and Lita never touches your credentials.
 Most AI writing tools give you a blank box and a generic model. You end up
 rewriting everything because it does not sound like you.
 
-Lita inverts that. It learns a **Voice** from writing you have already done —
-your Slack messages, your past articles — and treats that Voice as the contract
-every draft has to satisfy. The human job is the brief and the approval, not
-the typing.
+Lita inverts that. It learns a **Voice** from writing you have already done, and
+treats that Voice as the contract every draft has to satisfy. The human job is
+the brief and the approval, not the typing.
+
+You do not need much: we measured it, and a voice profile is essentially stable
+from four messages. Twenty pieces of writing you actually like will beat five
+hundred scraped ones, because nothing you dislike gets in.
 
 ## How it works
 
 ```
-Voice sources ──▶ Voice profile ──┐
-(Slack, past articles)            │
-                                  ├──▶ Codex CLI ──▶ Draft ──▶ you approve ──▶ export
-Brief ────────────────────────────┘
+Writing you like ──▶ Voice profile ──┐
+(paste it, or drop a file)           │
+                                     ├──▶ Codex CLI ──▶ Draft ──▶ you approve ──▶ export
+Brief ───────────────────────────────┘
 ("announce the v2 launch, aimed at existing users")
 ```
 
-1. **Connect a source.** One button connects Slack; Lita reads your own messages.
+1. **Hand it some writing.** Paste twenty things you have written and are happy
+   with, or drop in a file.
 2. **Build a Voice.** Codex distills tone, cadence, vocabulary, and structure
    into an editable profile. You correct anything it got wrong.
 3. **Write a brief.** A sentence or two about what to say and who to say it to.
@@ -58,14 +62,13 @@ Brief ────────────────────────�
 - macOS, Windows, or Linux
 - [Codex CLI](https://developers.openai.com/codex/cli) installed and logged in
   (`codex login`)
-- A Slack workspace, if you want to build a Voice from Slack
 
 ## Roadmap
 
 | Version | Scope |
 | --- | --- |
-| **v0.1** | Slack connect (one button) · one Voice · brief → X post → approve → copy |
-| v0.2 | Multi-platform output (note, Medium) · article URLs as a Voice source |
+| **v0.1** | Paste your writing · one Voice · brief → X post → approve → copy |
+| v0.2 | Multi-platform output (note, Medium) · Slack and article URLs as Voice sources |
 | v0.3 | Multiple Voices · draft history and re-editing |
 | Later | Publisher plugins (draft-to-platform), scheduled generation |
 
