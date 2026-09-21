@@ -4,10 +4,11 @@
 
 ## v0.1 に必要（優先順）
 
-- [ ] **B-01 Codex 呼び出しの PoC** — Rust から `codex exec --json --output-schema --sandbox read-only --skip-git-repo-check` を起動し、型付き JSON を受け取る。`codex` 未インストール／未ログインの検出も含める。**ここが崩れると設計全体が崩れるので最優先**
+- [ ] **B-10 約30秒の待ち時間の扱いを決める** — ストリーミングがないため生成中は無音になる。UI を作る前に product としての答えを出す（D-19）
 - [ ] **B-02 Slack の権限要件の検証** — `search.messages` が有料プラン必須かを確認する（未検証）。必須なら `conversations.history` + 自分の user_id フィルタへフォールバックする設計にする
 - [ ] **B-03 Slack App の作成と PKCE 有効化** — 本人の手作業。`pkce_enabled: true`、redirect_urls に `lita://oauth`、user scopes を確定。**PKCE の有効化は取り消せない一方向の操作**である点に注意
-- [ ] **B-04 Voice プロファイルのスキーマ確定** — B-01 で実際に文体抽出させ、出てきた項目から逆算して確定する
+- [ ] **B-04 Voice プロファイルのスキーマ確定** — PoC の出力を叩き台に、各フィールドへ `description` を付けて固める（D-18）
+- [ ] **B-11 未ログイン・利用上限の実地再現** — 現在は stderr の文字列マッチで分類しており脆い。より確かな判定手段がないか確かめる
 - [ ] **B-05 Tauri v2 スキャフォールド** — `tauri-plugin-deep-link`、SQLite、keyring を含む最小構成
 - [ ] **B-06 SQLite スキーマ設計** — Voice / VoiceSource / Brief / Draft / Platform
 - [ ] **B-07 ブリーフ入力 → 生成 → 承認 → コピーの UI**
@@ -26,4 +27,5 @@
 ## 完了
 
 - [x] **B-00 リポジトリ初期化と PM 運用の土台** — 2026-09-22 完了。LICENSE / README / .gitignore / `.claude/agents/lita-pm.md` / `docs/pm/` を作成
+- [x] **B-01 Codex 呼び出しの PoC** — 2026-09-22 完了。型付き JSON の受け取り、非リポジトリでの実行、プリフライトすべて確認。制約を3つ発見（検証記録参照）
 - [x] **B-09 GitHub への push と公開** — 2026-09-22 完了。https://github.com/Papillon6814/lita を public + MIT で公開
