@@ -1,0 +1,22 @@
+[package]
+name = "lita-auth"
+version = "0.0.0"
+description = "Signs the person in with Google on the desktop and turns that into a Lita (Supabase) session."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+getrandom = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+url = "2"
+
+[dev-dependencies]
+
+[[bin]]
+name = "login"
+path = "src/bin/login.rs"

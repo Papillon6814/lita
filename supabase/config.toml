@@ -160,7 +160,8 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The desktop app receives the OAuth result on a random loopback port (D-37).
+additional_redirect_urls = ["http://127.0.0.1:*", "http://127.0.0.1:*/", "http://127.0.0.1:*/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -319,6 +320,17 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google sign-in (D-37, D-41). Supabase runs the Google exchange on its own
+# callback and holds the secret; the app never sees it. The client below must
+# be a Google "Web application" client whose redirect URI is
+# https://<ref>.supabase.co/auth/v1/callback.
+[auth.external.google]
+enabled = true
+client_id = "131737675250-k64l1os3vrn3ld4ab9vpt4eavisos0hn.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+skip_nonce_check = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""

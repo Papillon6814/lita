@@ -87,3 +87,11 @@
 | D-38 | 同期対象 | **Voice・材料・ブリーフ・下書きの全部** | 生成履歴も全 PC で見えるようにする |
 | D-39 | スコープ | **バックエンドとアカウントは v0.1 に含める** | 完成定義（D-21）の前段に「Google でログイン」が加わる |
 | D-40 | バックエンド基盤 | **Supabase（東京 ap-northeast-1）** | 18 候補を調査。無料・東京・Google ログイン組み込み・セルフホスト可・素の Postgres を同時に満たすのは Supabase のみ。弱点は 2026 年の障害の多さで、RLS と SQL だけに依存して移設可能に保つことで担保する |
+
+## 2026-09-22 — Google ログインの実機検証
+
+検証記録: [`docs/pm/2026-09-22-google-login.md`](2026-09-22-google-login.md)
+
+| # | 論点 | 決定 | 理由・補足 |
+| --- | --- | --- | --- |
+| D-41 | Google が要求する `client_secret` の扱い | **アプリは Google と直接話さず、Supabase 経由の OAuth にする。Google 側は Web application クライアント、シークレットは Supabase が保持** | 実機で、Desktop app クライアントでもコード交換に `client_secret` が必須だと確定した。公開リポジトリにシークレットを載せない方を選ぶ。アプリは Supabase の `/auth/v1/authorize` に PKCE で入り、結果をループバック `http://127.0.0.1:<port>/` で受ける（許可リストに `http://127.0.0.1:*` 系を登録済み） |
