@@ -196,6 +196,18 @@ export const en = {
   "time.minutesAgo": "{n} min ago",
   "time.hoursAgo": "{n} h ago",
   "time.daysAgo": "{n} d ago",
+  "versions.title": "Versions",
+  "versions.hint": "A version is kept each time Lita writes, rewrites or restores. While editing, one is kept every ten minutes and when you close the article.",
+  "versions.keep": "Keep this state as a version",
+  "versions.none": "No versions yet.",
+  "versions.current": "current text",
+  "versions.restore": "Restore this version",
+  "versions.restoreConfirm": "Restore the version from {when}? The current text is kept as a version too.",
+  "versions.kind.generated": "Written by Lita",
+  "versions.kind.shortened": "Rewritten shorter",
+  "versions.kind.edited": "Edited",
+  "versions.kind.restored": "Restored",
+  "versions.kind.manual": "Kept",
   "privacy.note": "Lita never touches your OpenAI credentials; it only starts the codex command. Codex receives only your writing when building a Voice, and your brief plus the Voice summary when writing. Results are stored with your Lita account.",
 } as const;
 

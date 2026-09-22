@@ -255,3 +255,20 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .assist .prompt { max-height: 200px; }
 .assist-foot { display: flex; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 @media (max-width: 980px) { .editor-grid { grid-template-columns: 1fr; } .assist { position: static; } }
+
+/* Version history (replaces the assist panel while open) */
+.editor-bar-right { display: inline-flex; align-items: center; gap: 12px; }
+.editor-bar-right .quiet.on { color: var(--mint-ink); background: var(--mint-soft); }
+.versions { position: sticky; top: 26px; max-height: calc(100vh - 52px); overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.versions h3 { margin: 0; font-size: 1rem; }
+.versions .hint { margin: 0; }
+.versions .btn { align-self: flex-start; }
+.version-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.version { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; background: none; border: none; border-bottom: 1px solid var(--line); padding: 9px 6px; cursor: pointer; border-radius: 0; color: var(--fg); }
+.version:hover { background: var(--soft); }
+.version.on { background: var(--mint-soft); }
+.v-kind { font-weight: 500; }
+.v-when { color: var(--mute); font-size: 0.85rem; margin-left: auto; }
+.version-preview { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.v-title { font-weight: 700; }
+.v-body { background: var(--soft); white-space: pre-wrap; font-family: inherit; font-size: 0.92rem; line-height: 1.7; max-height: 40vh; overflow: auto; margin: 0; }
