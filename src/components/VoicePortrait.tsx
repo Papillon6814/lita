@@ -69,7 +69,7 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
           </p>
           <div className="cta">
             <button className="btn pri" onClick={onWrite} disabled={!onWrite}>{t("voice.write")}</button>
-            <button className="quiet" onClick={onStartOver}>{t("voice.startOver")}</button>
+            <button className="quiet" onClick={onStartOver}>{t("voice.delete")}</button>
           </div>
         </div>
       </section>

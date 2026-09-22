@@ -95,6 +95,7 @@ export type ArticleVersion = {
 };
 export type ArticleWritten = { article: Article; version: ArticleVersion; voice_notes: string };
 export type UserSettings = { default_voice_id: string | null };
+export type Trial = { title: string; text: string; voice_notes: string; elapsed_ms: number };
 export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
 
 
@@ -130,6 +131,7 @@ export type Host = {
   generateIntoArticle: (articleId: string, effort: Effort, previous?: string) => Promise<ArticleWritten>;
   getSettings: () => Promise<UserSettings>;
   setDefaultVoice: (voiceId: string | null) => Promise<void>;
+  trialWrite: (voiceId: string, brief: string, platformId: string, effort: Effort) => Promise<Trial>;
   copyText: (text: string) => Promise<void>;
   importNote: (account: string) => Promise<Imported>;
   importMedium: (handle: string) => Promise<Imported>;

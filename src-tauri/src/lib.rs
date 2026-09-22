@@ -558,6 +558,48 @@ async fn generate_into_article(app: AppHandle, article_id: String, effort: Store
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// Trial write (v0.2 voices): one generation for a voice and a brief that is
+/// not stored anywhere, so a person can tune the profile and compare.
+#[tauri::command]
+async fn trial_write(app: AppHandle, voice_id: String, brief: String, platform_id: String, effort: StoredEffort) -> Result<Trial, UiError> {
+    let brief = brief.trim().to_string();
+    if brief.is_empty() {
+        return Err(UiError::invalid("write a brief first"));
+    }
+    let (token, cancel) = {
+        let state = app.state::<AppState>();
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        (state.access_token()?, Arc::clone(&state.generate_cancel))
+    };
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Trial, UiError> {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
+        let platform = store
+            .platforms()
+            .map_err(fail)?
+            .into_iter()
+            .find(|p| p.id == platform_id)
+            .ok_or_else(|| UiError::invalid("no such platform"))?;
+        let prompt = generation_prompt(&voice.profile, &brief, &rules_of(&platform));
+        let req = Request { prompt, schema: post_schema(), model: None, effort: effort.into(), working_dir };
+        let run = CodexCli::on_path().run_typed_cancellable::<PostDraft>(&req, |_| {}, cancel).map_err(fail)?;
+        Ok(Trial { title: run.value.title, text: run.value.text.trim().to_string(), voice_notes: run.value.voice_notes, elapsed_ms: run.elapsed.as_millis() as i64 })
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[derive(Debug, Serialize)]
+pub struct Trial {
+    pub title: String,
+    pub text: String,
+    pub voice_notes: String,
+    pub elapsed_ms: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ArticleWritten {
     pub article: Article,
@@ -809,6 +851,7 @@ pub fn run() {
             cancel_generate,
             set_draft_status,
             generate_into_article,
+            trial_write,
             list_articles,
             get_article,
             create_article,

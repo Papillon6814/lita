@@ -39,6 +39,7 @@ export const tauriHost: T.Host = {
   generateIntoArticle: (articleId, effort, previous) => invoke<T.ArticleWritten>("generate_into_article", { articleId, effort, previous: previous ?? null }),
   getSettings: () => invoke<T.UserSettings>("get_settings"),
   setDefaultVoice: (voiceId) => invoke<void>("set_default_voice", { voiceId }),
+  trialWrite: (voiceId, brief, platformId, effort) => invoke<T.Trial>("trial_write", { voiceId, brief, platformId, effort }),
   copyText: (text: string) => writeText(text),
   importNote: (account: string) => invoke<T.Imported>("import_note", { account }),
   importMedium: (handle: string) => invoke<T.Imported>("import_medium", { handle }),
