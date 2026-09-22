@@ -7,6 +7,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
+use lita_codex::voice::VoiceProfile;
 use lita_codex::{CodexCli, Effort, Event, Preflight, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -25,63 +26,10 @@ const SAMPLE_MESSAGES: &[&str] = &[
 ];
 
 #[derive(Debug, Deserialize, Serialize)]
-struct VoiceProfile {
-    first_person: String,
-    tone: Vec<String>,
-    sentence_endings: Vec<String>,
-    avg_sentence_length_chars: i64,
-    preferred_words: Vec<String>,
-    avoided_words: Vec<String>,
-    opens_with: String,
-    uses_emoji: bool,
-    representative_excerpts: Vec<Excerpt>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Excerpt {
-    excerpt: String,
-    why: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 struct Post {
     text: String,
     char_count: i64,
     voice_notes: String,
-}
-
-fn voice_schema() -> Value {
-    json!({
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-            "first_person", "tone", "sentence_endings", "avg_sentence_length_chars",
-            "preferred_words", "avoided_words", "opens_with", "uses_emoji",
-            "representative_excerpts"
-        ],
-        "properties": {
-            "first_person": { "type": "string" },
-            "tone": { "type": "array", "items": { "type": "string" } },
-            "sentence_endings": { "type": "array", "items": { "type": "string" } },
-            "avg_sentence_length_chars": { "type": "integer" },
-            "preferred_words": { "type": "array", "items": { "type": "string" } },
-            "avoided_words": { "type": "array", "items": { "type": "string" } },
-            "opens_with": { "type": "string" },
-            "uses_emoji": { "type": "boolean" },
-            "representative_excerpts": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["excerpt", "why"],
-                    "properties": {
-                        "excerpt": { "type": "string" },
-                        "why": { "type": "string" }
-                    }
-                }
-            }
-        }
-    })
 }
 
 fn post_schema() -> Value {
@@ -174,7 +122,7 @@ fn main() -> Result<()> {
     let voice = codex.run_typed::<VoiceProfile>(
         &Request {
             prompt: voice_prompt,
-            schema: voice_schema(),
+            schema: VoiceProfile::extraction_schema(),
             model: None,
             effort: Effort::Quality,
             working_dir: workdir.path().to_path_buf(),
@@ -195,7 +143,7 @@ fn main() -> Result<()> {
          sentence endings and emoji habit exactly — the profile is a contract, not a \
          suggestion. `char_count` is the character count of `text`. In `voice_notes`, say in \
          one sentence which parts of the profile you leaned on.",
-        serde_json::to_string_pretty(&voice.value)?
+        serde_json::to_string_pretty(&voice.value.generation_view())?
     );
     lita_codex::assert_no_credentials(&post_prompt);
 
