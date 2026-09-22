@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "mock": "VITE_LITA_MOCK=1 vite --port 1430 --strictPort"
   },
   "dependencies": {
     "@fontsource/zen-kaku-gothic-new": "^5.3.0",

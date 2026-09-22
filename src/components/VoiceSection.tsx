@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { host, type SourceInput, type UiError, type Voice } from "../platform/host";
+import { mockScene } from "../platform/mock";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
 import { VoiceIntake } from "./VoiceIntake";
@@ -17,8 +18,10 @@ export function VoiceSection() {
     setState({ kind: "loading" });
     try {
       const [first] = await host.listVoices();
-      if (!first) return setState({ kind: "none" });
+      if (!first) return setState({ kind: mockScene() === "building" ? "building" : "none" });
       const voice = await host.getVoice(first.id);
+      const scene = mockScene();
+      if (voice && scene?.startsWith("write")) return setState({ kind: "write", voice });
       setState(voice ? { kind: "ready", voice } : { kind: "none" });
     } catch (e) {
       setState({ kind: "none", error: asUiError(e) });

@@ -3,6 +3,7 @@ import { host, type Imported, type MaterialBudget, type SourceInput, type Source
 import { asUiError } from "../errors";
 import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
+import { mockScene } from "../platform/mock";
 
 type Piece = { key: number; kind: SourceKind; origin: string | null; title: string | null; body: string; selected: boolean; editing: boolean };
 type Source = "note" | "medium" | "x";
@@ -45,6 +46,7 @@ export function VoiceIntake({ onBuild, error }: { onBuild: (name: string, source
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => { void host.materialBudget().then(setBudget).catch(() => {}); }, []);
+  useEffect(() => { if (mockScene() === "intake-loaded") { setAccount("kuno"); void runImport("note", () => host.importNote("kuno")); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const selected = pieces.filter((p) => p.selected && p.body.trim().length > 0);
   const use = useMemo(() => usage(selected, budget), [selected, budget]);

@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { leadSentence } from "../summary";
 import { ErrorNote } from "./ErrorNote";
 import type { UiError } from "../platform/host";
+import { mockScene } from "../platform/mock";
 
 const LANGUAGES: Record<string, string> = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", fr: "Français", de: "Deutsch", es: "Español" };
 const languageName = (tag: string) => LANGUAGES[tag.toLowerCase().split("-")[0]] ?? tag;
@@ -13,7 +14,7 @@ type Props = { voice: Voice; onChange: (v: Voice) => void; onStartOver: () => vo
 
 // The daily screen: Lita's one-line reading, the main action, details folded.
 export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(mockScene() === "voice-open");
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(voice.name);
   const [error, setError] = useState<UiError | null>(null);

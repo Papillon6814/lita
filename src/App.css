@@ -176,7 +176,12 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--mint-ink); animation: spin .9s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: var(--mint-ink); } }
-.draft { margin-top: 20px; border: 1px solid #d9efe9; background: linear-gradient(135deg, var(--mint-soft), var(--bg) 60%); border-radius: 16px; padding: 18px 20px; }
+.draft { margin: 12px 0 18px; border: 1px solid #d9efe9; background: linear-gradient(135deg, var(--mint-soft), var(--bg) 60%); border-radius: var(--r-box); padding: 18px 20px; }
+.draft-head h3:focus { outline: none; }
+.brief-line { font-size: 0.95rem; line-height: 1.7; margin: 0 0 8px; }
+.brief-line .link { margin-left: 6px; }
+.opt-static { padding: 8px 0; }
+.write .row { align-items: center; gap: 14px; }
 .draft-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .draft-head h3 { margin: 0; font-size: 1rem; }
 .count { color: var(--mute); font-size: 0.85rem; font-variant-numeric: tabular-nums; }

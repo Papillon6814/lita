@@ -64,13 +64,15 @@ Reference: https://developers.openai.com/codex/cli/reference
 crates/lita-codex/   drives the Codex CLI; owns VoiceProfile (src/voice.rs)
 src-tauri/           Tauri shell — #[tauri::command]s only, logic lives in crates/
 src/                 React + TypeScript frontend (Vite)
-src/platform/        the ONLY place that imports @tauri-apps/*
+src/platform/        the ONLY place that imports @tauri-apps/* (tauri.ts); mock.ts is the browser stand-in
 src/i18n/            English default; every locale must cover every key
 docs/pm/             decisions, backlog, state, handoff
 ```
 
 Commands: `npm run tauri dev`, `npm run tauri build`, `npm run build`
-(type-check + bundle the frontend), `cargo test`.
+(type-check + bundle the frontend), `cargo test`, `npm run mock` (every screen
+in a plain browser at `http://localhost:1430/?scene=<name>`; scenes listed at
+the top of `src/platform/mock.ts` — this is how screenshots are taken).
 
 ## Working agreement
 
