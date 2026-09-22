@@ -32,6 +32,7 @@
 24. **v0.2 段階 3: 版履歴**。エディタ右上の「版履歴」で右パネルが一覧に切り替わる（種類・時刻・いまの本文の印）。選ぶとプレビュー、「この版に戻す」は確認のうえ復元（元の本文は版に残る）。「いまの状態を版として残す」。自動 snapshot は編集中 10 分ごと（30 秒間隔で判定）と閉じるとき
 25. **v0.2 段階 4: 長文生成**。出す先に上限が無いとき（note / Medium）は `generation_prompt` が「記事」を求める: `title` を別に返し、段落は空行区切り、見出しは「## 」を要所だけ、長さはブリーフに従い既定は読了 4〜6 分。実機 1 回（note、丁寧に）で見出し付きの記事が返った（`cargo run -p lita-codex --example longform`）。エディタは note / Medium で「文字数・読了 n 分ほど」を出し、考える量のヒントも長文用に変わる
 26. **Codex の設定ファイル破損を未ログインと誤判定していたのを修正**。`~/.codex/config.toml` の重複キー（一時的に発生）で `codex doctor` が auth を報告せず、`login status` も exit 1 になり、アプリが「ログインしていません」と出ていた。`Preflight::ConfigBroken`（`config.load` の失敗を見る）と、`logged_in()` は「Not logged in」の文言があるときだけ false、に変更。UI は「設定ファイルを読み込めません」＋ `codex doctor` の案内
+27. **v0.2 段階 5: 文体**。「文体」は Voice 一覧（既定が先頭、各行に一文）→ Voice 画面（人物紹介＋詳細＋**試し書き**）。試し書きは記事にせず `trial_write` で 1 本書き、詳細を直してもう一度書くと「前／今」を横並び。「既定にする」、最初の Voice は自動で既定。「作り直す」は「この Voice を削除」に（記事は残り、Voice の指定だけ外れる）
 
 ## いま決まっていること
 
@@ -41,7 +42,7 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## 次の一手（この順で）
 
-0. **v0.2 の 3 柱（#49、D-44〜D-46）を段階ごとに進める**: 1 スキーマ・ストア・コマンド（完了）→ 2 Shell＋記事一覧＋エディタ（自動保存）（完了）→ 3 版履歴（完了）→ 4 長文生成（完了）→ 5 Voice 複数・試し書き比較 → 6 モックで UX 再レビュー。計画は `~/.claude-profiles/personal/config/plans/shimmering-exploring-anchor.md`
+0. **v0.2 の 3 柱（#49、D-44〜D-46）を段階ごとに進める**: 1 スキーマ・ストア・コマンド（完了）→ 2 Shell＋記事一覧＋エディタ（自動保存）（完了）→ 3 版履歴（完了）→ 4 長文生成（完了）→ 5 Voice 複数・試し書き比較（完了）→ 6 モックで UX 再レビュー。計画は `~/.claude-profiles/personal/config/plans/shimmering-exploring-anchor.md`
 1. **本人のドッグフーディング（2026-09-23 開始）** — `/Applications/Lita.app`（`npm run tauri build` の ad-hoc 署名ビルド、本人の Mac でのみ動く）で実投稿を書く。違和感は backlog へ。特に抽出が汎用語を特徴語に拾う件
 2. **配布（B-26 / #25、v0.2）** — 署名・公証・Homebrew cask。未使用の「Lita desktop」OAuth クライアントは 2026-09-22 に削除済み（30 日は復元可）
 
