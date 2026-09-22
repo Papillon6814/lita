@@ -45,6 +45,8 @@ impl From<Preflight> for CodexStatus {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SessionStatus {
+    /// The stored session is still being refreshed; ask again shortly.
+    Restoring,
     SignedOut,
     SignedIn { email: Option<String> },
 }
@@ -64,6 +66,8 @@ pub struct AppState {
     store: Store,
     keychain: SessionStore,
     session: Mutex<Option<Session>>,
+    /// True until the launch-time restore has finished.
+    restoring: AtomicBool,
     /// Set by `cancel_sign_in`; cleared when a sign-in starts.
     sign_in_cancel: Arc<AtomicBool>,
     /// Set by `cancel_voice_build`; cleared when a build starts.
@@ -77,6 +81,7 @@ impl AppState {
             store: Store::new(config::SUPABASE_URL, config::SUPABASE_ANON_KEY)?,
             keychain: SessionStore::new(config::KEYCHAIN_SERVICE),
             session: Mutex::new(None),
+            restoring: AtomicBool::new(true),
             sign_in_cancel: Arc::new(AtomicBool::new(false)),
             build_cancel: Arc::new(AtomicBool::new(false)),
         })
@@ -104,9 +109,13 @@ impl AppState {
             }
         };
         *self.session.lock().unwrap() = restored;
+        self.restoring.store(false, Ordering::Release);
     }
 
     fn status(&self) -> SessionStatus {
+        if self.restoring.load(Ordering::Acquire) {
+            return SessionStatus::Restoring;
+        }
         SessionStatus::from(self.session.lock().unwrap().as_ref())
     }
 

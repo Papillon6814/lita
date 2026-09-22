@@ -17,9 +17,19 @@ export default function App() {
   const [auth, setAuth] = useState<Auth>({ kind: "checking" });
   const stepsRef = useRef<HTMLElement>(null);
 
+  // The native side refreshes the stored session on launch; keep asking
+  // until it has decided, so a slow network never shows as "signed out".
   const loadSession = useCallback(async () => {
-    try { setAuth({ kind: "done", status: await host.sessionStatus() }); }
-    catch (e) { setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) }); }
+    for (let i = 0; i < 100; i++) {
+      try {
+        const status = await host.sessionStatus();
+        if (status.status !== "restoring") return setAuth({ kind: "done", status });
+      } catch (e) {
+        return setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) });
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    setAuth({ kind: "done", status: { status: "signed_out" } });
   }, []);
 
   const signIn = useCallback(async () => {
@@ -44,8 +54,7 @@ export default function App() {
 
   useEffect(() => {
     void check();
-    const timer = setTimeout(() => void loadSession(), 400);
-    return () => clearTimeout(timer);
+    void loadSession();
   }, [check, loadSession]);
 
   const session = auth.kind === "done" ? auth.status : null;

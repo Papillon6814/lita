@@ -13,6 +13,7 @@ export type CodexStatus =
   | { status: "error"; message: string };
 
 export type SessionStatus =
+  | { status: "restoring" }
   | { status: "signed_out" }
   | { status: "signed_in"; email: string | null };
 
