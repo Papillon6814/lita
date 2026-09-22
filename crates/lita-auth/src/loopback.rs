@@ -79,12 +79,14 @@ fn handle_request(mut stream: TcpStream) -> Result<Option<Callback>> {
         respond(&mut stream, 200, &page("Sign-in was cancelled", "You can close this window."))?;
         bail!("Google reported: {err}");
     }
-    match (code, state) {
-        (Some(code), Some(state)) => {
+    // `state` is optional: Supabase's PKCE redirect carries only `code`
+    // (the verifier is what binds the response to this attempt).
+    match code {
+        Some(code) => {
             respond(&mut stream, 200, &page("Signed in to Lita", "You can close this window and go back to Lita."))?;
-            Ok(Some(Callback { code, state }))
+            Ok(Some(Callback { code, state: state.unwrap_or_default() }))
         }
-        _ => {
+        None => {
             respond(&mut stream, 404, "")?;
             Ok(None)
         }
@@ -132,6 +134,9 @@ mod tests {
         let stray = request(port, "/favicon.ico");
         assert!(stray.starts_with("HTTP/1.1 404"), "{stray}");
 
+        let no_code = request(port, "/?state=only");
+        assert!(no_code.starts_with("HTTP/1.1 404"), "{no_code}");
+
         let ok = request(port, "/?state=abc&code=4%2Fxyz&scope=email");
         assert!(ok.starts_with("HTTP/1.1 200"), "{ok}");
         assert!(ok.contains("Signed in to Lita"));
@@ -139,6 +144,17 @@ mod tests {
         let cb = waiter.join().unwrap().unwrap();
         assert_eq!(cb.code, "4/xyz");
         assert_eq!(cb.state, "abc");
+    }
+
+    #[test]
+    fn code_without_state_is_accepted() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let waiter = std::thread::spawn(move || wait_for_callback(listener, Duration::from_secs(5)));
+        request(port, "/?code=35702956-4a58");
+        let cb = waiter.join().unwrap().unwrap();
+        assert_eq!(cb.code, "35702956-4a58");
+        assert_eq!(cb.state, "");
     }
 
     #[test]
