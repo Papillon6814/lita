@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { host, type CodexStatus, type SessionStatus } from "./platform/host";
 import { t } from "./i18n";
+import { VoiceSection } from "./components/VoiceSection";
 import "./App.css";
 
 const CODEX_INSTALL_URL = "https://developers.openai.com/codex/cli";
@@ -75,6 +76,12 @@ export default function App() {
           <StatusBody status={view.status} onRetry={check} />
         )}
       </section>
+
+      {auth.kind === "done" && auth.status.status === "signed_in" && view.kind === "done" && view.status.status === "ready" && (
+        <section className="card">
+          <VoiceSection />
+        </section>
+      )}
 
       <footer className="privacy">{t("privacy.note")}</footer>
     </main>
