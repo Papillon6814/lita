@@ -1,0 +1,15 @@
+[package]
+name = "lita-sources"
+version = "0.0.0"
+description = "Pulls a person's own published writing (note, Medium, X archive) in as Voice material."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+html2text = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+roxmltree = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
