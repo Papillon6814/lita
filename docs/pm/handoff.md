@@ -22,9 +22,9 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 ## 次の一手（この順で）
 
-1. **SQLite スキーマ設計（B-06）** — `voices.profile_json` に `voice.rs` の型をそのまま JSON 化して入れる。`tauri-plugin-sql` か `rusqlite` を Rust 側で
-2. **貼り付け／ファイル取り込みの UI（B-12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
-3. **ブリーフ → 生成 → 承認 → コピーの UI（B-07）**、速度／品質の切り替え（B-13）、Voice 生成のステージ表示（B-14）
+1. **SQLite スキーマ設計（B-06 / #11）** — `voices.profile_json` に `voice.rs` の型をそのまま JSON 化して入れる。`tauri-plugin-sql` か `rusqlite` を Rust 側で
+2. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
+3. **ブリーフ → 生成 → 承認 → コピーの UI（B-07 / #13）**、速度／品質の切り替え（B-13 / #14）、Voice 生成のステージ表示（B-14 / #15）
 
 ## 触る前に知っておくこと
 
@@ -35,6 +35,7 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 - `cargo run -p lita-codex --bin probe` / `--bin corpus` / `--bin schema` は**アカウントの Codex 利用枠を消費します**（約70秒／約60秒／約3分）。
 - Voice の生成プロンプトには必ず `VoiceProfile::generation_view()` を使ってください。プロファイル全体を渡してはいけません（D-28）。
 - v0.1 の完成定義に入らない提案は backlog に落とします。
+- backlog の各項目は GitHub Issue（#11〜#25、マイルストーン v0.1 / v0.2、ラベル `backlog` / `deferred`）と1対1で対応しています。着手時は該当 Issue を自分にアサインし、新しい項目は backlog.md と Issue の両方に追加します。
 
 ## Notion（正）へのリンク
 
