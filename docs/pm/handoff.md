@@ -14,6 +14,7 @@
 6. **Slack の権限要件を検証した**（Issue #4 / PR #5）— Slack 側はほぼ塞がっていた。同時に **Voice は4件で安定する**ことを実測し、**v0.1 から Slack を外す判断に至った（D-20）**
 7. **待ち時間を測り直した**（Issue #3）— **問題設定が誤っていた**。短文生成は6.6秒まで落ちる。生成中はインジケータのみ、推論量はユーザーが選べる形に決定（D-23〜D-26）。`Effort` と `--ignore-user-config` をラッパーに実装済み
 8. **Voice スキーマを確定した**（Issue #7）— 部分集合4通り×3回の実測で、**引用を生成に渡すと構造化フィールドが無視され、過去の文が借用される**と判明。引用は保存のみ、生成には構造化フィールド11個だけを渡す（D-27〜D-30）。`voice.rs` に型として固定
+9. **Tauri アプリの骨格を立てた**（Issue #9）— React + TS + Vite、`codex_status` コマンドで Codex の状態を表示。en/ja の i18n と `src/platform` 境界を敷設（D-31〜D-35）
 
 ## いま決まっていること
 
@@ -21,14 +22,14 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 ## 次の一手（この順で）
 
-1. **Tauri v2 スキャフォールド（B-05）** — 決めるべきことは決まった。ここから実装
-2. **SQLite スキーマ設計（B-06）** — `VoiceProfile` は JSON で保存する前提。`voices.profile_json` に `voice.rs` の型をそのまま入れる
-3. **貼り付け／ファイル取り込みの UI（B-12）** — v0.1 の入口
-4. **ブリーフ → 生成 → 承認 → コピーの UI（B-07）**、速度／品質の切り替え（B-13）、Voice 生成のステージ表示（B-14）
+1. **SQLite スキーマ設計（B-06）** — `voices.profile_json` に `voice.rs` の型をそのまま JSON 化して入れる。`tauri-plugin-sql` か `rusqlite` を Rust 側で
+2. **貼り付け／ファイル取り込みの UI（B-12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
+3. **ブリーフ → 生成 → 承認 → コピーの UI（B-07）**、速度／品質の切り替え（B-13）、Voice 生成のステージ表示（B-14）
 
 ## 触る前に知っておくこと
 
-- コード変更は必ず worktree + feature branch で行います。main 直コミットは禁止です。
+- コード変更は必ず worktree + feature branch で行います。main 直コミットは禁止です。worktree を切ったら `npm install` を忘れずに。
+- `@tauri-apps/*` を import してよいのは `src/platform/` だけです（D-32）。
 - 決定を変えるときは、**Notion の決定事項表**と **`docs/pm/decisions.md`** の両方を更新します。覆った決定は消さず「（日付 改訂）」を付けて残します。
 - Codex のトークンには触りません。`codex` を起動するだけです。
 - `cargo run -p lita-codex --bin probe` / `--bin corpus` / `--bin schema` は**アカウントの Codex 利用枠を消費します**（約70秒／約60秒／約3分）。

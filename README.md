@@ -63,6 +63,22 @@ Brief ────────────────────────�
 - [Codex CLI](https://developers.openai.com/codex/cli) installed and logged in
   (`codex login`)
 
+## Running from source
+
+You need Rust (stable), Node.js 20+, and the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+
+```
+npm install
+npm run tauri dev     # opens the app against the Vite dev server
+npm run tauri build   # produces a native bundle under src-tauri/target
+cargo test            # Rust unit tests
+```
+
+The app is a Cargo workspace: `crates/lita-codex` drives the Codex CLI and owns
+the Voice profile type, `src-tauri` is the Tauri shell, and `src/` is the React
+frontend. All calls into the native side go through `src/platform/host.ts`.
+
 ## Roadmap
 
 | Version | Scope |

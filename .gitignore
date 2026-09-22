@@ -1,30 +1,53 @@
-# Build
-/dist
-/build
-**/target/
-*.app
-*.dmg
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Dependencies
-node_modules/
-.pnp.*
-.yarn/
+node_modules
+dist
+dist-ssr
+*.local
 
-# Local data — never commit user content or credentials
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
-/data/
-.env
-.env.*
-!.env.example
-*.pem
-auth.json
-
-# Editor / OS
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-.idea/
-*.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# Tauri
-src-tauri/gen/
+# From create-tauri-app
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cargo build output (workspace root and any nested crate)
+target/
