@@ -11,6 +11,9 @@ use crate::voice::VoiceProfile;
 /// on which parts of the profile the draft leaned on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PostDraft {
+    /// For long-form destinations: the title, on its own. Empty for posts.
+    #[serde(default)]
+    pub title: String,
     pub text: String,
     pub char_count: i64,
     pub voice_notes: String,
@@ -28,9 +31,10 @@ pub fn post_schema() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "required": ["text", "char_count", "voice_notes"],
+        "required": ["title", "text", "char_count", "voice_notes"],
         "properties": {
-            "text": { "type": "string", "description": "The post, ready to publish as-is. No preamble, no quotes around it." },
+            "title": { "type": "string", "description": "For a long-form article: its title, on its own. For a short post: an empty string." },
+            "text": { "type": "string", "description": "The piece, ready to publish as-is: no preamble, no quotes around it, no title line (the title is returned separately)." },
             "char_count": { "type": "integer", "description": "The number of characters in `text`." },
             "voice_notes": { "type": "string", "description": "One sentence, in the same language as the post, on which parts of the profile the draft leaned on." }
         }

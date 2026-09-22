@@ -1,12 +1,13 @@
 //! Live check for the store: sign in, then create → read → update → delete
-//! a voice with sources, a brief, and a draft, through RLS. Leaves nothing
+//! a voice with sources, an article with versions, and the default-voice
+//! setting, through RLS. Leaves nothing
 //! behind. Needs LITA_SUPABASE_URL and LITA_SUPABASE_ANON_KEY; opens the
 //! browser once for sign-in.
 
 use anyhow::{Context, Result, ensure};
 use lita_auth::SupabaseAuth;
 use lita_codex::voice::{Excerpt, VoiceProfile};
-use lita_store::{DraftStatus, NewBrief, NewDraft, NewSource, SourceKind, Store, StoredEffort};
+use lita_store::{ArticlePatch, ArticleStatus, NewArticle, NewSource, NewVersion, SourceKind, Store, VersionKind};
 
 fn main() -> Result<()> {
     let url = std::env::var("LITA_SUPABASE_URL").context("LITA_SUPABASE_URL is not set")?;
@@ -61,38 +62,59 @@ fn main() -> Result<()> {
     ensure!(v2.name == "roundtrip renamed" && v2.profile.uses_emoji && v2.sources.len() == 1, "update failed");
     println!("update ok");
 
-    let brief = me.create_brief(&NewBrief {
-        voice_id: voice.id.clone(),
-        platform_id: "x".into(),
-        body: "新機能の告知".into(),
-        effort: StoredEffort::Fast,
-    })?;
-    let draft = me.create_draft(&NewDraft {
-        brief_id: brief.id.clone(),
-        body: "出来た文".into(),
-        prompt_sent: "the prompt".into(),
-        model: Some("gpt-5".into()),
-        elapsed_ms: 6600,
-    })?;
-    ensure!(draft.status == DraftStatus::Pending && draft.decided_at.is_none());
-    me.set_draft_status(&draft.id, DraftStatus::Approved)?;
-    let d2 = me.draft(&draft.id)?.context("draft vanished")?;
-    ensure!(d2.status == DraftStatus::Approved && d2.decided_at.is_some(), "approve failed");
-    me.set_draft_status(&draft.id, DraftStatus::Pending)?;
-    ensure!(me.draft(&draft.id)?.unwrap().decided_at.is_none(), "pending did not clear decided_at");
-    ensure!(me.briefs_for_voice(&voice.id)?.len() == 1 && me.drafts_for_brief(&brief.id)?.len() == 1);
-    println!("brief/draft ok");
+    ensure!(platforms.iter().any(|p| p.id == "note") && platforms.iter().any(|p| p.id == "medium"), "long-form platforms missing");
 
-    let unknown = me.create_brief(&NewBrief {
-        voice_id: voice.id.clone(),
-        platform_id: "mastodon".into(),
-        body: "x".into(),
-        effort: StoredEffort::Quality,
-    });
+    let article = me.create_article(&NewArticle {
+        voice_id: Some(voice.id.clone()),
+        platform_id: "x".into(),
+        title: String::new(),
+        body: String::new(),
+        brief: "新機能の告知".into(),
+    })?;
+    ensure!(article.status == ArticleStatus::Draft && article.body.is_empty());
+    let v1 = me.create_version(&NewVersion {
+        article_id: article.id.clone(),
+        kind: VersionKind::Generated,
+        title: String::new(),
+        body: "出来た文".into(),
+        prompt_sent: Some("the prompt".into()),
+        elapsed_ms: Some(6600),
+    })?;
+    me.update_article(&article.id, &ArticlePatch { body: Some("出来た文を直した".into()), title: Some("題".into()), ..Default::default() })?;
+    me.create_version(&NewVersion { article_id: article.id.clone(), kind: VersionKind::Edited, title: "題".into(), body: "出来た文を直した".into(), prompt_sent: None, elapsed_ms: None })?;
+    let a2 = me.article(&article.id)?.context("article vanished")?;
+    ensure!(a2.body == "出来た文を直した" && a2.title == "題" && a2.updated_at >= article.updated_at, "article update failed");
+    let versions = me.versions(&article.id)?;
+    ensure!(versions.len() == 2 && versions[0].kind == VersionKind::Edited && versions[1].id == v1.id, "versions wrong: {versions:?}");
+    me.update_article(&article.id, &ArticlePatch { status: Some(ArticleStatus::Approved), ..Default::default() })?;
+    let listed = me.articles(Some(ArticleStatus::Approved))?;
+    ensure!(listed.iter().any(|a| a.id == article.id && a.excerpt == "出来た文を直した"), "approved list missing the article");
+    ensure!(me.articles(Some(ArticleStatus::Archived))?.iter().all(|a| a.id != article.id), "archived list has the article");
+    println!("article/versions ok");
+
+    // Edited snapshots are pruned to the latest 50 per article.
+    for i in 0..55 {
+        me.create_version(&NewVersion { article_id: article.id.clone(), kind: VersionKind::Edited, title: String::new(), body: format!("e{i}"), prompt_sent: None, elapsed_ms: None })?;
+    }
+    let vs = me.versions(&article.id)?;
+    let edited = vs.iter().filter(|v| v.kind == VersionKind::Edited).count();
+    ensure!(edited == 50 && vs.iter().any(|v| v.id == v1.id), "prune wrong: {edited} edited, generated kept={}", vs.iter().any(|v| v.id == v1.id));
+    println!("prune ok");
+
+    me.set_default_voice(Some(&voice.id))?;
+    ensure!(me.settings()?.default_voice_id.as_deref() == Some(voice.id.as_str()), "default voice not stored");
+    me.set_default_voice(None)?;
+    ensure!(me.settings()?.default_voice_id.is_none(), "default voice not cleared");
+    println!("settings ok");
+
+    let unknown = me.create_article(&NewArticle { voice_id: None, platform_id: "mastodon".into(), ..Default::default() });
     ensure!(unknown.is_err(), "unknown platform was accepted");
 
     ensure!(me.delete_voice(&voice.id)?, "delete reported nothing");
-    ensure!(me.voice(&voice.id)?.is_none() && me.brief(&brief.id)?.is_none() && me.draft(&draft.id)?.is_none(), "cascade failed");
+    let orphan = me.article(&article.id)?.context("article should survive voice deletion")?;
+    ensure!(orphan.voice_id.is_none(), "voice_id should be null after the voice is deleted");
+    ensure!(me.delete_article(&article.id)?, "article delete reported nothing");
+    ensure!(me.version(&v1.id)?.is_none(), "versions did not cascade");
     ensure!(!me.delete_voice(&voice.id)?, "second delete should be a no-op");
     println!("delete + cascade ok");
 

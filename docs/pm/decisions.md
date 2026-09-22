@@ -102,3 +102,11 @@
 | --- | --- | --- | --- |
 | D-42 | Slack 連携 | **見送り（v0.2 の候補からも外し、凍結）** | Marketplace 掲載が唯一の正路だが、提出には既に 10 以上のアクティブなワークスペースへのインストールが必要（2026-07 に 5→10）、承認まで実例で 4 ヶ月、`search:read` は掲載不可、承認後はスコープ変更ごとに最大 6 週間の再審査。個人の OSS では前提条件を満たすのが現実的でない。技術面（Edge Function での OAuth、RTS API）は今の基盤で解けるので、状況が変われば再開できる |
 | D-43 | v0.1 の文体ソース（D-20 を補強） | **本人の公開済みの発信から拾う。note（アカウント名から公開記事）→ Medium（同）→ X（公式アーカイブの取り込み）の順。貼り付けは受け皿として残す** | 「貼るのは億劫」という本人の実感と、再現したい文体は公開済みの投稿そのものにあるという理由。note は認証不要の公開 API、Medium は RSS、X は API の読み取りが有料のため公式アーカイブ（`tweets.js`）。いずれも審査や規約の壁がない。Codex / Claude Code のログや iMessage は「発信向けの文体ではない」ため見送り |
+
+## 2026-09-23 — v0.2: 3 柱（文体・記事・エディタ）への再設計
+
+| # | 論点 | 決定 | 理由・補足 |
+| --- | --- | --- | --- |
+| D-44 | v0.2 の情報設計（D-13 / D-21 を改訂） | **アプリは「文体（Voice）」「記事」「エディタ」の 3 柱。ホームは記事一覧。サイドバー（記事 / 文体）＋メイン（一覧・エディタ・Voice）。エディタはプレーンテキストで長文（note / Medium）に対応。Voice は複数、記事ごとに選び、既定 Voice を持つ** | 本人の実感（2026-09-23）「文体調整・過去記事の管理・文章エディタの 3 つから成る」。参考は iA Writer / Ulysses の Library–Editor。配布（#25）より先にやる |
+| D-45 | 記事と版のモデル | **`briefs` + `drafts` を廃止し、`articles`（title / body / brief / voice_id / platform_id / status: draft・approved・archived）と `article_versions`（kind: generated・shortened・edited・restored・manual、生成時は prompt_sent と elapsed_ms）に置き換え。生成は常に記事の本文を書き換え、版が増える。既存データは移行（brief 1 件＝記事 1 件、drafts＝generated 版）し、旧テーブルは drop** | v0.1 のモデルは「1 回の生成」しか表せず、編集し続ける文書を扱えない。利用者は本人のみなので移行して drop |
+| D-46 | 自動保存と版の規則 | **自動保存は 600 ms の trailing debounce ＋ 5 s の max wait。表示は「保存しました（n 分前）/ 保存中 / 保存できませんでした」。失敗時はローカルに退避して再試行。版は生成・短く・復元・「版を残す」・編集中 10 分ごと・記事を閉じるとき（差分あり）に snapshot。同じ内容なら作らない。`edited` は記事あたり最新 50 件に間引く（DB trigger）。復元は元の状態を `edited` で残してから `restored` 版を作る（履歴は常に直線）** | 137foundry「autosave は debounce ＋ max wait、失敗状態を必ず出す」、uxpatternsguide「復元は新しい版を作る」 |

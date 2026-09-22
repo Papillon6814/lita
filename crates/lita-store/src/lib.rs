@@ -77,24 +77,6 @@ pub struct NewSource {
     pub body: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Brief {
-    pub id: Id,
-    pub voice_id: Id,
-    pub platform_id: String,
-    pub body: String,
-    pub effort: StoredEffort,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct NewBrief {
-    pub voice_id: Id,
-    pub platform_id: String,
-    pub body: String,
-    pub effort: StoredEffort,
-}
-
 /// `Effort` as the database spells it. Kept separate from
 /// `lita_codex::Effort` so the CLI mapping ("low"/"medium") and the storage
 /// mapping ("fast"/"quality") can drift independently.
@@ -123,35 +105,107 @@ impl From<StoredEffort> for Effort {
     }
 }
 
+/// Where an article stands. `Approved` means the person took it (copied it
+/// out); `Archived` means they put it away without using it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum DraftStatus {
-    Pending,
+pub enum ArticleStatus {
+    Draft,
     Approved,
-    Discarded,
+    Archived,
+}
+
+/// One piece of writing: its own brief, voice, destination, current text,
+/// and (in `article_versions`) a history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Article {
+    pub id: Id,
+    pub voice_id: Option<Id>,
+    pub platform_id: String,
+    pub title: String,
+    pub body: String,
+    pub brief: String,
+    pub status: ArticleStatus,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// An article as listed: no body, but a short excerpt for the list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArticleSummary {
+    pub id: Id,
+    pub voice_id: Option<Id>,
+    pub platform_id: String,
+    pub title: String,
+    pub excerpt: String,
+    pub status: ArticleStatus,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+pub struct NewArticle {
+    pub voice_id: Option<Id>,
+    pub platform_id: String,
+    pub title: String,
+    pub body: String,
+    pub brief: String,
+}
+
+/// Fields of an article that can change. `None` leaves a field as it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ArticlePatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_id: Option<Option<Id>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<ArticleStatus>,
+}
+
+/// What produced a version (see the migration for the meaning of each).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionKind {
+    Generated,
+    Shortened,
+    Edited,
+    Restored,
+    Manual,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Draft {
+pub struct ArticleVersion {
     pub id: Id,
-    pub brief_id: Id,
+    pub article_id: Id,
+    pub kind: VersionKind,
+    pub title: String,
     pub body: String,
-    /// Exactly what was sent to Codex. Kept so the person can audit it.
-    pub prompt_sent: String,
-    pub model: Option<String>,
-    pub elapsed_ms: i64,
-    pub status: DraftStatus,
+    /// For generated / shortened: exactly what went to Codex (B-08).
+    pub prompt_sent: Option<String>,
+    pub elapsed_ms: Option<i64>,
     pub created_at: String,
-    pub decided_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct NewDraft {
-    pub brief_id: Id,
+pub struct NewVersion {
+    pub article_id: Id,
+    pub kind: VersionKind,
+    pub title: String,
     pub body: String,
-    pub prompt_sent: String,
-    pub model: Option<String>,
-    pub elapsed_ms: i64,
+    pub prompt_sent: Option<String>,
+    pub elapsed_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct UserSettings {
+    pub default_voice_id: Option<Id>,
 }
 
 /// Connection details for one Supabase project. Cheap to clone.
@@ -259,8 +313,9 @@ impl UserStore<'_> {
         self.insert_sources(id, sources)
     }
 
-    /// Deletes a voice and, through `ON DELETE CASCADE`, its sources, briefs,
-    /// and drafts. Returns whether a row was deleted.
+    /// Deletes a voice and, through `ON DELETE CASCADE`, its sources. Articles
+    /// that used it keep their text and lose the link (`voice_id` becomes
+    /// null). Returns whether a row was deleted.
     pub fn delete_voice(&self, id: &str) -> Result<bool> {
         let deleted: Vec<serde_json::Value> = self.parse(self.request(
             self.store
@@ -286,42 +341,108 @@ impl UserStore<'_> {
         Ok(())
     }
 
-    // ----- briefs and drafts -----------------------------------------------
+    // ----- articles --------------------------------------------------------
 
-    pub fn create_brief(&self, new: &NewBrief) -> Result<Brief> {
-        self.insert_one("briefs", new)
+    /// Newest first. `status` narrows the list; `None` lists everything.
+    pub fn articles(&self, status: Option<ArticleStatus>) -> Result<Vec<ArticleSummary>> {
+        #[derive(Deserialize)]
+        struct Row {
+            id: Id,
+            voice_id: Option<Id>,
+            platform_id: String,
+            title: String,
+            body: String,
+            status: ArticleStatus,
+            created_at: String,
+            updated_at: String,
+        }
+        let mut query: Vec<(&str, String)> = vec![
+            ("select", "id,voice_id,platform_id,title,body,status,created_at,updated_at".into()),
+            ("order", "updated_at.desc".into()),
+        ];
+        let status_value = status.map(|s| serde_json::to_value(s).unwrap_or_default().as_str().unwrap_or("").to_string());
+        if let Some(v) = &status_value {
+            query.push(("status", format!("eq.{v}")));
+        }
+        let borrowed: Vec<(&str, &str)> = query.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let rows: Vec<Row> = self.get_many("articles", &borrowed)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| ArticleSummary {
+                id: r.id,
+                voice_id: r.voice_id,
+                platform_id: r.platform_id,
+                title: r.title,
+                excerpt: excerpt_of(&r.body),
+                status: r.status,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
+            .collect())
     }
 
-    pub fn brief(&self, id: &str) -> Result<Option<Brief>> {
-        let rows: Vec<Brief> = self.get_many("briefs", &[("id", &format!("eq.{id}")), ("limit", "1")])?;
+    pub fn article(&self, id: &str) -> Result<Option<Article>> {
+        let rows: Vec<Article> = self.get_many("articles", &[("id", &format!("eq.{id}")), ("limit", "1")])?;
         Ok(rows.into_iter().next())
     }
 
-    pub fn briefs_for_voice(&self, voice_id: &str) -> Result<Vec<Brief>> {
-        self.get_many("briefs", &[("voice_id", &format!("eq.{voice_id}")), ("order", "created_at.desc")])
+    pub fn create_article(&self, new: &NewArticle) -> Result<Article> {
+        self.insert_one("articles", new)
     }
 
-    pub fn create_draft(&self, new: &NewDraft) -> Result<Draft> {
-        self.insert_one("drafts", new)
+    pub fn update_article(&self, id: &str, patch: &ArticlePatch) -> Result<()> {
+        self.patch_one("articles", id, patch)
     }
 
-    pub fn draft(&self, id: &str) -> Result<Option<Draft>> {
-        let rows: Vec<Draft> = self.get_many("drafts", &[("id", &format!("eq.{id}")), ("limit", "1")])?;
+    /// Deletes an article and, through `ON DELETE CASCADE`, its versions.
+    pub fn delete_article(&self, id: &str) -> Result<bool> {
+        let deleted: Vec<serde_json::Value> = self.parse(self.request(
+            self.store
+                .http
+                .delete(self.url("articles"))
+                .query(&[("id", format!("eq.{id}")), ("select", "id".into())])
+                .header("Prefer", "return=representation"),
+        )?)?;
+        Ok(!deleted.is_empty())
+    }
+
+    // ----- versions --------------------------------------------------------
+
+    /// Newest first.
+    pub fn versions(&self, article_id: &str) -> Result<Vec<ArticleVersion>> {
+        self.get_many(
+            "article_versions",
+            &[("article_id", &format!("eq.{article_id}")), ("order", "created_at.desc")],
+        )
+    }
+
+    pub fn version(&self, id: &str) -> Result<Option<ArticleVersion>> {
+        let rows: Vec<ArticleVersion> =
+            self.get_many("article_versions", &[("id", &format!("eq.{id}")), ("limit", "1")])?;
         Ok(rows.into_iter().next())
     }
 
-    pub fn drafts_for_brief(&self, brief_id: &str) -> Result<Vec<Draft>> {
-        self.get_many("drafts", &[("brief_id", &format!("eq.{brief_id}")), ("order", "created_at")])
+    pub fn create_version(&self, new: &NewVersion) -> Result<ArticleVersion> {
+        self.insert_one("article_versions", new)
     }
 
-    /// Records the person's decision. A decision can be changed; `decided_at`
-    /// always reflects the latest one, and clears when going back to pending.
-    pub fn set_draft_status(&self, id: &str, status: DraftStatus) -> Result<()> {
-        let decided_at = match status {
-            DraftStatus::Pending => serde_json::Value::Null,
-            _ => json!("now()"),
-        };
-        self.patch_one("drafts", id, &json!({ "status": status, "decided_at": decided_at }))
+    // ----- settings --------------------------------------------------------
+
+    pub fn settings(&self) -> Result<UserSettings> {
+        let rows: Vec<UserSettings> = self.get_many("user_settings", &[("select", "default_voice_id"), ("limit", "1")])?;
+        Ok(rows.into_iter().next().unwrap_or_default())
+    }
+
+    /// Upsert: the row is created the first time a setting is written.
+    pub fn set_default_voice(&self, voice_id: Option<&str>) -> Result<()> {
+        self.request(
+            self.store
+                .http
+                .post(self.url("user_settings"))
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .json(&json!({ "default_voice_id": voice_id })),
+        )?;
+        Ok(())
     }
 
     // ----- plumbing --------------------------------------------------------
@@ -390,16 +511,43 @@ impl UserStore<'_> {
     }
 }
 
+/// The first line or so of a body, for lists.
+fn excerpt_of(body: &str) -> String {
+    let first = body.trim().lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    let mut out: String = first.chars().take(80).collect();
+    if first.chars().count() > 80 {
+        out.push('…');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn excerpt_is_the_first_non_empty_line_cut_short() {
+        assert_eq!(excerpt_of("\n\n  短い一行  \n二行目"), "短い一行");
+        let long = "あ".repeat(100);
+        let e = excerpt_of(&long);
+        assert_eq!(e.chars().count(), 81);
+        assert!(e.ends_with('…'));
+    }
+
+    #[test]
+    fn article_patch_serialises_only_what_is_set() {
+        let p = ArticlePatch { body: Some("x".into()), voice_id: Some(None), ..Default::default() };
+        assert_eq!(serde_json::to_string(&p).unwrap(), r#"{"voice_id":null,"body":"x"}"#);
+        assert_eq!(serde_json::to_string(&ArticlePatch::default()).unwrap(), "{}");
+    }
 
     #[test]
     fn effort_maps_both_ways() {
         assert_eq!(StoredEffort::from(Effort::Fast), StoredEffort::Fast);
         assert_eq!(Effort::from(StoredEffort::Quality), Effort::Quality);
         assert_eq!(serde_json::to_string(&StoredEffort::Fast).unwrap(), "\"fast\"");
-        assert_eq!(serde_json::to_string(&DraftStatus::Discarded).unwrap(), "\"discarded\"");
+        assert_eq!(serde_json::to_string(&ArticleStatus::Archived).unwrap(), "\"archived\"");
+        assert_eq!(serde_json::to_string(&VersionKind::Shortened).unwrap(), "\"shortened\"");
         assert_eq!(serde_json::to_string(&SourceKind::Paste).unwrap(), "\"paste\"");
     }
 
