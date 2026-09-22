@@ -151,5 +151,5 @@ export const ja: Record<MessageKey, string> = {
   "write.again": "書き直す",
   "write.discard": "これは使わない",
   "write.editHint": "コピーする前に、文章を直せます。",
-  "privacy.note": "Lita は OpenAI の認証情報に触れません。codex コマンドを起動するだけです。文章は Voice を作るために一度だけ Codex に送られ、あなたの Lita アカウントに保存されます。",
+  "privacy.note": "Lita は OpenAI の認証情報に触れません。codex コマンドを起動するだけです。Codex に送るのは、Voice を作るときの文章と、書くときのブリーフと Voice の要約だけです。結果はあなたの Lita アカウントに保存されます。",
 };
