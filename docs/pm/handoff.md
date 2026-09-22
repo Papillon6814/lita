@@ -28,7 +28,7 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 1. **Google Cloud の OAuth クライアント（Desktop app）を作る（B-41）** — Supabase 側は作成済み（下記）。Google 側はブラウザ操作エージェントで作成中
 2. **Google ログインの実機検証（B-30 / #26）** — Desktop app クライアント＋ループバック＋PKCE
-3. **サーバ側スキーマと API クライアント（B-06 / #11）** — `feat/11-sqlite` の設計を `user_id` 付きで移植
+3. **Rust の API クライアント（B-06 / #11 の後半）** — PostgREST をユーザーの JWT で叩く。スキーマは PR #27 で適用済み（`supabase/migrations/20260922000000_init.sql`）
 4. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
 5. **ブリーフ → 生成 → 承認 → コピーの UI（B-07 / #13）**、速度／品質の切り替え（B-13 / #14）、Voice 生成のステージ表示（B-14 / #15）
 
@@ -50,7 +50,7 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 - プロジェクト: `lita`、ref `csfvqpqzvcorqlsmfjwb`、東京 ap-northeast-1、Postgres 17。ダッシュボード https://supabase.com/dashboard/project/csfvqpqzvcorqlsmfjwb
 - DB パスワードは macOS キーチェーン（service `lita-supabase-db-password`、account `lita`）。リポジトリにも Notion にも書かない
 - CLI は `--profile <name>` で複数アカウントを切り替えられる。別アカウントを使うときは本人が `supabase login --profile <name>` を対話で実行する
-- `supabase link --project-ref csfvqpqzvcorqlsmfjwb` はまだしていない（B-06 で `supabase init` と一緒に行う）
+- `supabase/` はリポジトリにある（`config.toml` とマイグレーション）。worktree を切ったら `supabase link --project-ref csfvqpqzvcorqlsmfjwb` を再実行する（`.temp` は gitignore）。スキーマ変更は新しいマイグレーションファイルを足して `supabase db push`
 
 ## Notion（正）へのリンク
 
