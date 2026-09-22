@@ -1,14 +1,13 @@
 //! Desktop sign-in.
 //!
-//! Google's guidance for native apps is the loopback flow: open the system
-//! browser, let it redirect to `http://127.0.0.1:<port>`, and exchange the
-//! code with PKCE. No custom URI scheme, no client secret in the app. The
-//! resulting Google ID token is then handed to Supabase, which issues the
-//! session the rest of Lita uses. Lita never sees a Google password and never
-//! stores the Google token; only the Supabase session is kept.
+//! The person signs in with Google, but the app never talks to Google
+//! directly: Supabase runs the OAuth exchange on its own callback URL and
+//! holds the Google client secret (D-41). The app does PKCE against Supabase
+//! and receives the result on a loopback port, `http://127.0.0.1:<port>`,
+//! which is what Google recommends for native apps and needs no custom URI
+//! scheme. Only the Supabase session is ever stored, in the OS keychain.
 
-pub mod google;
+mod loopback;
 pub mod supabase;
 
-pub use google::{GoogleIdentity, GoogleSignIn};
-pub use supabase::{Session, SupabaseAuth};
+pub use supabase::{Session, SupabaseAuth, User};
