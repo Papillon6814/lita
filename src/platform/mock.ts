@@ -56,7 +56,7 @@ const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
 }));
 
 const draftBody = "資本政策の相談で最初に聞くのは、いくら欲しいかではなく、何を諦められるかだ。エクイティは返さなくていい金ではなく、時間と自由を先に売る契約なのだろうか。";
-const longBody = draftBody + "ファイナンスの選択肢を並べる前に、まず自分が手放せないものを一つ決める。そこから逆算すると、借入か出資かの答えはほとんど決まっていると思う。それでも迷うなら、迷っている理由の方が本題ではないか。";
+const longBody = draftBody + "資本政策の話は、結局のところ何を諦めるかの順番を決める作業でしかないのだろうか。" + "ファイナンスの選択肢を並べる前に、まず自分が手放せないものを一つ決める。そこから逆算すると、借入か出資かの答えはほとんど決まっていると思う。それでも迷うなら、迷っている理由の方が本題ではないか。" + "ファイナンスの選択肢を並べる前に、まず自分が手放せないものを一つ決める。そこから逆算すると、借入か出資かの答えはほとんど決まっていると思う。それでも迷うなら、迷っている理由の方が本題ではないか。";
 
 const codex: T.CodexStatus =
   scene === "codex-not-logged-in" ? { status: "not_logged_in", version: "0.154.0" }
@@ -84,8 +84,9 @@ export const mockHost: T.Host = {
   materialBudget: async () => ({ per_piece_chars: 1500, total_chars: 20000 }),
   platforms: async () => [{ id: "x", name: "X", max_chars: 280, rules: "" }],
   previewPrompt: async (_v, brief) => `You are writing as the author described below.\n\nVoice:\n${JSON.stringify(profile, null, 2)}\n\nBrief:\n${brief}\n\nPlatform: X (280 chars)`,
-  generateDraft: async () => {
+  generateDraft: async (_v, _b, _p, _e, previous) => {
     if (scene === "write-generating") return never();
+    if (previous) { await wait(300); return { draft: { id: "d2", brief_id: "b1", body: draftBody, prompt_sent: "", model: null, elapsed_ms: 6000, status: "pending", created_at: new Date().toISOString(), decided_at: null }, voice_notes: "前の下書きを削って収めた。" }; }
     if (scene === "write-error") { await wait(300); throw { code: "codex_quota", detail: "stream error: quota exceeded (429)" }; }
     await wait(300);
     const body = scene === "write-over" ? longBody : draftBody;

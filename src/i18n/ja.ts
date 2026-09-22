@@ -151,6 +151,7 @@ export const ja: Record<MessageKey, string> = {
   "write.chars": "{n} / {max} 文字",
   "write.charsNoMax": "{n} 文字",
   "write.over": "上限を {n} 文字超えています。",
+  "write.shorten": "短く書き直す",
   "write.notes": "Voice をどう使ったか",
   "write.copy": "コピーして採用",
   "write.copied": "コピーしました。投稿先に貼り付けてください。",

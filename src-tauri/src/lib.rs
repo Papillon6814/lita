@@ -378,7 +378,7 @@ fn rules_of(p: &Platform) -> PlatformRules {
 
 /// The exact text that `generate_draft` would send (B-08).
 #[tauri::command]
-async fn preview_prompt(app: AppHandle, voice_id: String, brief: String, platform_id: String) -> Result<String, UiError> {
+async fn preview_prompt(app: AppHandle, voice_id: String, brief: String, platform_id: String, previous: Option<String>) -> Result<String, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -390,7 +390,7 @@ async fn preview_prompt(app: AppHandle, voice_id: String, brief: String, platfor
             .into_iter()
             .find(|p| p.id == platform_id)
             .ok_or_else(|| UiError::invalid("no such platform"))?;
-        Ok(generation_prompt(&voice.profile, &brief, &rules_of(&platform)))
+        Ok(prompt_for(&voice.profile, &brief, &rules_of(&platform), previous.as_deref()))
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
@@ -402,11 +402,20 @@ pub struct Generated {
     pub voice_notes: String,
 }
 
+/// One place decides between a fresh draft and a shorter rewrite (#40), so
+/// the preview and the run can never disagree.
+fn prompt_for(profile: &lita_codex::voice::VoiceProfile, brief: &str, rules: &lita_codex::post::PlatformRules, previous: Option<&str>) -> String {
+    match previous.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(prev) => lita_codex::post::shorten_prompt(profile, brief, rules, prev),
+        None => generation_prompt(profile, brief, rules),
+    }
+}
+
 /// Brief → Codex → Draft. The brief is stored before the run so a failed
 /// run still leaves what was asked. Measured 6.6 s (Fast) / 10.8 s
 /// (Quality) for a short X post (D-24).
 #[tauri::command]
-async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platform_id: String, effort: StoredEffort) -> Result<Generated, UiError> {
+async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platform_id: String, effort: StoredEffort, previous: Option<String>) -> Result<Generated, UiError> {
     let brief = brief.trim().to_string();
     if brief.is_empty() {
         return Err(UiError::invalid("write a brief first"));
@@ -434,7 +443,7 @@ async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platfor
             .create_brief(&NewBrief { voice_id: voice.id.clone(), platform_id: platform.id.clone(), body: brief.clone(), effort })
             .map_err(fail)?;
 
-        let prompt = generation_prompt(&voice.profile, &brief, &rules_of(&platform));
+        let prompt = prompt_for(&voice.profile, &brief, &rules_of(&platform), previous.as_deref());
         let req = Request { prompt: prompt.clone(), schema: post_schema(), model: None, effort: effort.into(), working_dir };
         let run = CodexCli::on_path()
             .run_typed_cancellable::<PostDraft>(&req, |_| {}, cancel)

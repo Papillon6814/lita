@@ -11,6 +11,9 @@ type Phase =
   | { kind: "result"; draft: Draft; text: string; notes: string; copied: boolean };
 
 const EFFORT_KEY = "lita.effort";
+// The brief survives a trip back to the Voice screen (#41), per voice, for
+// this session only.
+const briefKey = (voiceId: string) => `lita.brief.${voiceId}`;
 
 // Brief → draft → judge. The whole post arrives at once (D-23), so while
 // waiting there is only an indicator and a way to stop. Once a draft is
@@ -19,7 +22,10 @@ const EFFORT_KEY = "lita.effort";
 export function WriteScreen({ voice, onBack }: { voice: Voice; onBack: () => void }) {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [platformId, setPlatformId] = useState("x");
-  const [brief, setBrief] = useState(() => (mockScene()?.startsWith("write-") ? "資本政策の相談を受けたときに最初に聞くことについて。創業者に向けて、エクイティは時間を売る契約だと伝えたい。" : ""));
+  const [brief, setBrief] = useState(() => {
+    if (mockScene()?.startsWith("write-")) return "資本政策の相談を受けたときに最初に聞くことについて。創業者に向けて、エクイティは時間を売る契約だと伝えたい。";
+    try { return sessionStorage.getItem(briefKey(voice.id)) ?? ""; } catch { return ""; }
+  });
   const [effort, setEffort] = useState<Effort>(() => {
     try { return (localStorage.getItem(EFFORT_KEY) as Effort) || "quality"; } catch { return "quality"; }
   });
@@ -32,6 +38,7 @@ export function WriteScreen({ voice, onBack }: { voice: Voice; onBack: () => voi
 
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); }, []);
   useEffect(() => { try { localStorage.setItem(EFFORT_KEY, effort); } catch {} }, [effort]);
+  useEffect(() => { try { sessionStorage.setItem(briefKey(voice.id), brief); } catch {} }, [voice.id, brief]);
 
   const platform = platforms.find((p) => p.id === platformId) ?? null;
   const canWrite = brief.trim().length > 0 && phase.kind !== "generating";
@@ -47,13 +54,14 @@ export function WriteScreen({ voice, onBack }: { voice: Voice; onBack: () => voi
     return () => { live = false; };
   }, [previewOpen, voice.id, brief, platformId]);
 
-  const generate = useCallback(async () => {
+  // `previous` asks for a shorter rewrite of that draft instead of a fresh one (#40).
+  const generate = useCallback(async (previous?: string) => {
     if (!brief.trim()) return;
     setError(null);
     setEditingBrief(false);
     setPhase({ kind: "generating" });
     try {
-      const g = await host.generateDraft(voice.id, brief, platformId, effort);
+      const g = await host.generateDraft(voice.id, brief, platformId, effort, previous);
       setPhase({ kind: "result", draft: g.draft, text: g.draft.body, notes: g.voice_notes, copied: mockScene() === "write-copied" });
     } catch (e) {
       const err = asUiError(e);
@@ -88,6 +96,7 @@ export function WriteScreen({ voice, onBack }: { voice: Voice; onBack: () => voi
   // Leaving while Codex is writing would leave it running for nothing.
   const back = () => { if (phase.kind === "generating") void host.cancelGenerate(); onBack(); };
   const onKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canWrite) { e.preventDefault(); void generate(); } };
+  const shorten = () => { if (phase.kind === "result") void generate(phase.text); };
 
   const count = phase.kind === "result" ? [...phase.text].length : 0;
   const over = platform?.max_chars != null && count > platform.max_chars ? count - platform.max_chars : 0;
@@ -101,7 +110,12 @@ export function WriteScreen({ voice, onBack }: { voice: Voice; onBack: () => voi
         </span>
       </div>
       <textarea className="draft-text" value={phase.text} onChange={(e) => setPhase({ ...phase, text: e.target.value, copied: false })} rows={5} aria-label={t("write.result")} />
-      {over > 0 && <p className="warn small">{t("write.over", { n: String(over) })}</p>}
+      {over > 0 && (
+        <p className="warn small over-line">
+          {t("write.over", { n: String(over) })}{" "}
+          <button className="btn sm" onClick={shorten}>{t("write.shorten")}</button>
+        </p>
+      )}
       {!phase.copied && <p className="hint">{t("write.editHint")}</p>}
       {phase.notes && <p className="notes"><span className="muted">{t("write.notes")}:</span> {phase.notes}</p>}
       <div className="draft-actions">
