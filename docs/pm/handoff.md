@@ -34,7 +34,7 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## 次の一手（この順で）
 
-1. 公開前の運用: Google 同意画面を Testing → 本番へ。未使用の「Lita desktop」クライアントは削除候補
+1. 公開前の運用: Google 同意画面を Testing → 本番へ。**進行中（2026-09-22）**: Google はホームページ URL とプライバシーポリシー URL を必須にしている。`site/` を GitHub Pages で https://lita.muumoo.online/ に配備（`/privacy.html`）。残りは DNS の CNAME（lita → papillon6814.github.io、ムームードメイン）→ Google 側で承認済みドメインに muumoo.online を追加し URL を入力 → 「アプリを公開」。未使用の「Lita desktop」クライアントは削除候補
 
 ## 触る前に知っておくこと
 
@@ -54,6 +54,8 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 - backlog の各項目は GitHub Issue（#11〜#25、マイルストーン v0.1 / v0.2、ラベル `backlog` / `deferred`）と1対1で対応しています。着手時は該当 Issue を自分にアサインし、新しい項目は backlog.md と Issue の両方に追加します。
 
 ## Google Cloud（2026-09-22 作成）
+
+- 公開サイト（同意画面の必須項目）: `site/` → GitHub Pages（`.github/workflows/pages.yml`、カスタムドメイン lita.muumoo.online）。プライバシーポリシーは `site/privacy.html`。扱うデータが変わったらここも直す
 
 - プロジェクト `lita-509404`（組織 muumoo.online）。同意画面は External / Testing、テストユーザーは kuno@muumoo.online のみ。**公開前に同意画面を本番に切り替える必要がある**
 - OAuth クライアント: 「Lita (Supabase)」（Web application、使用中）と「Lita desktop」（Desktop app、方式 A の検証用で未使用）。ID とシークレットはキーチェーン `lita-google-web-client-*` / `lita-google-client-*`
