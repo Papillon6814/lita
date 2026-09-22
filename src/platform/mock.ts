@@ -6,7 +6,7 @@
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
 // profile without one_line), articles, articles-empty, editor, editor-empty,
-// editor-generating, editor-over, editor-save-failed, write, write-generating,
+// editor-generating, editor-over, editor-save-failed, editor-versions, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
 
 import type * as T from "./types";
@@ -85,7 +85,11 @@ const articles: T.Article[] = scene === "articles-empty" ? [] : articleBodies.ma
 }));
 // The editor scenes open a2 (a draft with a brief).
 if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === "a2"); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
-const versions: T.ArticleVersion[] = [];
+const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
+  { id: "v3", article_id: "a1", kind: "edited", title: "", body: draftBody, prompt_sent: null, elapsed_ms: null, created_at: ago(3) },
+  { id: "v2", article_id: "a1", kind: "shortened", title: "", body: draftBody, prompt_sent: "…", elapsed_ms: 6000, created_at: ago(25) },
+  { id: "v1", article_id: "a1", kind: "generated", title: "", body: draftBody + "資本政策の話は、結局のところ何を諦めるかの順番を決める作業でしかないのだろうか。", prompt_sent: "…", elapsed_ms: 6600, created_at: ago(40) },
+] : [];
 let nextId = 100;
 const excerpt = (b: string) => (b.trim().split("\n").find((l) => l.trim()) ?? "").slice(0, 80);
 

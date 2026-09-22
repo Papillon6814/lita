@@ -6,6 +6,11 @@ import { t } from "../i18n";
 import { useAutosave } from "../hooks/useAutosave";
 import { ErrorNote } from "./ErrorNote";
 import { relativeDate } from "./ArticleList";
+import { VersionHistory } from "./VersionHistory";
+
+// Editing snapshots (D-46): every ten minutes of active editing, and when
+// the article is closed with changes since the last snapshot.
+const SNAPSHOT_MS = 10 * 60 * 1000;
 
 const EFFORT_KEY = "lita.effort";
 type Text = { title: string; body: string; brief: string };
@@ -26,6 +31,8 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
   const [preview, setPreview] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [showVersions, setShowVersions] = useState(mockScene() === "editor-versions");
+  const lastSnapshot = useRef<{ at: number; text: Text | null }>({ at: Date.now(), text: null });
 
   const save = useCallback(async (v: Text) => { await host.updateArticle(id, v); }, [id]);
   const same = useCallback((a: Text, b: Text) => a.title === b.title && a.body === b.body && a.brief === b.brief, []);
@@ -57,8 +64,30 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Leaving flushes what is pending.
-  useEffect(() => () => { void auto.flush(); }, [auto]);
+  // Leaving flushes what is pending, then snapshots if anything changed
+  // since the last snapshot (the native side skips identical text).
+  useEffect(() => () => {
+    void auto.flush().then(() => {
+      const last = lastSnapshot.current.text;
+      if (last === null || !same(last, textRef.current)) void host.snapshotArticle(id, false).catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  const textRef = useRef<Text>(text);
+  textRef.current = text;
+
+  // Periodic snapshot while editing.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (auto.state.kind !== "clean") return;
+      const last = lastSnapshot.current;
+      if (Date.now() - last.at < SNAPSHOT_MS) return;
+      if (last.text !== null && same(last.text, textRef.current)) return;
+      lastSnapshot.current = { at: Date.now(), text: textRef.current };
+      void host.snapshotArticle(id, false).catch(() => {});
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [id, auto.state.kind, same]);
 
   const edit = (patch: Partial<Text>) => {
     setText((prev) => { const next = { ...prev, ...patch }; auto.update(next); return next; });
@@ -97,6 +126,7 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
       setText(next);
       setCopied(false);
       setGen({ kind: "done", notes: w.voice_notes });
+      lastSnapshot.current = { at: Date.now(), text: next };
       bodyRef.current?.focus();
     } catch (e) {
       const err = asUiError(e);
@@ -130,9 +160,12 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
     <div className="editor" onKeyDown={onKey}>
       <div className="editor-bar">
         <button className="back" onClick={onBack}>← {t("nav.articles")}</button>
-        <span className={auto.state.kind === "failed" ? "save-state warn" : "save-state"} role="status">
-          {saveLabel}
-          {auto.state.kind === "failed" && <button className="link" onClick={() => void auto.retry()}>{t("save.retry")}</button>}
+        <span className="editor-bar-right">
+          <span className={auto.state.kind === "failed" ? "save-state warn" : "save-state"} role="status">
+            {saveLabel}
+            {auto.state.kind === "failed" && <button className="link" onClick={() => void auto.retry()}>{t("save.retry")}</button>}
+          </span>
+          <button className={showVersions ? "quiet sm on" : "quiet sm"} aria-pressed={showVersions} onClick={() => setShowVersions((v) => !v)}>{t("versions.title")}</button>
         </span>
       </div>
 
@@ -152,6 +185,18 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
           </div>
         </div>
 
+        {showVersions ? (
+          <VersionHistory
+            article={article}
+            current={{ title: text.title, body: text.body }}
+            onClose={() => setShowVersions(false)}
+            onRestored={(a) => {
+              const next: Text = { title: a.title, body: a.body, brief: a.brief };
+              setArticle(a); auto.settle(next); setText(next); setCopied(false);
+              lastSnapshot.current = { at: Date.now(), text: next };
+            }}
+          />
+        ) : (
         <aside className="assist">
           <h3>{t("assist.title")}</h3>
           <label className="field">
@@ -212,6 +257,7 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
             <button className="quiet sm" onClick={() => void remove()}>{t("article.delete")}</button>
           </div>
         </aside>
+        )}
       </div>
     </div>
   );
