@@ -5,7 +5,7 @@
 //! users cannot build one. Run with `cargo run -p lita-codex --bin corpus`.
 
 use anyhow::Result;
-use lita_codex::{CodexCli, Preflight, Request};
+use lita_codex::{CodexCli, Effort, Preflight, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -99,8 +99,11 @@ fn main() -> Result<()> {
 
     let mut results = Vec::new();
     for &n in SIZES {
-        let corpus =
-            MESSAGES[..n].iter().map(|m| format!("- {m}")).collect::<Vec<_>>().join("\n");
+        let corpus = MESSAGES[..n]
+            .iter()
+            .map(|m| format!("- {m}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let prompt = format!(
             "You are analysing one person's writing so that another writer can imitate it \
              convincingly. Below are messages they wrote in a work chat.\n\n{corpus}\n\n\
@@ -112,6 +115,7 @@ fn main() -> Result<()> {
                 prompt,
                 schema: schema(),
                 model: None,
+                effort: Effort::Quality,
                 working_dir: workdir.path().to_path_buf(),
             },
             |_| {},
@@ -126,7 +130,11 @@ fn main() -> Result<()> {
     for (n, p) in &results {
         println!(
             "n={n:>2}  first_person={:<8} emoji={:<5} avg_len={:>3}  tone={}",
-            if p.first_person.is_empty() { "(none)" } else { &p.first_person },
+            if p.first_person.is_empty() {
+                "(none)"
+            } else {
+                &p.first_person
+            },
             p.uses_emoji,
             p.avg_sentence_length_chars,
             p.tone.join("/")
