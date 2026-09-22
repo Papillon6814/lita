@@ -4,6 +4,13 @@
 
 ## 結論
 
+- **採用した方式 B（Supabase 経由の OAuth、D-41）は一周通った。** アプリは Supabase の `/auth/v1/authorize?provider=google` に PKCE で入り、結果を `http://127.0.0.1:<ポート>/` で受け、`grant_type=pkce` でセッションを得る。リフレッシュと RLS 越しの読み取りも成功。Google のシークレットはアプリに載らない【確度：高】
+- Supabase からの戻りには `code` しか付かない。`state` は必須にしない（PKCE の verifier が試行を束ねる）【確度：高】
+- リダイレクト許可リストは `http://127.0.0.1:*` / `http://127.0.0.1:*/` / `http://127.0.0.1:*/**` の3つを登録した。どれが効いたかは切り分けていない【確度：中】
+
+以下は方式 A（アプリが Google と直接話す）で先に確かめた事実。方式 A のコードは捨てたが、知見は残す。
+
+
 - **ループバック＋PKCE は動く。** `http://127.0.0.1:<ランダムポート>` で受け、Google の ID トークンを nonce 付きで検証できた。ブラウザ往復は同意済みなら 8.4 秒、初回同意込みで 32.6 秒【確度：高】
 - **Google はデスクトップ用クライアントでも `client_secret` を要求する。** 省略すると `invalid_request: client_secret is missing`。調査時に【確度：低】としていた点が事実と確定【確度：高】
 - **Supabase は nonce のハッシュ比較。** 生の nonce を両方に送ると `Nonces mismatch`。Google には SHA-256 の16進を nonce として渡し、Supabase には生の値を渡すと通る【確度：高】
@@ -13,12 +20,14 @@
 
 1. Google Cloud プロジェクト `lita-509404`（組織 muumoo.online）に同意画面（External / Testing、テストユーザー kuno@muumoo.online）と Desktop app クライアント「Lita desktop」を作成（ブラウザ操作エージェント）
 2. Supabase プロジェクト `csfvqpqzvcorqlsmfjwb` の Google プロバイダを有効化（`supabase/config.toml` の `[auth.external.google]`、シークレットは `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)`。`supabase config push` で反映。Storage 設定の読み取りで CLI 版差のエラーが出るが認証設定は適用される）
-3. `cargo run -p lita-auth --bin login` を、`LITA_GOOGLE_CLIENT_ID` / `LITA_GOOGLE_CLIENT_SECRET` / `LITA_SUPABASE_URL` / `LITA_SUPABASE_ANON_KEY` を環境変数にして実行。値はすべて macOS キーチェーン（account `lita`）にある
+3. 方式 B 用に Google の Web application クライアント「Lita (Supabase)」を作成（リダイレクト URI は `https://csfvqpqzvcorqlsmfjwb.supabase.co/auth/v1/callback`）。Supabase の Google プロバイダをこのクライアントに向け、`additional_redirect_urls` にループバックを登録して `supabase config push`
+4. `cargo run -p lita-auth --bin login` を `LITA_SUPABASE_URL` / `LITA_SUPABASE_ANON_KEY` を環境変数にして実行。Google の各クライアント ID とシークレットは macOS キーチェーン（account `lita`、service `lita-google-*`）にある。Desktop app クライアント「Lita desktop」は方式 A の検証用で、今は使っていない
 
 ## 途中で踏んだ穴
 
 - ループバック受信で `os error 35`（EAGAIN）。原因は2つ。非ブロッキングの accept を使っていたこと、そしてヘッダーの空行の先まで読もうとして読み取りタイムアウトが macOS では EAGAIN として返ること。ブロッキング accept を別スレッドに置き、空行で止めるように修正し、ユニットテスト3件を追加した
 - 本人が古いタブで許可すると、古いポートに戻るので受け取れない。UI では「一番新しいタブで許可」と案内するか、古いフローを明示的に破棄する
+- 方式 B に切り替えた直後、Supabase の戻りに `state` が無いのに受信側が必須にしていて 404 を返した。任意にして解決
 
 ## 方式の選択（D-41）
 

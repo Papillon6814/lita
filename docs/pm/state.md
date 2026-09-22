@@ -27,8 +27,8 @@
 | --- | --- |
 | バックエンド基盤の選定 | 完了。**Supabase（東京）**（D-40） |
 | Supabase プロジェクト | 完了（org `muumoo`、project `lita`、東京、ref `csfvqpqzvcorqlsmfjwb`） |
-| Google OAuth クライアント | 作成中 |
-| Google ログイン | 未着手 |
+| Google OAuth クライアント | 完了（`lita-509404`、Web クライアント「Lita (Supabase)」） |
+| Google ログイン | 完了（#26）。Supabase 経由の PKCE＋ループバック。`crates/lita-auth` |
 | サーバ側スキーマ | 完了（PR #27）。RLS 付きで本番に適用済み |
 | Rust の API クライアント | 未着手 |
 | 貼り付け／ファイル取り込みの UI | 未着手（v0.1 の入口） |

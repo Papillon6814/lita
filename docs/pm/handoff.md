@@ -17,6 +17,7 @@
 9. **Tauri アプリの骨格を立てた**（Issue #9）— React + TS + Vite、`codex_status` コマンドで Codex の状態を表示。en/ja の i18n と `src/platform` 境界を敷設（D-31〜D-35）
 10. **バックログ全 15 件を GitHub Issue 化した**（#11〜#25）
 11. **保存方式をサーバへ転換した**。SQLite 実装（#11）の途中で「別 PC でも引き継ぎたい」要件が出て、オンライン専用・Google OAuth・v0.1 に含める、と決定（D-36〜D-39）。基盤候補 18 件を調査して Notion 子ページにまとめた。同日 **Supabase に決定（D-40）**
+12. **Supabase にスキーマを適用し、Google ログインを実機で通した**（PR #27、#26）。Google はデスクトップ用クライアントでもシークレットを要求すると確定し、Supabase 経由の OAuth に切り替えた（D-41）。`crates/lita-auth` がログインとリフレッシュを担う
 
 ## いま決まっていること
 
@@ -26,11 +27,9 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 ## 次の一手（この順で）
 
-1. **Google Cloud の OAuth クライアント（Desktop app）を作る（B-41）** — Supabase 側は作成済み（下記）。Google 側はブラウザ操作エージェントで作成中
-2. **Google ログインの実機検証（B-30 / #26）** — Desktop app クライアント＋ループバック＋PKCE
-3. **Rust の API クライアント（B-06 / #11 の後半）** — PostgREST をユーザーの JWT で叩く。スキーマは PR #27 で適用済み（`supabase/migrations/20260922000000_init.sql`）
-4. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
-5. **ブリーフ → 生成 → 承認 → コピーの UI（B-07 / #13）**、速度／品質の切り替え（B-13 / #14）、Voice 生成のステージ表示（B-14 / #15）
+1. **Rust の API クライアント（B-06 / #11 の後半）** — PostgREST をユーザーの JWT で叩く。スキーマは PR #27 で適用済み（`supabase/migrations/20260922000000_init.sql`）
+2. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
+3. **ブリーフ → 生成 → 承認 → コピーの UI（B-07 / #13）**、速度／品質の切り替え（B-13 / #14）、Voice 生成のステージ表示（B-14 / #15）
 
 ## 触る前に知っておくこと
 
@@ -44,11 +43,17 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 - SQLite に戻す提案が出たら、まず D-36 の理由（別 PC での引き継ぎ）を確認してください。ローカル優先＋同期は保留項目（B-31）です。
 - backlog の各項目は GitHub Issue（#11〜#25、マイルストーン v0.1 / v0.2、ラベル `backlog` / `deferred`）と1対1で対応しています。着手時は該当 Issue を自分にアサインし、新しい項目は backlog.md と Issue の両方に追加します。
 
+## Google Cloud（2026-09-22 作成）
+
+- プロジェクト `lita-509404`（組織 muumoo.online）。同意画面は External / Testing、テストユーザーは kuno@muumoo.online のみ。**公開前に同意画面を本番に切り替える必要がある**
+- OAuth クライアント: 「Lita (Supabase)」（Web application、使用中）と「Lita desktop」（Desktop app、方式 A の検証用で未使用）。ID とシークレットはキーチェーン `lita-google-web-client-*` / `lita-google-client-*`
+
 ## Supabase（2026-09-22 作成）
 
 - 組織: `muumoo`（slug `swsrpyuhcrycgcolxaig`、Free プラン）。既存の「finn Org」には作成権限がなかったため新設
 - プロジェクト: `lita`、ref `csfvqpqzvcorqlsmfjwb`、東京 ap-northeast-1、Postgres 17。ダッシュボード https://supabase.com/dashboard/project/csfvqpqzvcorqlsmfjwb
 - DB パスワードは macOS キーチェーン（service `lita-supabase-db-password`、account `lita`）。リポジトリにも Notion にも書かない
+- Google プロバイダは `supabase/config.toml` の `[auth.external.google]` で管理し、`SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET` を環境変数にして `supabase config push` で反映する（Storage 設定の読み取りエラーが出るが認証設定は適用される。CLI 更新で消える見込み）
 - CLI は `--profile <name>` で複数アカウントを切り替えられる。別アカウントを使うときは本人が `supabase login --profile <name>` を対話で実行する
 - `supabase/` はリポジトリにある（`config.toml` とマイグレーション）。worktree を切ったら `supabase link --project-ref csfvqpqzvcorqlsmfjwb` を再実行する（`.temp` は gitignore）。スキーマ変更は新しいマイグレーションファイルを足して `supabase db push`
 
