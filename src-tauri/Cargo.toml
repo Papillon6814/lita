@@ -21,6 +21,7 @@ lita-codex = { path = "../crates/lita-codex" }
 lita-sources = { path = "../crates/lita-sources" }
 lita-store = { path = "../crates/lita-store" }
 anyhow = "1"
+reqwest = { version = "0.12", default-features = false }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

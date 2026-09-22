@@ -2,11 +2,16 @@
 //! `#[tauri::command]` here; the actual work lives in the `lita-*` crates.
 
 mod config;
+mod errors;
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
-use lita_codex::voice::VoiceProfile;
+use lita_codex::voice::{Budget, VoiceProfile, select_material};
 use lita_codex::{CodexCli, Effort, Preflight, Request};
 use lita_sources::Piece;
 use lita_store::{NewSource, SourceKind, Store, Voice, VoiceSummary};
@@ -40,6 +45,8 @@ impl From<Preflight> for CodexStatus {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SessionStatus {
+    /// The stored session is still being refreshed; ask again shortly.
+    Restoring,
     SignedOut,
     SignedIn { email: Option<String> },
 }
@@ -59,6 +66,12 @@ pub struct AppState {
     store: Store,
     keychain: SessionStore,
     session: Mutex<Option<Session>>,
+    /// True until the launch-time restore has finished.
+    restoring: AtomicBool,
+    /// Set by `cancel_sign_in`; cleared when a sign-in starts.
+    sign_in_cancel: Arc<AtomicBool>,
+    /// Set by `cancel_voice_build`; cleared when a build starts.
+    build_cancel: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -68,6 +81,9 @@ impl AppState {
             store: Store::new(config::SUPABASE_URL, config::SUPABASE_ANON_KEY)?,
             keychain: SessionStore::new(config::KEYCHAIN_SERVICE),
             session: Mutex::new(None),
+            restoring: AtomicBool::new(true),
+            sign_in_cancel: Arc::new(AtomicBool::new(false)),
+            build_cancel: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -93,25 +109,29 @@ impl AppState {
             }
         };
         *self.session.lock().unwrap() = restored;
+        self.restoring.store(false, Ordering::Release);
     }
 
     fn status(&self) -> SessionStatus {
+        if self.restoring.load(Ordering::Acquire) {
+            return SessionStatus::Restoring;
+        }
         SessionStatus::from(self.session.lock().unwrap().as_ref())
     }
 
-    /// The current access token, or a message the UI can show.
-    fn access_token(&self) -> Result<String, String> {
+    /// The current access token, or the error the UI shows when signed out.
+    fn access_token(&self) -> Result<String, UiError> {
         self.session
             .lock()
             .unwrap()
             .as_ref()
             .map(|s| s.access_token.clone())
-            .ok_or_else(|| "not signed in".to_string())
+            .ok_or_else(UiError::not_signed_in)
     }
 }
 
-fn fail(e: anyhow::Error) -> String {
-    format!("{e:#}")
+fn fail(e: anyhow::Error) -> UiError {
+    UiError::from(e)
 }
 
 /// Runs `codex doctor --json` off the main thread, because it takes about a
@@ -134,27 +154,39 @@ fn session_status(state: State<'_, AppState>) -> SessionStatus {
 /// Opens the browser for Google sign-in and waits for it to come back.
 /// Blocks for as long as the person takes, so it runs off the main thread.
 #[tauri::command]
-async fn sign_in(app: AppHandle) -> Result<SessionStatus, String> {
+async fn sign_in(app: AppHandle) -> Result<SessionStatus, UiError> {
+    let cancel = {
+        let state = app.state::<AppState>();
+        state.sign_in_cancel.store(false, Ordering::Relaxed);
+        Arc::clone(&state.sign_in_cancel)
+    };
     let opener = app.clone();
     let session = tauri::async_runtime::spawn_blocking(move || {
         let state = opener.state::<AppState>();
-        state.auth.sign_in_with_provider("google", |url| {
-            opener.opener().open_url(url.as_str(), None::<&str>).map_err(Into::into)
-        })
+        state.auth.sign_in_with_provider_cancellable(
+            "google",
+            |url| opener.opener().open_url(url.as_str(), None::<&str>).map_err(Into::into),
+            &cancel,
+        )
     })
     .await
-    .map_err(|e| format!("sign-in task failed: {e}"))?
-    .map_err(|e| format!("{e:#}"))?;
+    .map_err(|e| UiError::unknown(format!("sign-in task failed: {e}")))?
+    .map_err(fail)?;
 
     let state = app.state::<AppState>();
-    state.keychain.save(&session).map_err(|e| format!("{e:#}"))?;
+    state.keychain.save(&session).map_err(fail)?;
     *state.session.lock().unwrap() = Some(session);
     Ok(state.status())
 }
 
 #[tauri::command]
-fn sign_out(state: State<'_, AppState>) -> Result<SessionStatus, String> {
-    state.keychain.clear().map_err(|e| format!("{e:#}"))?;
+fn cancel_sign_in(state: State<'_, AppState>) {
+    state.sign_in_cancel.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn sign_out(state: State<'_, AppState>) -> Result<SessionStatus, UiError> {
+    state.keychain.clear().map_err(fail)?;
     *state.session.lock().unwrap() = None;
     Ok(state.status())
 }
@@ -162,33 +194,62 @@ fn sign_out(state: State<'_, AppState>) -> Result<SessionStatus, String> {
 // ----- voices ----------------------------------------------------------------
 
 #[tauri::command]
-async fn list_voices(app: AppHandle) -> Result<Vec<VoiceSummary>, String> {
+async fn list_voices(app: AppHandle) -> Result<Vec<VoiceSummary>, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<AppState>().store.as_user(token).voices().map_err(fail)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 #[tauri::command]
-async fn get_voice(app: AppHandle, id: String) -> Result<Option<Voice>, String> {
+async fn get_voice(app: AppHandle, id: String) -> Result<Option<Voice>, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<AppState>().store.as_user(token).voice(&id).map_err(fail)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 #[tauri::command]
-async fn delete_voice(app: AppHandle, id: String) -> Result<bool, String> {
+async fn delete_voice(app: AppHandle, id: String) -> Result<bool, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<AppState>().store.as_user(token).delete_voice(&id).map_err(fail)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn rename_voice(app: AppHandle, id: String, name: String) -> Result<(), UiError> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(UiError::invalid("give the voice a name"));
+    }
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).rename_voice(&id, &name).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// The person corrected part of the profile. Stored as given; the UI owns
+/// the editing rules.
+#[tauri::command]
+async fn update_voice_profile(app: AppHandle, id: String, profile: VoiceProfile) -> Result<Option<Voice>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let me = app.state::<AppState>();
+        let store = me.store.as_user(token);
+        store.update_profile(&id, &profile).map_err(fail)?;
+        store.voice(&id).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 /// One piece of writing handed in by the UI.
@@ -210,32 +271,52 @@ pub enum VoiceProgress {
     Saved,
 }
 
+/// The limits `create_voice` applies, so the UI can show them.
+#[derive(Debug, Serialize)]
+pub struct MaterialBudget {
+    pub per_piece_chars: usize,
+    pub total_chars: usize,
+}
+
+#[tauri::command]
+fn material_budget() -> MaterialBudget {
+    let b = Budget::default();
+    MaterialBudget { per_piece_chars: b.per_piece_chars, total_chars: b.total_chars }
+}
+
 /// Builds a Voice from the given writing: Codex extracts the profile
 /// (45–65 s measured), then it is stored with its sources. Emits
-/// `voice-progress` events along the way.
+/// `voice-progress` events along the way. Material is capped by
+/// `Budget::default()` (R-1); the sources are stored in full regardless.
 #[tauri::command]
-async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -> Result<Voice, String> {
+async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -> Result<Voice, UiError> {
     let sources: Vec<NewSource> = sources
         .into_iter()
         .map(|s| NewSource { kind: s.kind, origin: s.origin, body: s.body.trim().to_string() })
         .filter(|s| !s.body.is_empty())
         .collect();
     if sources.is_empty() {
-        return Err("paste at least one piece of writing".into());
+        return Err(UiError::invalid("paste at least one piece of writing"));
     }
     let name = name.trim().to_string();
     if name.is_empty() {
-        return Err("give the voice a name".into());
+        return Err(UiError::invalid("give the voice a name"));
     }
 
-    let token = app.state::<AppState>().access_token()?;
-    let working_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let (token, cancel) = {
+        let state = app.state::<AppState>();
+        state.build_cancel.store(false, Ordering::Relaxed);
+        (state.access_token()?, Arc::clone(&state.build_cancel))
+    };
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
 
-    tauri::async_runtime::spawn_blocking(move || -> Result<Voice, String> {
-        std::fs::create_dir_all(&working_dir).map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Voice, UiError> {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
         let _ = app.emit("voice-progress", VoiceProgress::Started);
 
-        let samples: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
+        let bodies: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
+        let material = select_material(&bodies, Budget::default());
+        let samples: Vec<&str> = material.samples.iter().map(String::as_str).collect();
         let req = Request {
             prompt: VoiceProfile::extraction_prompt(&samples),
             schema: VoiceProfile::extraction_schema(),
@@ -245,11 +326,15 @@ async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -
         };
         let emitter = app.clone();
         let run = CodexCli::on_path()
-            .run_typed::<VoiceProfile>(&req, |event| {
-                if event.kind == "turn.started" {
-                    let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
-                }
-            })
+            .run_typed_cancellable::<VoiceProfile>(
+                &req,
+                |event| {
+                    if event.kind == "turn.started" {
+                        let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
+                    }
+                },
+                cancel,
+            )
             .map_err(fail)?;
         let _ = app.emit("voice-progress", VoiceProgress::Extracted);
 
@@ -263,7 +348,12 @@ async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -
         Ok(voice)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+fn cancel_voice_build(state: State<'_, AppState>) {
+    state.build_cancel.store(true, Ordering::Relaxed);
 }
 
 // ----- sources (D-43) ---------------------------------------------------------
@@ -285,29 +375,29 @@ pub struct Imported {
 const IMPORT_MAX: usize = 20;
 
 #[tauri::command]
-async fn import_note(account: String) -> Result<Imported, String> {
+async fn import_note(account: String) -> Result<Imported, UiError> {
     tauri::async_runtime::spawn_blocking(move || {
         let (listing, pieces) = lita_sources::note::import(&account, IMPORT_MAX).map_err(fail)?;
         Ok(Imported { pieces, total: Some(listing.total_count), skipped_paid: listing.skipped_paid, recent_only: false })
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 #[tauri::command]
-async fn import_medium(handle: String) -> Result<Imported, String> {
+async fn import_medium(handle: String) -> Result<Imported, UiError> {
     tauri::async_runtime::spawn_blocking(move || {
         let pieces = lita_sources::medium::import(&handle).map_err(fail)?;
         Ok(Imported { pieces, total: None, skipped_paid: 0, recent_only: true })
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 /// `contents` is the text of `data/tweets.js` from the archive, read by
 /// the UI. Newest posts first, capped like the other imports.
 #[tauri::command]
-async fn import_x_archive(contents: String, handle: Option<String>, include_replies: bool) -> Result<Imported, String> {
+async fn import_x_archive(contents: String, handle: Option<String>, include_replies: bool) -> Result<Imported, UiError> {
     tauri::async_runtime::spawn_blocking(move || {
         let opts = lita_sources::x::Options { include_replies, ..Default::default() };
         let mut pieces = lita_sources::x::parse_tweets_js(&contents, handle.as_deref(), opts).map_err(fail)?;
@@ -316,7 +406,7 @@ async fn import_x_archive(contents: String, handle: Option<String>, include_repl
         Ok(Imported { pieces, total: Some(total), skipped_paid: 0, recent_only: false })
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -335,11 +425,16 @@ pub fn run() {
             codex_status,
             session_status,
             sign_in,
+            cancel_sign_in,
             sign_out,
             list_voices,
             get_voice,
             delete_voice,
+            rename_voice,
+            update_voice_profile,
             create_voice,
+            cancel_voice_build,
+            material_budget,
             import_note,
             import_medium,
             import_x_archive

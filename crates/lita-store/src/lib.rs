@@ -245,6 +245,12 @@ impl UserStore<'_> {
         self.patch_one("voices", id, &json!({ "name": name }))
     }
 
+    /// Updates the profile in place (the person corrected a field). Sources
+    /// stay as they were: the profile was still built from them.
+    pub fn update_profile(&self, id: &str, profile: &VoiceProfile) -> Result<()> {
+        self.patch_one("voices", id, &json!({ "profile": profile }))
+    }
+
     /// Replaces the profile after a re-extraction. Sources are replaced too,
     /// since the new profile was built from them.
     pub fn replace_voice_profile(&self, id: &str, profile: &VoiceProfile, sources: &[NewSource]) -> Result<()> {

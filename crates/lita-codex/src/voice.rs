@@ -200,3 +200,83 @@ mod tests {
         assert_eq!(view["preferred_words"][0], "結局は");
     }
 }
+
+/// How much writing extraction is allowed to see. Measured 2026-09-22: a
+/// Voice is stable from four pieces and twenty mostly adds vocabulary
+/// (D-20), and prompt size only matters when reasoning is on (D-30). The
+/// numbers are provisional until re-measured with long articles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Budget {
+    /// Characters kept from the start of each piece.
+    pub per_piece_chars: usize,
+    /// Characters across all pieces; later pieces are dropped once reached.
+    pub total_chars: usize,
+}
+
+impl Default for Budget {
+    fn default() -> Self {
+        Self { per_piece_chars: 1_500, total_chars: 20_000 }
+    }
+}
+
+/// The pieces that will actually be sent, and what the budget did to them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Material {
+    pub samples: Vec<String>,
+    pub chars_used: usize,
+    /// Pieces cut down to `per_piece_chars`.
+    pub truncated: usize,
+    /// Pieces left out because `total_chars` was reached.
+    pub dropped: usize,
+}
+
+/// Applies `budget` to `pieces` in order: a piece is cut to the per-piece
+/// limit, and once the total is reached the rest are dropped. Empty pieces
+/// never count.
+pub fn select_material<S: AsRef<str>>(pieces: &[S], budget: Budget) -> Material {
+    let mut m = Material { samples: Vec::new(), chars_used: 0, truncated: 0, dropped: 0 };
+    for piece in pieces {
+        let text = piece.as_ref().trim();
+        if text.is_empty() {
+            continue;
+        }
+        if m.chars_used >= budget.total_chars {
+            m.dropped += 1;
+            continue;
+        }
+        let room = budget.total_chars - m.chars_used;
+        let limit = budget.per_piece_chars.min(room);
+        let count = text.chars().count();
+        let kept: String = if count > limit {
+            m.truncated += 1;
+            text.chars().take(limit).collect()
+        } else {
+            text.to_string()
+        };
+        m.chars_used += kept.chars().count();
+        m.samples.push(kept);
+    }
+    m
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    #[test]
+    fn short_pieces_pass_untouched() {
+        let m = select_material(&["abc", "", "  def  "], Budget::default());
+        assert_eq!(m.samples, vec!["abc", "def"]);
+        assert_eq!((m.chars_used, m.truncated, m.dropped), (6, 0, 0));
+    }
+
+    #[test]
+    fn long_pieces_are_cut_and_overflow_is_dropped() {
+        let b = Budget { per_piece_chars: 5, total_chars: 12 };
+        let m = select_material(&["あいうえおかき", "12345678", "xyz", "more"], b);
+        assert_eq!(m.samples, vec!["あいうえお", "12345", "xy"]);
+        assert_eq!(m.chars_used, 12);
+        assert_eq!(m.truncated, 3);
+        assert_eq!(m.dropped, 1);
+    }
+}
