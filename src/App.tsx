@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { host, type CodexStatus, type SessionStatus } from "./platform/host";
+import { host, type CodexStatus, type SessionStatus, type UiError } from "./platform/host";
+import { asUiError } from "./errors";
 import { t } from "./i18n";
+import { ErrorNote } from "./components/ErrorNote";
 import { VoiceSection } from "./components/VoiceSection";
 import "./App.css";
 
@@ -10,7 +12,7 @@ type View = { kind: "checking" } | { kind: "done"; status: CodexStatus };
 type Auth =
   | { kind: "checking" }
   | { kind: "waiting" }
-  | { kind: "done"; status: SessionStatus; error?: string };
+  | { kind: "done"; status: SessionStatus; error?: UiError };
 
 export default function App() {
   const [view, setView] = useState<View>({ kind: "checking" });
@@ -20,7 +22,7 @@ export default function App() {
     try {
       setAuth({ kind: "done", status: await host.sessionStatus() });
     } catch (e) {
-      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) });
     }
   }, []);
 
@@ -29,15 +31,19 @@ export default function App() {
     try {
       setAuth({ kind: "done", status: await host.signIn() });
     } catch (e) {
-      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+      const error = asUiError(e);
+      // A cancel is the person's own choice; no need to call it an error.
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: error.code === "cancelled" ? undefined : error });
     }
   }, []);
+
+  const cancelSignIn = useCallback(() => void host.cancelSignIn(), []);
 
   const signOut = useCallback(async () => {
     try {
       setAuth({ kind: "done", status: await host.signOut() });
     } catch (e) {
-      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) });
     }
   }, []);
 
@@ -58,26 +64,44 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [check, loadSession]);
 
+  const signedIn = auth.kind === "done" && auth.status.status === "signed_in";
+  const codexReady = view.kind === "done" && view.status.status === "ready";
+  const allGood = signedIn && codexReady;
+
   return (
     <main className="shell">
       <header className="masthead">
-        <h1>Lita</h1>
-        <p className="tagline">{t("app.tagline")}</p>
+        <div>
+          <h1>Lita</h1>
+          <p className="tagline">{t("app.tagline")}</p>
+        </div>
+        {/* R-3: once everything is fine, status shrinks to one quiet line. */}
+        {allGood && auth.kind === "done" && auth.status.status === "signed_in" && (
+          <div className="status-strip" aria-live="polite">
+            <span className="ok">{t("status.codexOk")}</span>
+            <span className="muted">{t("status.signedInAs", { email: auth.status.email ?? "" })}</span>
+            <button className="link" onClick={signOut}>{t("action.signOut")}</button>
+          </div>
+        )}
       </header>
 
-      <section className="card" aria-live="polite">
-        <SessionBody auth={auth} onSignIn={signIn} onSignOut={signOut} />
-      </section>
+      {!signedIn && (
+        <section className="card" aria-live="polite">
+          <SessionBody auth={auth} onSignIn={signIn} onCancel={cancelSignIn} />
+        </section>
+      )}
 
-      <section className="card" aria-live="polite">
-        {view.kind === "checking" ? (
-          <p className="muted">{t("codex.checking")}</p>
-        ) : (
-          <StatusBody status={view.status} onRetry={check} />
-        )}
-      </section>
+      {!codexReady && (
+        <section className="card" aria-live="polite">
+          {view.kind === "checking" ? (
+            <p className="muted">{t("codex.checking")}</p>
+          ) : (
+            <StatusBody status={view.status} onRetry={check} />
+          )}
+        </section>
+      )}
 
-      {auth.kind === "done" && auth.status.status === "signed_in" && view.kind === "done" && view.status.status === "ready" && (
+      {allGood && (
         <section className="card">
           <VoiceSection />
         </section>
@@ -88,26 +112,20 @@ export default function App() {
   );
 }
 
-function SessionBody({ auth, onSignIn, onSignOut }: { auth: Auth; onSignIn: () => void; onSignOut: () => void }) {
+function SessionBody({ auth, onSignIn, onCancel }: { auth: Auth; onSignIn: () => void; onCancel: () => void }) {
   if (auth.kind === "checking") return <p className="muted">{t("session.checking")}</p>;
-  if (auth.kind === "waiting") return <p className="muted">{t("session.waiting")}</p>;
-  if (auth.status.status === "signed_in") {
+  if (auth.kind === "waiting") {
     return (
       <div className="row">
-        <p className="ok">{t("session.signedIn", { email: auth.status.email ?? "" })}</p>
-        <button className="secondary" onClick={onSignOut}>{t("action.signOut")}</button>
+        <p className="muted">{t("session.waiting")}</p>
+        <button className="secondary" onClick={onCancel}>{t("action.cancel")}</button>
       </div>
     );
   }
   return (
     <>
       <p>{t("session.signedOut")}</p>
-      {auth.error && (
-        <>
-          <p className="warn">{t("session.error")}</p>
-          <pre>{auth.error}</pre>
-        </>
-      )}
+      {auth.error && <ErrorNote error={auth.error} />}
       <button onClick={onSignIn}>{t("action.signIn")}</button>
     </>
   );
@@ -116,7 +134,7 @@ function SessionBody({ auth, onSignIn, onSignOut }: { auth: Auth; onSignIn: () =
 function StatusBody({ status, onRetry }: { status: CodexStatus; onRetry: () => void }) {
   switch (status.status) {
     case "ready":
-      return <p className="ok">{t("codex.ready", { version: status.version })}</p>;
+      return <p className="ok">{t("status.codexOk")}</p>;
     case "not_logged_in":
       return (
         <>
@@ -133,15 +151,14 @@ function StatusBody({ status, onRetry }: { status: CodexStatus; onRetry: () => v
           <p className="muted">{t("codex.notInstalled.hint")}</p>
           <div className="actions">
             <button onClick={() => void host.openExternal(CODEX_INSTALL_URL)}>{t("action.install")}</button>
-            <button onClick={onRetry}>{t("action.retry")}</button>
+            <button className="secondary" onClick={onRetry}>{t("action.retry")}</button>
           </div>
         </>
       );
     case "error":
       return (
         <>
-          <p className="warn">{t("codex.error")}</p>
-          <pre>{status.message}</pre>
+          <ErrorNote error={{ code: "unknown", detail: status.message }} />
           <button onClick={onRetry}>{t("action.retry")}</button>
         </>
       );

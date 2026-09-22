@@ -13,6 +13,8 @@ use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -51,6 +53,8 @@ pub enum FailureKind {
     QuotaExhausted,
     /// The final message never satisfied the schema we asked for.
     SchemaMismatch,
+    /// The caller asked for the run to stop (see `run_typed_cancellable`).
+    Cancelled,
     /// Anything we could not classify. Show the stderr tail and move on.
     Unknown,
 }
@@ -68,6 +72,7 @@ impl fmt::Display for RunFailure {
             FailureKind::NotLoggedIn => "Codex has no usable credentials",
             FailureKind::QuotaExhausted => "the account's Codex usage limit was reached",
             FailureKind::SchemaMismatch => "Codex never returned output matching the schema",
+            FailureKind::Cancelled => "the run was cancelled",
             FailureKind::Unknown => "the Codex CLI failed",
         };
         write!(
@@ -188,7 +193,18 @@ impl CodexCli {
     pub fn run_typed<T: DeserializeOwned>(
         &self,
         req: &Request,
+        on_event: impl FnMut(&Event),
+    ) -> Result<Run<T>> {
+        self.run_typed_cancellable(req, on_event, Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Like `run_typed`, but stops (killing the CLI) as soon as `cancel`
+    /// becomes true. A cancelled run fails with `FailureKind::Cancelled`.
+    pub fn run_typed_cancellable<T: DeserializeOwned>(
+        &self,
+        req: &Request,
         mut on_event: impl FnMut(&Event),
+        cancel: Arc<AtomicBool>,
     ) -> Result<Run<T>> {
         let scratch = tempfile::tempdir().context("failed to create a scratch directory")?;
         let schema_path = scratch.path().join("schema.json");
@@ -220,6 +236,27 @@ impl CodexCli {
         });
 
         let stdout = child.stdout.take().expect("stdout was piped");
+
+        // A watcher kills the child when asked to cancel; that closes stdout,
+        // which ends the read loop below.
+        let child = Arc::new(Mutex::new(child));
+        let finished = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let child = Arc::clone(&child);
+            let finished = Arc::clone(&finished);
+            let cancel = Arc::clone(&cancel);
+            std::thread::spawn(move || {
+                while !finished.load(Ordering::Relaxed) {
+                    if cancel.load(Ordering::Relaxed) {
+                        if let Ok(mut c) = child.lock() {
+                            let _ = c.kill();
+                        }
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            })
+        };
         let mut events = Vec::new();
         for line in BufReader::new(stdout).lines() {
             let line = line.context("failed to read the event stream")?;
@@ -236,10 +273,24 @@ impl CodexCli {
             }
         }
 
-        let status = child.wait().context("failed to wait for the Codex CLI")?;
+        let status = child
+            .lock()
+            .map_err(|_| anyhow::anyhow!("child handle poisoned"))?
+            .wait()
+            .context("failed to wait for the Codex CLI")?;
+        finished.store(true, Ordering::Relaxed);
+        let _ = watcher.join();
         let stderr = stderr_reader.join().unwrap_or_default();
         let elapsed = started.elapsed();
 
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RunFailure {
+                kind: FailureKind::Cancelled,
+                exit_code: status.code(),
+                stderr_tail: String::new(),
+            }
+            .into());
+        }
         if !status.success() {
             return Err(RunFailure {
                 kind: classify(&stderr),

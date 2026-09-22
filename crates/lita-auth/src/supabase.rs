@@ -12,7 +12,9 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::loopback::{Callback, wait_for_callback};
+use std::sync::atomic::AtomicBool;
+
+use crate::loopback::{Callback, wait_for_callback_cancellable};
 
 /// A signed-in Lita session. This is what gets persisted (in the OS
 /// keychain, never in a file) and sent as the bearer token to PostgREST.
@@ -68,6 +70,16 @@ impl SupabaseAuth {
         provider: &str,
         open_browser: impl FnOnce(&Url) -> Result<()>,
     ) -> Result<Session> {
+        self.sign_in_with_provider_cancellable(provider, open_browser, &AtomicBool::new(false))
+    }
+
+    /// As above, but stops waiting for the browser once `cancel` is set.
+    pub fn sign_in_with_provider_cancellable(
+        &self,
+        provider: &str,
+        open_browser: impl FnOnce(&Url) -> Result<()>,
+        cancel: &AtomicBool,
+    ) -> Result<Session> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").context("binding a loopback port")?;
         let port = listener.local_addr()?.port();
         let redirect_to = format!("http://127.0.0.1:{port}/");
@@ -84,7 +96,7 @@ impl SupabaseAuth {
             .append_pair("code_challenge_method", "s256");
 
         open_browser(&authorize)?;
-        let Callback { code, .. } = wait_for_callback(listener, self.timeout)?;
+        let Callback { code, .. } = wait_for_callback_cancellable(listener, self.timeout, cancel)?;
 
         #[derive(Serialize)]
         struct Body<'a> {

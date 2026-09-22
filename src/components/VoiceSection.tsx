@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { host, type SourceInput, type Voice } from "../platform/host";
+import { host, type SourceInput, type UiError, type Voice } from "../platform/host";
+import { asUiError } from "../errors";
 import { t } from "../i18n";
 import { VoiceIntake } from "./VoiceIntake";
 import { BuildingVoice } from "./BuildingVoice";
@@ -8,7 +9,7 @@ import { VoiceCard } from "./VoiceCard";
 // v0.1 is one voice (D-13): the first one in the list is "the" voice.
 type State =
   | { kind: "loading" }
-  | { kind: "none"; error?: string }
+  | { kind: "none"; error?: UiError }
   | { kind: "building" }
   | { kind: "ready"; voice: Voice };
 
@@ -23,7 +24,7 @@ export function VoiceSection() {
       const voice = await host.getVoice(first.id);
       setState(voice ? { kind: "ready", voice } : { kind: "none" });
     } catch (e) {
-      setState({ kind: "none", error: String(e) });
+      setState({ kind: "none", error: asUiError(e) });
     }
   }, []);
 
@@ -36,9 +37,12 @@ export function VoiceSection() {
     try {
       setState({ kind: "ready", voice: await host.createVoice(name, sources) });
     } catch (e) {
-      setState({ kind: "none", error: String(e) });
+      const error = asUiError(e);
+      setState({ kind: "none", error: error.code === "cancelled" ? undefined : error });
     }
   }, []);
+
+  const cancelBuild = useCallback(() => void host.cancelVoiceBuild(), []);
 
   const startOver = useCallback(async (voice: Voice) => {
     if (!window.confirm(t("voice.card.startOverConfirm"))) return;
@@ -47,7 +51,7 @@ export function VoiceSection() {
       setState({ kind: "none" });
     } catch (e) {
       setState({ kind: "ready", voice });
-      alert(String(e));
+      alert(String(asUiError(e).detail));
     }
   }, []);
 
@@ -57,7 +61,7 @@ export function VoiceSection() {
     case "none":
       return <VoiceIntake onBuild={build} error={state.error} />;
     case "building":
-      return <BuildingVoice />;
+      return <BuildingVoice onCancel={cancelBuild} />;
     case "ready":
       return <VoiceCard voice={state.voice} onStartOver={() => void startOver(state.voice)} />;
   }

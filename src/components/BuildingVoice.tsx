@@ -7,7 +7,7 @@ import { t } from "../i18n";
 // on a timer rather than on real progress. Say so in the hint text.
 const STAGES: VoiceProgress["stage"][] = ["started", "thinking", "extracted", "saved"];
 
-export function BuildingVoice() {
+export function BuildingVoice({ onCancel }: { onCancel: () => void }) {
   const [reached, setReached] = useState<VoiceProgress["stage"]>("started");
 
   useEffect(() => {
@@ -19,10 +19,13 @@ export function BuildingVoice() {
   const current = STAGES.indexOf(reached);
   return (
     <div className="building" aria-live="polite">
-      <h2>{t("voice.building.title")}</h2>
+      <div className="row">
+        <h2>{t("voice.building.title")}</h2>
+        <button className="secondary" onClick={onCancel}>{t("voice.building.cancel")}</button>
+      </div>
       <ol className="stages">
         {STAGES.map((s, i) => (
-          <li key={s} className={i < current ? "done" : i === current ? "active" : ""}>
+          <li key={s} className={i < current ? "done" : i === current ? "active" : ""} aria-current={i === current ? "step" : undefined}>
             {t(`voice.stage.${s}` as const)}
           </li>
         ))}

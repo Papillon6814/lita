@@ -20,7 +20,19 @@ pub(crate) struct Callback {
 /// gets a 404 and we keep waiting. Accepting happens on its own thread so
 /// the timeout does not depend on non-blocking sockets, which behave
 /// differently across platforms.
+#[cfg(test)]
 pub(crate) fn wait_for_callback(listener: TcpListener, timeout: Duration) -> Result<Callback> {
+    wait_for_callback_cancellable(listener, timeout, &std::sync::atomic::AtomicBool::new(false))
+}
+
+/// As above, but gives up as soon as `cancel` is set.
+pub(crate) fn wait_for_callback_cancellable(
+    listener: TcpListener,
+    timeout: Duration,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Callback> {
+    use std::sync::atomic::Ordering;
+    use std::sync::mpsc::RecvTimeoutError;
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -38,9 +50,16 @@ pub(crate) fn wait_for_callback(listener: TcpListener, timeout: Duration) -> Res
             }
         }
     });
-    match rx.recv_timeout(timeout) {
-        Ok(result) => result,
-        Err(_) => bail!("timed out waiting for the browser"),
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            bail!("sign-in was cancelled");
+        }
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(result) => return result,
+            Err(RecvTimeoutError::Timeout) if std::time::Instant::now() < deadline => continue,
+            Err(_) => bail!("timed out waiting for the browser"),
+        }
     }
 }
 
@@ -166,6 +185,20 @@ mod tests {
         assert!(page.contains("cancelled"));
         let err = waiter.join().unwrap().unwrap_err();
         assert!(err.to_string().contains("access_denied"), "{err}");
+    }
+
+    #[test]
+    fn waiting_can_be_cancelled() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let c2 = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            c2.store(true, Ordering::Relaxed);
+        });
+        let err = wait_for_callback_cancellable(listener, Duration::from_secs(5), &cancel).unwrap_err();
+        assert!(err.to_string().contains("cancelled"), "{err}");
     }
 
     #[test]
