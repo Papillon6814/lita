@@ -81,6 +81,7 @@ mod tests {
             closes_with: String::new(),
             uses_emoji: false,
             representative_excerpts: vec![Excerpt { excerpt: "SECRET-EXCERPT".into(), why: "".into() }],
+            one_line: String::new(),
         };
         let p = generation_prompt(
             &profile,

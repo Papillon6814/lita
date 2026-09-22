@@ -37,6 +37,7 @@ fn main() -> Result<()> {
         closes_with: String::new(),
         uses_emoji: false,
         representative_excerpts: vec![Excerpt { excerpt: "例".into(), why: "短い".into() }],
+            one_line: String::new(),
     };
     let sources = vec![
         NewSource { kind: SourceKind::Paste, origin: None, body: "一つ目".into() },

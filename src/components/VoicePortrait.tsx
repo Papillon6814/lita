@@ -62,7 +62,7 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
               </>
             )}
           </div>
-          <p className="lead">{leadSentence(p)}</p>
+          <p className="lead">{p.one_line.trim() || leadSentence(p)}</p>
           <p className="attr">
             {t("voice.attribution", { n: String(voice.voice_sources.length), date: created })}{" "}
             <button className="link" onClick={() => setOpen(true)}>{t("voice.fixSummary")}</button>
@@ -79,6 +79,7 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
       <details className="more" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
         <summary>{open ? t("voice.details.hide") : t("voice.details.show")}</summary>
         <dl className="sheet">
+          <TextRow label={t("voice.card.oneLine")} value={p.one_line} onSave={(v) => save({ ...p, one_line: v })} />
           <Row label={t("voice.card.language")}>{languageName(p.language)}</Row>
           <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} />
           <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} />

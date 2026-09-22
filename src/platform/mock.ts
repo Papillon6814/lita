@@ -4,7 +4,8 @@
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
-// intake, intake-loaded, building, voice, voice-open, write, write-generating,
+// intake, intake-loaded, building, voice, voice-open, voice-template (older
+// profile without one_line), write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
 
 import type * as T from "./types";
@@ -36,6 +37,7 @@ const profile: T.VoiceProfile = {
     { excerpt: "資本政策は、何を諦めるかを先に決める作業なのだろうか。", why: "問いで締める癖が出ている" },
     { excerpt: "ファイナンスの話は結局、時間をどう買うかに帰着すると思う。", why: "抽象化して言い切る" },
   ],
+  one_line: scene === "voice-template" ? "" : "あなたの文章は、常体で分析的。エクイティやファイナンスを軸に問いを立て、「のだろうか」と含みを残して締める。",
 };
 
 const sources: T.VoiceSource[] = [1, 2, 3, 4].map((i) => ({
