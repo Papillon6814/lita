@@ -16,7 +16,7 @@ export type SessionStatus =
   | { status: "signed_out" }
   | { status: "signed_in"; email: string | null };
 
-export type SourceKind = "paste" | "file";
+export type SourceKind = "paste" | "file" | "note" | "medium" | "x";
 
 export type SourceInput = { kind: SourceKind; origin: string | null; body: string };
 
@@ -62,6 +62,9 @@ export type VoiceSummary = {
 
 export type VoiceProgress = { stage: "started" | "thinking" | "extracted" | "saved" };
 
+export type Piece = { title: string | null; url: string | null; published_at: string | null; text: string };
+export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
+
 export const host = {
   codexStatus: () => invoke<CodexStatus>("codex_status"),
   sessionStatus: () => invoke<SessionStatus>("session_status"),
@@ -71,6 +74,10 @@ export const host = {
   getVoice: (id: string) => invoke<Voice | null>("get_voice", { id }),
   deleteVoice: (id: string) => invoke<boolean>("delete_voice", { id }),
   createVoice: (name: string, sources: SourceInput[]) => invoke<Voice>("create_voice", { name, sources }),
+  importNote: (account: string) => invoke<Imported>("import_note", { account }),
+  importMedium: (handle: string) => invoke<Imported>("import_medium", { handle }),
+  importXArchive: (contents: string, handle: string | null, includeReplies: boolean) =>
+    invoke<Imported>("import_x_archive", { contents, handle, includeReplies }),
   onVoiceProgress: (handler: (p: VoiceProgress) => void): Promise<UnlistenFn> =>
     listen<VoiceProgress>("voice-progress", (e) => handler(e.payload)),
   openExternal: (url: string) => openUrl(url),

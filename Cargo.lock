@@ -2236,6 +2236,7 @@ dependencies = [
  "anyhow",
  "lita-auth",
  "lita-codex",
+ "lita-sources",
  "lita-store",
  "serde",
  "serde_json",
