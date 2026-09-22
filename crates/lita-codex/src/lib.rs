@@ -64,6 +64,8 @@ pub enum FailureKind {
 pub struct RunFailure {
     pub kind: FailureKind,
     pub exit_code: Option<i32>,
+    /// What Codex said in its `turn.failed` event, when it got that far.
+    pub message: Option<String>,
     pub stderr_tail: String,
 }
 
@@ -76,11 +78,14 @@ impl fmt::Display for RunFailure {
             FailureKind::Cancelled => "the run was cancelled",
             FailureKind::Unknown => "the Codex CLI failed",
         };
-        write!(
-            f,
-            "{what} (exit {:?})\n{}",
-            self.exit_code, self.stderr_tail
-        )
+        write!(f, "{what} (exit {:?})", self.exit_code)?;
+        if let Some(m) = &self.message {
+            write!(f, "\n{m}")?;
+        }
+        if !self.stderr_tail.is_empty() {
+            write!(f, "\n{}", self.stderr_tail)?;
+        }
+        Ok(())
     }
 }
 
@@ -187,6 +192,22 @@ impl CodexCli {
         })
     }
 
+    /// Whether the CLI has credentials, without touching the network.
+    ///
+    /// `codex login status` exits 0 when logged in and 1 otherwise, in about
+    /// 10 ms. Checking first spares a run that would otherwise spend ten
+    /// seconds retrying a 401 (verified against codex-cli 0.155.1).
+    /// Returns `None` if the command itself could not be run.
+    pub fn logged_in(&self) -> Option<bool> {
+        Command::new(&self.program)
+            .args(["login", "status"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()
+            .map(|st| st.success())
+    }
+
     /// Runs one prompt and deserializes the final message into `T`.
     ///
     /// `on_event` is called as each JSONL event arrives, so a caller can drive
@@ -207,6 +228,15 @@ impl CodexCli {
         mut on_event: impl FnMut(&Event),
         cancel: Arc<AtomicBool>,
     ) -> Result<Run<T>> {
+        if self.logged_in() == Some(false) {
+            return Err(RunFailure {
+                kind: FailureKind::NotLoggedIn,
+                exit_code: None,
+                message: None,
+                stderr_tail: String::new(),
+            }
+            .into());
+        }
         let scratch = tempfile::tempdir().context("failed to create a scratch directory")?;
         let schema_path = scratch.path().join("schema.json");
         let output_path = scratch.path().join("final.json");
@@ -288,14 +318,17 @@ impl CodexCli {
             return Err(RunFailure {
                 kind: FailureKind::Cancelled,
                 exit_code: status.code(),
+                message: None,
                 stderr_tail: String::new(),
             }
             .into());
         }
         if !status.success() {
+            let failure = turn_failure(&events);
             return Err(RunFailure {
-                kind: classify(&stderr),
+                kind: classify(&failure, &stderr),
                 exit_code: status.code(),
+                message: failure.message,
                 stderr_tail: tail(&stderr),
             }
             .into());
@@ -366,12 +399,64 @@ impl CodexCli {
     }
 }
 
-fn classify(stderr: &str) -> FailureKind {
-    let lower = stderr.to_lowercase();
-    if lower.contains("not logged in") || lower.contains("codex login") || lower.contains("401") {
+/// What Codex reported about a failed turn, pulled from its own event stream.
+///
+/// `codex exec --json` ends a failed run with `{"type":"turn.failed","error":
+/// {"message": …}}` (and repeats the text in `{"type":"error"}` events before
+/// it). That record is the sturdy signal; stderr is tracing output that
+/// changes shape between releases. Newer CLIs may add a machine-readable
+/// `codexErrorInfo` next to the message, so it is read when present.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct TurnFailure {
+    pub message: Option<String>,
+    pub info: Option<String>,
+}
+
+fn turn_failure(events: &[Event]) -> TurnFailure {
+    let failed = events.iter().rev().find(|e| e.kind == "turn.failed");
+    let error = failed.map(|e| &e.raw["error"]);
+    let message = error
+        .and_then(|e| e["message"].as_str())
+        .or_else(|| {
+            events
+                .iter()
+                .rev()
+                .find(|e| e.kind == "error")
+                .and_then(|e| e.raw["message"].as_str())
+        })
+        .map(str::to_string);
+    let info = error
+        .and_then(|e| e["codexErrorInfo"].as_str().or_else(|| e["codex_error_info"].as_str()))
+        .map(str::to_string);
+    TurnFailure { message, info }
+}
+
+/// Maps a failure to something Lita can act on.
+///
+/// Verified 2026-09-22 against codex-cli 0.155.1: with no credentials the
+/// stream ends in `turn.failed` whose message carries `401 Unauthorized:
+/// Missing bearer or basic authentication in header`; an exhausted plan ends
+/// in `turn.failed` with `You've hit your usage limit …` (from the CLI's
+/// public issue tracker; not reproducible on demand).
+fn classify(failure: &TurnFailure, stderr: &str) -> FailureKind {
+    if let Some(info) = failure.info.as_deref() {
+        let info = info.to_ascii_lowercase();
+        if info.contains("unauthorized") {
+            return FailureKind::NotLoggedIn;
+        }
+        if info.contains("usagelimit") || info.contains("usage_limit") || info.contains("ratelimit") {
+            return FailureKind::QuotaExhausted;
+        }
+    }
+    let text = failure.message.as_deref().unwrap_or(stderr);
+    let lower = text.to_lowercase();
+    if lower.contains("401") || lower.contains("unauthorized") || lower.contains("missing bearer")
+        || lower.contains("not logged in") || lower.contains("codex login")
+    {
         FailureKind::NotLoggedIn
     } else if lower.contains("usage limit")
         || lower.contains("rate limit")
+        || lower.contains("too many requests")
         || lower.contains("quota")
         || lower.contains("429")
     {
@@ -420,20 +505,49 @@ mod tests {
         assert_eq!(Effort::default(), Effort::Quality);
     }
 
+    fn event(json: &str) -> Event {
+        let raw: Value = serde_json::from_str(json).unwrap();
+        Event { kind: raw["type"].as_str().unwrap().to_string(), raw }
+    }
+
+    // Captured from codex-cli 0.155.1 with an empty CODEX_HOME (2026-09-22).
+    const NOT_LOGGED_IN: &str = r#"{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a3f1f0aa1f32dfaa-NRT, request id: req_05817a7d59a044429961d9e51826b96d"}}"#;
+    // As reported for codex-cli on the public tracker (openai/codex).
+    const USAGE_LIMIT: &str = r#"{"type":"turn.failed","error":{"message":"You've hit your usage limit. Upgrade to Plus to continue using Codex, or try again at Sep 13th, 2026 10:04 PM."}}"#;
+
     #[test]
-    fn classifies_a_login_failure() {
-        assert_eq!(
-            classify("error: not logged in, run codex login"),
-            FailureKind::NotLoggedIn
-        );
+    fn reads_the_turn_failed_record() {
+        let events = vec![event(r#"{"type":"thread.started","thread_id":"t"}"#), event(r#"{"type":"error","message":"Reconnecting... 2/5"}"#), event(NOT_LOGGED_IN)];
+        let f = turn_failure(&events);
+        assert!(f.message.unwrap().starts_with("unexpected status 401"));
+        assert_eq!(f.info, None);
     }
 
     #[test]
-    fn classifies_a_quota_failure() {
-        assert_eq!(
-            classify("You have hit your usage limit."),
-            FailureKind::QuotaExhausted
-        );
+    fn classifies_a_login_failure_from_the_stream() {
+        let f = turn_failure(&[event(NOT_LOGGED_IN)]);
+        assert_eq!(classify(&f, "unrelated stderr noise"), FailureKind::NotLoggedIn);
+    }
+
+    #[test]
+    fn classifies_a_quota_failure_from_the_stream() {
+        let f = turn_failure(&[event(USAGE_LIMIT)]);
+        assert_eq!(classify(&f, ""), FailureKind::QuotaExhausted);
+    }
+
+    #[test]
+    fn prefers_machine_readable_error_info_when_present() {
+        let f = turn_failure(&[event(r#"{"type":"turn.failed","error":{"message":"anything","codexErrorInfo":"usageLimitExceeded"}}"#)]);
+        assert_eq!(classify(&f, ""), FailureKind::QuotaExhausted);
+        let f = turn_failure(&[event(r#"{"type":"turn.failed","error":{"message":"anything","codexErrorInfo":"unauthorized"}}"#)]);
+        assert_eq!(classify(&f, ""), FailureKind::NotLoggedIn);
+    }
+
+    #[test]
+    fn falls_back_to_stderr_without_a_turn_record() {
+        assert_eq!(classify(&TurnFailure::default(), "error: not logged in, run codex login"), FailureKind::NotLoggedIn);
+        assert_eq!(classify(&TurnFailure::default(), "You have hit your usage limit."), FailureKind::QuotaExhausted);
+        assert_eq!(classify(&TurnFailure::default(), "segfault"), FailureKind::Unknown);
     }
 
     #[test]
