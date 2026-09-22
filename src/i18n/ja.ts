@@ -70,6 +70,8 @@ export const ja: Record<MessageKey, string> = {
   "voice.card.yes": "使う",
   "voice.card.no": "使わない",
   "voice.card.excerpts": "元になった引用",
+  "voice.card.none": "特になし",
+  "voice.card.meta": "{n} 件の文章から {date} に作成",
   "voice.card.startOver": "作り直す",
   "voice.card.startOverConfirm": "この Voice を削除して作り直しますか？",
   "status.codexOk": "Codex 準備完了",

@@ -68,6 +68,8 @@ export const en = {
   "voice.card.yes": "yes",
   "voice.card.no": "no",
   "voice.card.excerpts": "Excerpts that shaped it",
+  "voice.card.none": "none in particular",
+  "voice.card.meta": "Built from {n} pieces on {date}",
   "voice.card.startOver": "Start over",
   "voice.card.startOverConfirm": "Delete this voice and start over?",
   "status.codexOk": "Codex ready",
