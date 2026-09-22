@@ -22,10 +22,10 @@ export const tauriHost: T.Host = {
   cancelVoiceBuild: () => invoke<void>("cancel_voice_build"),
   materialBudget: () => invoke<T.MaterialBudget>("material_budget"),
   platforms: () => invoke<T.Platform[]>("platforms"),
-  previewPrompt: (voiceId: string, brief: string, platformId: string) =>
-    invoke<string>("preview_prompt", { voiceId, brief, platformId }),
-  generateDraft: (voiceId: string, brief: string, platformId: string, effort: T.Effort) =>
-    invoke<T.Generated>("generate_draft", { voiceId, brief, platformId, effort }),
+  previewPrompt: (voiceId: string, brief: string, platformId: string, previous?: string) =>
+    invoke<string>("preview_prompt", { voiceId, brief, platformId, previous: previous ?? null }),
+  generateDraft: (voiceId: string, brief: string, platformId: string, effort: T.Effort, previous?: string) =>
+    invoke<T.Generated>("generate_draft", { voiceId, brief, platformId, effort, previous: previous ?? null }),
   cancelGenerate: () => invoke<void>("cancel_generate"),
   setDraftStatus: (id: string, status: T.DraftStatus) => invoke<void>("set_draft_status", { id, status }),
   copyText: (text: string) => writeText(text),

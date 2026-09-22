@@ -61,6 +61,29 @@ pub fn generation_prompt(profile: &VoiceProfile, brief: &str, platform: &Platfor
     )
 }
 
+/// The prompt for "短く書き直す": the same contract, plus the draft that ran
+/// over the limit. Cutting is asked for explicitly, because "shorter" alone
+/// tends to come back as a summary in a flatter voice.
+pub fn shorten_prompt(profile: &VoiceProfile, brief: &str, platform: &PlatformRules, previous: &str) -> String {
+    let over = platform
+        .max_chars
+        .map(|n| {
+            let len = previous.chars().count() as i64;
+            if len > n { format!(" It is {} characters over the limit of {n}.", len - n) } else { String::new() }
+        })
+        .unwrap_or_default();
+    format!(
+        "{base}\n\n\
+         PREVIOUS DRAFT (too long{over_note}):\n{previous}\n\n\
+         Rewrite the previous draft so it fits.{over} Keep its point, its order and its voice; \
+         cut words and clauses rather than summarising, and do not add anything new.",
+        base = generation_prompt(profile, brief, platform),
+        over_note = if over.is_empty() { String::new() } else { format!(", {} characters", previous.chars().count()) },
+        previous = previous.trim(),
+        over = over,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,5 +116,21 @@ mod tests {
         assert!(p.contains("under 280"));
         assert!(p.contains("(ja)"));
         assert!(!p.contains("SECRET-EXCERPT"));
+    }
+
+    #[test]
+    fn shorten_prompt_carries_the_previous_draft_and_the_overrun() {
+        let profile = VoiceProfile {
+            language: "ja".into(), first_person: "僕".into(), formality: "casual".into(), tone: vec![],
+            sentence_endings: vec![], avg_sentence_length_chars: 30, preferred_words: vec![], avoided_words: vec![],
+            opens_with: String::new(), closes_with: String::new(), uses_emoji: false, representative_excerpts: vec![],
+            one_line: String::new(),
+        };
+        let platform = PlatformRules { name: "X".into(), max_chars: Some(10), rules: "".into() };
+        let p = shorten_prompt(&profile, "brief", &platform, "twelve chars");
+        assert!(p.contains("PREVIOUS DRAFT"));
+        assert!(p.contains("twelve chars"));
+        assert!(p.contains("2 characters over the limit of 10"));
+        assert!(p.contains("BRIEF:\nbrief"));
     }
 }

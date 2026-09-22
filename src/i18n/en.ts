@@ -149,6 +149,7 @@ export const en = {
   "write.chars": "{n} / {max}",
   "write.charsNoMax": "{n} characters",
   "write.over": "Over the limit by {n}.",
+  "write.shorten": "Rewrite shorter",
   "write.notes": "How it used your Voice",
   "write.copy": "Copy and approve",
   "write.copied": "Copied. Paste it where it goes.",
