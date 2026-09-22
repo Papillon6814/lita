@@ -11,10 +11,11 @@ use std::sync::Arc;
 use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
+use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
 use lita_codex::voice::{Budget, VoiceProfile, select_material};
 use lita_codex::{CodexCli, Effort, Preflight, Request};
 use lita_sources::Piece;
-use lita_store::{NewSource, SourceKind, Store, Voice, VoiceSummary};
+use lita_store::{Draft, DraftStatus, NewBrief, NewDraft, NewSource, Platform, SourceKind, Store, StoredEffort, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -72,6 +73,8 @@ pub struct AppState {
     sign_in_cancel: Arc<AtomicBool>,
     /// Set by `cancel_voice_build`; cleared when a build starts.
     build_cancel: Arc<AtomicBool>,
+    /// Set by `cancel_generate`; cleared when a generation starts.
+    generate_cancel: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -84,6 +87,7 @@ impl AppState {
             restoring: AtomicBool::new(true),
             sign_in_cancel: Arc::new(AtomicBool::new(false)),
             build_cancel: Arc::new(AtomicBool::new(false)),
+            generate_cancel: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -356,6 +360,116 @@ fn cancel_voice_build(state: State<'_, AppState>) {
     state.build_cancel.store(true, Ordering::Relaxed);
 }
 
+// ----- writing (B-07, B-08, B-13) ------------------------------------------
+
+#[tauri::command]
+async fn platforms(app: AppHandle) -> Result<Vec<Platform>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).platforms().map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+fn rules_of(p: &Platform) -> PlatformRules {
+    PlatformRules { name: p.name.clone(), max_chars: p.max_chars, rules: p.rules.clone() }
+}
+
+/// The exact text that `generate_draft` would send (B-08).
+#[tauri::command]
+async fn preview_prompt(app: AppHandle, voice_id: String, brief: String, platform_id: String) -> Result<String, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
+        let platform = store
+            .platforms()
+            .map_err(fail)?
+            .into_iter()
+            .find(|p| p.id == platform_id)
+            .ok_or_else(|| UiError::invalid("no such platform"))?;
+        Ok(generation_prompt(&voice.profile, &brief, &rules_of(&platform)))
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[derive(Debug, Serialize)]
+pub struct Generated {
+    pub draft: Draft,
+    pub voice_notes: String,
+}
+
+/// Brief → Codex → Draft. The brief is stored before the run so a failed
+/// run still leaves what was asked. Measured 6.6 s (Fast) / 10.8 s
+/// (Quality) for a short X post (D-24).
+#[tauri::command]
+async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platform_id: String, effort: StoredEffort) -> Result<Generated, UiError> {
+    let brief = brief.trim().to_string();
+    if brief.is_empty() {
+        return Err(UiError::invalid("write a brief first"));
+    }
+    let (token, cancel) = {
+        let state = app.state::<AppState>();
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        (state.access_token()?, Arc::clone(&state.generate_cancel))
+    };
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<Generated, UiError> {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
+        let platform = store
+            .platforms()
+            .map_err(fail)?
+            .into_iter()
+            .find(|p| p.id == platform_id)
+            .ok_or_else(|| UiError::invalid("no such platform"))?;
+
+        let stored_brief = store
+            .create_brief(&NewBrief { voice_id: voice.id.clone(), platform_id: platform.id.clone(), body: brief.clone(), effort })
+            .map_err(fail)?;
+
+        let prompt = generation_prompt(&voice.profile, &brief, &rules_of(&platform));
+        let req = Request { prompt: prompt.clone(), schema: post_schema(), model: None, effort: effort.into(), working_dir };
+        let run = CodexCli::on_path()
+            .run_typed_cancellable::<PostDraft>(&req, |_| {}, cancel)
+            .map_err(fail)?;
+
+        let draft = store
+            .create_draft(&NewDraft {
+                brief_id: stored_brief.id,
+                body: run.value.text.trim().to_string(),
+                prompt_sent: prompt,
+                model: None,
+                elapsed_ms: run.elapsed.as_millis() as i64,
+            })
+            .map_err(fail)?;
+        Ok(Generated { draft, voice_notes: run.value.voice_notes })
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+fn cancel_generate(state: State<'_, AppState>) {
+    state.generate_cancel.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+async fn set_draft_status(app: AppHandle, id: String, status: DraftStatus) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).set_draft_status(&id, status).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
 // ----- sources (D-43) ---------------------------------------------------------
 
 /// What an import found, beyond the pieces themselves.
@@ -414,6 +528,7 @@ pub fn run() {
     let state = AppState::new().expect("Supabase configuration is valid");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(state)
         .setup(|app| {
             // Off the main thread: the refresh is a network round trip.
@@ -435,6 +550,11 @@ pub fn run() {
             create_voice,
             cancel_voice_build,
             material_budget,
+            platforms,
+            preview_prompt,
+            generate_draft,
+            cancel_generate,
+            set_draft_status,
             import_note,
             import_medium,
             import_x_archive

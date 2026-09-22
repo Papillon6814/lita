@@ -5,9 +5,10 @@ import { t } from "../i18n";
 import { VoiceIntake } from "./VoiceIntake";
 import { BuildingVoice } from "./BuildingVoice";
 import { VoicePortrait } from "./VoicePortrait";
+import { WriteScreen } from "./WriteScreen";
 
 // v0.1 is one voice (D-13): the first one in the list is "the" voice.
-type State = { kind: "loading" } | { kind: "none"; error?: UiError } | { kind: "building" } | { kind: "ready"; voice: Voice };
+type State = { kind: "loading" } | { kind: "none"; error?: UiError } | { kind: "building" } | { kind: "ready"; voice: Voice } | { kind: "write"; voice: Voice };
 
 export function VoiceSection() {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -46,6 +47,15 @@ export function VoiceSection() {
     case "none": return <VoiceIntake onBuild={build} error={state.error} />;
     case "building": return <BuildingVoice onCancel={() => void host.cancelVoiceBuild()} />;
     case "ready":
-      return <VoicePortrait voice={state.voice} onChange={(voice) => setState({ kind: "ready", voice })} onStartOver={() => void startOver(state.voice)} />;
+      return (
+        <VoicePortrait
+          voice={state.voice}
+          onChange={(voice) => setState({ kind: "ready", voice })}
+          onStartOver={() => void startOver(state.voice)}
+          onWrite={() => setState({ kind: "write", voice: state.voice })}
+        />
+      );
+    case "write":
+      return <WriteScreen voice={state.voice} onBack={() => setState({ kind: "ready", voice: state.voice })} />;
   }
 }

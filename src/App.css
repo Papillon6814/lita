@@ -156,3 +156,31 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .stages li.done::before { background: var(--mint-ink); border-color: var(--mint-ink); }
 @keyframes pulse { 50% { transform: scale(1.3); } }
 @media (prefers-reduced-motion: reduce) { .stages li.active::before { animation: none; } * { transition: none !important; } }
+
+/* Write */
+.back { font: inherit; background: none; border: none; color: var(--mute); padding: 0 0 12px; cursor: pointer; font-size: 0.9rem; }
+.back:hover { color: var(--mint-ink); }
+.write .field { margin: 14px 0 12px; }
+.write .field textarea { min-height: 84px; }
+.write-options { display: flex; gap: 28px; flex-wrap: wrap; margin: 4px 0 12px; }
+.opt { display: flex; flex-direction: column; gap: 6px; }
+.opt-label { color: var(--mute); font-size: 0.85rem; }
+.opt .seg { margin: 0; }
+.seg-sub { color: var(--mute); font-weight: 400; font-size: 0.8rem; }
+.hint.inline { margin: 0; }
+.prompt { max-height: 260px; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+.write-actions { margin: 16px 0 0; }
+.generating { display: flex; align-items: center; gap: 14px; background: var(--soft); border-radius: var(--r-box); padding: 14px 16px; }
+.generating .hint { margin: 2px 0 0; }
+.generating > div { flex: 1; }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--mint-ink); animation: spin .9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: var(--mint-ink); } }
+.draft { margin-top: 20px; border: 1px solid #d9efe9; background: linear-gradient(135deg, var(--mint-soft), var(--bg) 60%); border-radius: 16px; padding: 18px 20px; }
+.draft-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.draft-head h3 { margin: 0; font-size: 1rem; }
+.count { color: var(--mute); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.count.over { color: var(--warn-ink); font-weight: 700; }
+.draft-text { font-size: 1.05rem; line-height: 1.75; background: #fff; }
+.notes { margin: 8px 0 0; font-size: 0.9rem; }
+.draft-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
