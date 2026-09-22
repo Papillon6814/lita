@@ -19,7 +19,7 @@ type Gen = { kind: "idle" } | { kind: "generating" } | { kind: "done"; notes: st
 // The editor: the text on the left, Lita's help on the right. Everything
 // the person types is saved as they go (D-46); Lita writes only when asked,
 // and always into the same text, so there is one thing to judge.
-export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => void; onDeleted: () => void }) {
+export function Editor({ id, onBack, onDeleted, onGoVoices }: { id: string; onBack: () => void; onDeleted: () => void; onGoVoices: () => void }) {
   const [article, setArticle] = useState<Article | null>(null);
   const [text, setText] = useState<Text>({ title: "", body: "", brief: "" });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -246,7 +246,7 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
               <span className="hint inline muted">{t("write.shortcut")}</span>
             </div>
           )}
-          {!article.voice_id && <p className="hint">{t("assist.needVoice")}</p>}
+          {!article.voice_id && <p className="hint">{t("assist.needVoice")} <button className="link" onClick={onGoVoices}>{t("article.goVoices")}</button></p>}
           {text.body.trim() && gen.kind !== "generating" && <p className="hint">{t("assist.rewriteHint")}</p>}
           {gen.kind === "done" && gen.notes && <p className="notes"><span className="muted">{t("write.notes")}:</span> {gen.notes}</p>}
           {error && <ErrorNote error={error} />}
