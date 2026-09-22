@@ -26,7 +26,7 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 ## 次の一手（この順で）
 
-1. **Supabase プロジェクト（東京）と Google Cloud の OAuth クライアントを作る（B-41、本人）** — アカウントが要るのでエージェントは代行できない。URL と anon key、client_id を受け取る
+1. **Google Cloud の OAuth クライアント（Desktop app）を作る（B-41）** — Supabase 側は作成済み（下記）。Google 側はブラウザ操作エージェントで作成中
 2. **Google ログインの実機検証（B-30 / #26）** — Desktop app クライアント＋ループバック＋PKCE
 3. **サーバ側スキーマと API クライアント（B-06 / #11）** — `feat/11-sqlite` の設計を `user_id` 付きで移植
 4. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
@@ -43,6 +43,14 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 - v0.1 の完成定義に入らない提案は backlog に落とします。
 - SQLite に戻す提案が出たら、まず D-36 の理由（別 PC での引き継ぎ）を確認してください。ローカル優先＋同期は保留項目（B-31）です。
 - backlog の各項目は GitHub Issue（#11〜#25、マイルストーン v0.1 / v0.2、ラベル `backlog` / `deferred`）と1対1で対応しています。着手時は該当 Issue を自分にアサインし、新しい項目は backlog.md と Issue の両方に追加します。
+
+## Supabase（2026-09-22 作成）
+
+- 組織: `muumoo`（slug `swsrpyuhcrycgcolxaig`、Free プラン）。既存の「finn Org」には作成権限がなかったため新設
+- プロジェクト: `lita`、ref `csfvqpqzvcorqlsmfjwb`、東京 ap-northeast-1、Postgres 17。ダッシュボード https://supabase.com/dashboard/project/csfvqpqzvcorqlsmfjwb
+- DB パスワードは macOS キーチェーン（service `lita-supabase-db-password`、account `lita`）。リポジトリにも Notion にも書かない
+- CLI は `--profile <name>` で複数アカウントを切り替えられる。別アカウントを使うときは本人が `supabase login --profile <name>` を対話で実行する
+- `supabase link --project-ref csfvqpqzvcorqlsmfjwb` はまだしていない（B-06 で `supabase init` と一緒に行う）
 
 ## Notion（正）へのリンク
 

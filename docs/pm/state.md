@@ -26,7 +26,8 @@
 | 項目 | 状態 |
 | --- | --- |
 | バックエンド基盤の選定 | 完了。**Supabase（東京）**（D-40） |
-| Supabase プロジェクトと Google OAuth クライアント | 未作成（本人の作業） |
+| Supabase プロジェクト | 完了（org `muumoo`、project `lita`、東京、ref `csfvqpqzvcorqlsmfjwb`） |
+| Google OAuth クライアント | 作成中 |
 | Google ログイン | 未着手 |
 | サーバ側スキーマと API クライアント | 未着手（`feat/11-sqlite` の設計を移植） |
 | 貼り付け／ファイル取り込みの UI | 未着手（v0.1 の入口） |
