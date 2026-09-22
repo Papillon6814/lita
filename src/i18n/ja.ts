@@ -230,5 +230,7 @@ export const ja: Record<MessageKey, string> = {
   "trial.before": "前",
   "trial.after": "今",
   "trial.result": "結果",
+  "article.emptyNoVoice": "まず、あなたの書き方を Lita に教えましょう。文章を集めて Voice を作ると、ここから書けます。",
+  "article.goVoices": "文体（Voice）を作る",
   "privacy.note": "Lita は OpenAI の認証情報に触れません。codex コマンドを起動するだけです。Codex に送るのは、Voice を作るときの文章と、書くときのブリーフと Voice の要約だけです。結果はあなたの Lita アカウントに保存されます。",
 };

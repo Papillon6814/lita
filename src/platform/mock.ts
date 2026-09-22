@@ -5,7 +5,7 @@
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
-// profile without one_line), voices (two voices), voice-trial,
+// profile without one_line), voices (two voices), articles-first-run, voice-trial,
 // voice-trial-generating, voice-trial-compare, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
@@ -74,7 +74,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-loaded", "building"].includes(scene);
+const hasVoice = !["intake", "intake-loaded", "building", "articles-first-run"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -86,7 +86,7 @@ const articleBodies = [
   { title: "投資家との最初の会話で聞くこと", body: "投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。\n\nリターンの話は後からいくらでもできる。恐れが分かれば、こちらの提案の形はほとんど決まる。\n\n## 恐れは三つに分かれる\n\n一つ目は時間、二つ目は評判、三つ目は次の資金調達だ。", brief: "投資家との初回面談で何を聞くべきか。note 向けに 1,500 字ほど。", platform: "note", status: "draft", at: ago(60 * 26) },
   { title: "ファイナンスは時間を買う話", body: draftBody, brief: "ファイナンスの選択肢の話。", platform: "x", status: "archived", at: ago(60 * 24 * 4) },
 ];
-const articles: T.Article[] = scene === "articles-empty" ? [] : articleBodies.map((a, i) => ({
+const articles: T.Article[] = scene === "articles-empty" || scene === "articles-first-run" ? [] : articleBodies.map((a, i) => ({
   id: `a${i + 1}`, voice_id: "v1", platform_id: a.platform, title: a.title, body: a.body, brief: a.brief,
   status: a.status as T.ArticleStatus, created_at: a.at, updated_at: a.at,
 }));

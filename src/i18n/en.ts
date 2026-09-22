@@ -228,6 +228,8 @@ export const en = {
   "trial.before": "Before",
   "trial.after": "After",
   "trial.result": "Result",
+  "article.emptyNoVoice": "Start by teaching Lita how you write. Gather some writing, build a Voice, and write from here.",
+  "article.goVoices": "Build a Voice",
   "privacy.note": "Lita never touches your OpenAI credentials; it only starts the codex command. Codex receives only your writing when building a Voice, and your brief plus the Voice summary when writing. Results are stored with your Lita account.",
 } as const;
 

@@ -61,10 +61,10 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
       />
       <main className="main">
         {route.kind === "articles" && (
-          <ArticleList filter={route.filter} onOpen={(id) => setRoute({ kind: "article", id })} onNew={() => void newArticle()} />
+          <ArticleList filter={route.filter} onOpen={(id) => setRoute({ kind: "article", id })} onNew={() => void newArticle()} onGoVoices={() => setRoute({ kind: "voices" })} />
         )}
         {route.kind === "article" && (
-          <Editor key={route.id} id={route.id} onBack={() => setRoute({ kind: "articles", filter: "all" })} onDeleted={() => setRoute({ kind: "articles", filter: "all" })} />
+          <Editor key={route.id} id={route.id} onBack={() => setRoute({ kind: "articles", filter: "all" })} onDeleted={() => setRoute({ kind: "articles", filter: "all" })} onGoVoices={() => setRoute({ kind: "voices" })} />
         )}
         {route.kind === "voices" && <VoiceSection onWrite={(voiceId) => void newArticle(voiceId)} />}
         <footer className="privacy">{t("privacy.note")}</footer>

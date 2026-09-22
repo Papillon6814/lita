@@ -4,15 +4,15 @@ import { asUiError } from "../errors";
 import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 
-type Props = { filter: ArticleStatus | "all"; onOpen: (id: string) => void; onNew: () => void };
+type Props = { filter: ArticleStatus | "all"; onOpen: (id: string) => void; onNew: () => void; onGoVoices: () => void };
 type State = { kind: "loading" } | { kind: "ready"; rows: ArticleSummary[] } | { kind: "error"; error: UiError };
 
 // The home screen: what has been written, newest first. Nothing on it is a
 // number for its own sake; dates and destinations only.
-export function ArticleList({ filter, onOpen, onNew }: Props) {
+export function ArticleList({ filter, onOpen, onNew, onGoVoices }: Props) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [voices, setVoices] = useState<VoiceSummary[]>([]);
+  const [voices, setVoices] = useState<VoiceSummary[] | null>(null);
   const [q, setQ] = useState("");
 
   useEffect(() => {
@@ -26,7 +26,8 @@ export function ArticleList({ filter, onOpen, onNew }: Props) {
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); void host.listVoices().then(setVoices).catch(() => {}); }, []);
 
   const platformName = (id: string) => platforms.find((p) => p.id === id)?.name ?? id;
-  const voiceName = (id: string | null) => voices.find((v) => v.id === id)?.name ?? "";
+  const voiceName = (id: string | null) => voices?.find((v) => v.id === id)?.name ?? "";
+  const noVoice = voices !== null && voices.length === 0;
   const needle = q.trim().toLowerCase();
   const rows = state.kind === "ready" ? state.rows.filter((r) => !needle || (r.title + " " + r.excerpt).toLowerCase().includes(needle)) : [];
   const nothingAtAll = state.kind === "ready" && state.rows.length === 0;
@@ -43,8 +44,17 @@ export function ArticleList({ filter, onOpen, onNew }: Props) {
 
       {nothingAtAll && (
         <div className="empty">
-          <p className="lead-sm">{filter === "all" ? t("article.emptyAll") : t("article.emptyFilter")}</p>
-          {filter === "all" && <button className="btn pri" onClick={onNew}>{t("article.new")}</button>}
+          {noVoice ? (
+            <>
+              <p className="lead-sm">{t("article.emptyNoVoice")}</p>
+              <button className="btn pri" onClick={onGoVoices}>{t("article.goVoices")}</button>
+            </>
+          ) : (
+            <>
+              <p className="lead-sm">{filter === "all" ? t("article.emptyAll") : t("article.emptyFilter")}</p>
+              {filter === "all" && <button className="btn pri" onClick={onNew}>{t("article.new")}</button>}
+            </>
+          )}
         </div>
       )}
 

@@ -2,17 +2,19 @@
 
 **Lita writes your posts, in your voice — using the Codex login you already have.**
 
-Lita is a desktop app for people who publish. You hand it a one-line brief; it
-returns a draft for X that sounds like you, not like a chatbot. You read it,
-fix what you want, and copy it.
+Lita is a desktop app for people who publish. It is made of three things: your
+**Voices** (how you write, learned from your own writing), your **articles**,
+and an **editor** where Lita writes from a one-line brief and you fix what you
+want. Drafts sound like you, not like a chatbot.
 
 It does not ask you for an API key. It drives the [OpenAI Codex
 CLI](https://developers.openai.com/codex/cli) you already signed into, so your
 ChatGPT login stays where it is and Lita never touches your credentials.
 
-> **Status: v0.1 works end to end, for the author.** Voice from your own
-> writing → brief → draft → approve → copy is done and in daily use. There is
-> no installer yet: you run it from source. See [Roadmap](#roadmap).
+> **Status: v0.2, in daily use by the author.** Articles, an editor with
+> autosave and version history, long-form for note and Medium, and several
+> Voices with a trial-write to tune them. There is no installer yet: you run
+> it from source. See [Roadmap](#roadmap).
 
 Site and privacy policy: <https://lita.muumoo.online/>
 
@@ -32,11 +34,11 @@ scraped ones, because nothing you dislike gets in.
 ## How it works
 
 ```
-Your public writing ──▶ Voice ──┐
-(note, Medium, X archive,       │
- or paste / a text file)        ├──▶ Codex CLI ──▶ Draft ──▶ you approve ──▶ clipboard
-                                │
-Brief ──────────────────────────┘
+Your public writing ──▶ Voice(s) ──┐
+(note, Medium, X archive,          │
+ or paste / a text file)           ├──▶ Codex CLI ──▶ article text ──▶ you edit ──▶ copy
+                                   │        (every run and edit kept as a version)
+Brief, in the editor ──────────────┘
 ("what, for whom, what to take away")
 ```
 
@@ -47,13 +49,17 @@ Brief ────────────────────────�
    words that are yours, and how you open and close, into a profile you can
    read and edit line by line. It also writes one sentence about your writing
    for the top of the screen.
-3. **Write a brief.** A sentence or two: what to say, to whom, what they should
-   take away.
-4. **Write.** Lita runs `codex exec` with a JSON schema, so the draft comes
-   back structured. You can see the exact prompt before it is sent, choose
-   fast or careful, and stop a run.
-5. **Judge.** Edit the draft, ask for a shorter rewrite if it runs over the
-   platform limit, then copy it. Or write again, or throw it away.
+3. **Open an article.** The home screen lists what you have written. A new
+   article opens the editor: your text on the left, Lita on the right.
+4. **Write a brief and let Lita write.** A sentence or two: what to say, to
+   whom, what they should take away. Lita runs `codex exec` with a JSON schema
+   and writes into the article: a post for X, or a titled, paragraphed piece
+   for note or Medium. You see the exact prompt first, choose fast or careful,
+   and can stop a run.
+5. **Edit and keep.** Everything you type is saved as you go. Each generation,
+   rewrite and restore is a version you can go back to. Copy when it is right.
+6. **Tune the Voice.** Fix any line of the profile, then use the trial write
+   to see the same brief before and after. Keep a Voice per way of writing.
 
 ## Design principles
 
@@ -110,8 +116,8 @@ The repository is a Cargo workspace:
 | Version | Scope |
 | --- | --- |
 | **v0.1** (done) | Voice from note / Medium / X archive / paste · one Voice · brief → X post → approve → copy · fast/careful · prompt preview · shorter rewrite |
-| v0.2 | Signed, notarised builds and a Homebrew cask · draft history and re-editing · multiple Voices · long-form output for note and Medium |
-| Later | Publisher plugins (draft to platform) · other model backends |
+| **v0.2** (done) | Articles as the home · editor with autosave and version history · long-form for note and Medium · several Voices, a default, trial write |
+| v0.3 | Signed, notarised builds and a Homebrew cask · publisher plugins (draft to platform) · other model backends |
 
 Slack as a Voice source was investigated and shelved: Marketplace listing
 requires ten active workspaces before review, which a personal OSS project
