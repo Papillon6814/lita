@@ -67,11 +67,38 @@ impl fmt::Display for RunFailure {
             FailureKind::SchemaMismatch => "Codex never returned output matching the schema",
             FailureKind::Unknown => "the Codex CLI failed",
         };
-        write!(f, "{what} (exit {:?})\n{}", self.exit_code, self.stderr_tail)
+        write!(
+            f,
+            "{what} (exit {:?})\n{}",
+            self.exit_code, self.stderr_tail
+        )
     }
 }
 
 impl std::error::Error for RunFailure {}
+
+/// How hard the model should think before answering.
+///
+/// Measured on a short X post: `Fast` returned in 6.6s, `Quality` in 10.8s,
+/// with no visible quality difference at that length. Longer pieces may tell a
+/// different story, which is why this is the user's choice and not ours.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Effort {
+    /// Lower latency. Reasoning is turned down.
+    Fast,
+    /// Codex's own default.
+    #[default]
+    Quality,
+}
+
+impl Effort {
+    fn as_config_value(self) -> &'static str {
+        match self {
+            Effort::Fast => "low",
+            Effort::Quality => "medium",
+        }
+    }
+}
 
 /// A single generation request.
 pub struct Request {
@@ -79,8 +106,10 @@ pub struct Request {
     pub prompt: String,
     /// A JSON Schema the final message must satisfy.
     pub schema: Value,
-    /// Optional model override; `None` uses the user's configured default.
+    /// Optional model override; `None` uses Codex's default.
     pub model: Option<String>,
+    /// How hard to think. Surfaced to the user as a speed/quality switch.
+    pub effort: Effort,
     /// Where to run. Deliberately does not have to be a git repository —
     /// Lita's data directory never will be.
     pub working_dir: PathBuf,
@@ -102,12 +131,16 @@ pub struct CodexCli {
 impl CodexCli {
     /// Uses whatever `codex` is on PATH.
     pub fn on_path() -> Self {
-        Self { program: PathBuf::from("codex") }
+        Self {
+            program: PathBuf::from("codex"),
+        }
     }
 
     /// Uses a specific binary, for users who installed it somewhere unusual.
     pub fn at(program: impl Into<PathBuf>) -> Self {
-        Self { program: program.into() }
+        Self {
+            program: program.into(),
+        }
     }
 
     /// Asks the CLI to describe its own health.
@@ -115,7 +148,11 @@ impl CodexCli {
     /// `codex doctor --json` emits a redacted machine-readable report, which is
     /// far steadier to read than scraping the human-facing output.
     pub fn preflight(&self) -> Result<Preflight> {
-        let out = match Command::new(&self.program).arg("doctor").arg("--json").output() {
+        let out = match Command::new(&self.program)
+            .arg("doctor")
+            .arg("--json")
+            .output()
+        {
             Ok(out) => out,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(Preflight::NotInstalled);
@@ -126,7 +163,10 @@ impl CodexCli {
         let report: Value = serde_json::from_slice(&out.stdout)
             .context("`codex doctor --json` did not produce JSON")?;
 
-        let version = report["codexVersion"].as_str().unwrap_or("unknown").to_string();
+        let version = report["codexVersion"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
         let auth_ok = report["checks"]["auth.credentials"]["status"]
             .as_str()
             .is_some_and(|s| s == "ok");
@@ -207,13 +247,23 @@ impl CodexCli {
         }
 
         let raw = std::fs::read_to_string(&output_path).with_context(|| {
-            format!("the run succeeded but wrote no output to {}", output_path.display())
+            format!(
+                "the run succeeded but wrote no output to {}",
+                output_path.display()
+            )
         })?;
         let value = serde_json::from_str::<T>(&raw).with_context(|| {
-            format!("the final message did not match the schema we asked for:\n{}", tail(&raw))
+            format!(
+                "the final message did not match the schema we asked for:\n{}",
+                tail(&raw)
+            )
         })?;
 
-        Ok(Run { value, events, elapsed })
+        Ok(Run {
+            value,
+            events,
+            elapsed,
+        })
     }
 
     fn command(&self, req: &Request, schema: &Path, output: &Path) -> Command {
@@ -234,7 +284,18 @@ impl CodexCli {
             // exec` refuses to start in one otherwise.
             .arg("--skip-git-repo-check")
             // Keep the user's drafts out of ~/.codex session rollouts.
-            .arg("--ephemeral");
+            .arg("--ephemeral")
+            // Lita's output must not depend on the user's Codex profile,
+            // AGENTS.md files or MCP servers. Without this, a run picks up
+            // whatever they have configured — we saw one fail to refresh an
+            // unrelated MCP server's OAuth token mid-generation. Credentials
+            // live in auth.json, not config.toml, so login still works.
+            .arg("--ignore-user-config")
+            .arg("-c")
+            .arg(format!(
+                "model_reasoning_effort=\"{}\"",
+                req.effort.as_config_value()
+            ));
 
         if let Some(model) = &req.model {
             cmd.arg("--model").arg(model);
@@ -286,7 +347,10 @@ fn tail(s: &str) -> String {
 /// premise is that credentials never enter this path.
 pub fn assert_no_credentials(prompt: &str) {
     for marker in ["sk-", "xoxp-", "xoxb-", "eyJ"] {
-        assert!(!prompt.contains(marker), "prompt contains something token-shaped: {marker}");
+        assert!(
+            !prompt.contains(marker),
+            "prompt contains something token-shaped: {marker}"
+        );
     }
 }
 
@@ -295,13 +359,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn effort_maps_to_codex_reasoning_levels() {
+        assert_eq!(Effort::Fast.as_config_value(), "low");
+        assert_eq!(Effort::Quality.as_config_value(), "medium");
+        assert_eq!(Effort::default(), Effort::Quality);
+    }
+
+    #[test]
     fn classifies_a_login_failure() {
-        assert_eq!(classify("error: not logged in, run codex login"), FailureKind::NotLoggedIn);
+        assert_eq!(
+            classify("error: not logged in, run codex login"),
+            FailureKind::NotLoggedIn
+        );
     }
 
     #[test]
     fn classifies_a_quota_failure() {
-        assert_eq!(classify("You have hit your usage limit."), FailureKind::QuotaExhausted);
+        assert_eq!(
+            classify("You have hit your usage limit."),
+            FailureKind::QuotaExhausted
+        );
     }
 
     #[test]

@@ -7,7 +7,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
-use lita_codex::{CodexCli, Event, Preflight, Request};
+use lita_codex::{CodexCli, Effort, Event, Preflight, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -107,7 +107,11 @@ struct EventTrace {
 
 impl EventTrace {
     fn new() -> Self {
-        Self { started: Instant::now(), first_event_at: None, kinds: Vec::new() }
+        Self {
+            started: Instant::now(),
+            first_event_at: None,
+            kinds: Vec::new(),
+        }
     }
 
     fn record(&mut self, event: &Event) {
@@ -141,12 +145,21 @@ fn main() -> Result<()> {
     // directory never will be, and this is what --skip-git-repo-check buys us.
     let workdir = tempfile::tempdir()?;
     let is_repo = workdir.path().join(".git").exists();
-    println!("  working directory: {} (git repo: {is_repo})", workdir.path().display());
+    println!(
+        "  working directory: {} (git repo: {is_repo})",
+        workdir.path().display()
+    );
 
     // --- Task 1: turn raw messages into a Voice profile -------------------
-    println!("\n== task 1: extract a voice profile from {} messages ==", SAMPLE_MESSAGES.len());
-    let corpus =
-        SAMPLE_MESSAGES.iter().map(|m| format!("- {m}")).collect::<Vec<_>>().join("\n");
+    println!(
+        "\n== task 1: extract a voice profile from {} messages ==",
+        SAMPLE_MESSAGES.len()
+    );
+    let corpus = SAMPLE_MESSAGES
+        .iter()
+        .map(|m| format!("- {m}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let voice_prompt = format!(
         "You are analysing one person's writing so that another writer can imitate it \
          convincingly. Below are messages they wrote in a work chat.\n\n{corpus}\n\n\
@@ -163,6 +176,7 @@ fn main() -> Result<()> {
             prompt: voice_prompt,
             schema: voice_schema(),
             model: None,
+            effort: Effort::Quality,
             working_dir: workdir.path().to_path_buf(),
         },
         |e| trace.record(e),
@@ -191,6 +205,7 @@ fn main() -> Result<()> {
             prompt: post_prompt,
             schema: post_schema(),
             model: None,
+            effort: Effort::Quality,
             working_dir: workdir.path().to_path_buf(),
         },
         |e| trace.record(e),
@@ -209,7 +224,10 @@ fn main() -> Result<()> {
     println!("  codex version        {version}");
     println!("  typed JSON           both tasks deserialized into Rust structs");
     println!("  ran outside a repo   yes");
-    println!("  total time           {:.1}s", (voice.elapsed + post.elapsed).as_secs_f64());
+    println!(
+        "  total time           {:.1}s",
+        (voice.elapsed + post.elapsed).as_secs_f64()
+    );
     Ok(())
 }
 
