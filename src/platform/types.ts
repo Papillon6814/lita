@@ -75,6 +75,25 @@ export type Draft = {
   elapsed_ms: number; status: DraftStatus; created_at: string; decided_at: string | null;
 };
 export type Generated = { draft: Draft; voice_notes: string };
+
+export type ArticleStatus = "draft" | "approved" | "archived";
+export type Article = {
+  id: string; voice_id: string | null; platform_id: string; title: string; body: string; brief: string;
+  status: ArticleStatus; created_at: string; updated_at: string;
+};
+export type ArticleSummary = {
+  id: string; voice_id: string | null; platform_id: string; title: string; excerpt: string;
+  status: ArticleStatus; created_at: string; updated_at: string;
+};
+/** Fields to change; anything left out stays as it is. `voice_id: null` clears it. */
+export type ArticlePatch = Partial<{ voice_id: string | null; platform_id: string; title: string; body: string; brief: string; status: ArticleStatus }>;
+export type VersionKind = "generated" | "shortened" | "edited" | "restored" | "manual";
+export type ArticleVersion = {
+  id: string; article_id: string; kind: VersionKind; title: string; body: string;
+  prompt_sent: string | null; elapsed_ms: number | null; created_at: string;
+};
+export type ArticleWritten = { article: Article; version: ArticleVersion; voice_notes: string };
+export type UserSettings = { default_voice_id: string | null };
 export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
 
 
@@ -99,6 +118,17 @@ export type Host = {
   generateDraft: (voiceId: string, brief: string, platformId: string, effort: Effort, previous?: string) => Promise<Generated>;
   cancelGenerate: () => Promise<void>;
   setDraftStatus: (id: string, status: DraftStatus) => Promise<void>;
+  listArticles: (status?: ArticleStatus) => Promise<ArticleSummary[]>;
+  getArticle: (id: string) => Promise<Article | null>;
+  createArticle: (platformId?: string, voiceId?: string) => Promise<Article>;
+  updateArticle: (id: string, patch: ArticlePatch) => Promise<void>;
+  deleteArticle: (id: string) => Promise<boolean>;
+  listVersions: (articleId: string) => Promise<ArticleVersion[]>;
+  snapshotArticle: (articleId: string, manual: boolean) => Promise<ArticleVersion | null>;
+  restoreVersion: (versionId: string) => Promise<Article>;
+  generateIntoArticle: (articleId: string, effort: Effort, previous?: string) => Promise<ArticleWritten>;
+  getSettings: () => Promise<UserSettings>;
+  setDefaultVoice: (voiceId: string | null) => Promise<void>;
   copyText: (text: string) => Promise<void>;
   importNote: (account: string) => Promise<Imported>;
   importMedium: (handle: string) => Promise<Imported>;

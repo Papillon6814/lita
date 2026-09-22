@@ -28,6 +28,7 @@
 20. **Google 同意画面を本番化した**。必須だったホームページとプライバシーポリシーを `site/` に書いて GitHub Pages（lita.muumoo.online）で公開し、DNS と Google 側の入力はブラウザ操作エージェントと本人で分担（承認済みドメイン欄の入力は権限判定が拒否したため本人が入力）
 21. **README を実態に合わせ、アプリアイコン（紙色のタイルにインクの L とミントの点、`design/app-icon.html`）を入れ、リリースビルドを `/Applications/Lita.app` に置いた**（2026-09-23）
 22. **v0.2 段階 1: 記事と版のスキーマ**（#49）。`articles` / `article_versions` / `user_settings` を追加し、`briefs` / `drafts` を移行して drop（D-45）。`lita-store` に記事・版・設定の API、Tauri に `list_articles` … `restore_version` … `set_default_voice`。v0.1 の書く画面は互換コマンド（`generate_draft` が記事を作る）で動き続ける。roundtrip で本番検証済み
+23. **v0.2 段階 2: Shell・記事一覧・エディタ**。サイドバー（記事: すべて／下書き／採用／保管、文体）＋メイン。ホームは記事一覧（検索、出す先・状態・Voice・更新）。エディタは左に紙（タイトル・本文・文字数・コピーして採用）、右に「Lita に書かせる」（ブリーフ・Voice・出す先・考える量・書く／書き直す／短く・プロンプト確認・保管・削除）。自動保存は `src/hooks/useAutosave.ts`（D-46）。書く画面（WriteScreen）は廃止。窓の既定は 1120×720。モックの scene: articles / articles-empty / editor / editor-empty / editor-generating / editor-over / editor-save-failed
 
 ## いま決まっていること
 
@@ -37,7 +38,7 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## 次の一手（この順で）
 
-0. **v0.2 の 3 柱（#49、D-44〜D-46）を段階ごとに進める**: 1 スキーマ・ストア・コマンド（完了）→ 2 Shell＋記事一覧＋エディタ（自動保存）→ 3 版履歴 → 4 長文生成 → 5 Voice 複数・試し書き比較 → 6 モックで UX 再レビュー。計画は `~/.claude-profiles/personal/config/plans/shimmering-exploring-anchor.md`
+0. **v0.2 の 3 柱（#49、D-44〜D-46）を段階ごとに進める**: 1 スキーマ・ストア・コマンド（完了）→ 2 Shell＋記事一覧＋エディタ（自動保存）（完了）→ 3 版履歴 → 4 長文生成 → 5 Voice 複数・試し書き比較 → 6 モックで UX 再レビュー。計画は `~/.claude-profiles/personal/config/plans/shimmering-exploring-anchor.md`
 1. **本人のドッグフーディング（2026-09-23 開始）** — `/Applications/Lita.app`（`npm run tauri build` の ad-hoc 署名ビルド、本人の Mac でのみ動く）で実投稿を書く。違和感は backlog へ。特に抽出が汎用語を特徴語に拾う件
 2. **配布（B-26 / #25、v0.2）** — 署名・公証・Homebrew cask。未使用の「Lita desktop」OAuth クライアントは 2026-09-22 に削除済み（30 日は復元可）
 

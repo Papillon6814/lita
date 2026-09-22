@@ -6,12 +6,11 @@ import { t } from "../i18n";
 import { VoiceIntake } from "./VoiceIntake";
 import { BuildingVoice } from "./BuildingVoice";
 import { VoicePortrait } from "./VoicePortrait";
-import { WriteScreen } from "./WriteScreen";
 
 // v0.1 is one voice (D-13): the first one in the list is "the" voice.
-type State = { kind: "loading" } | { kind: "none"; error?: UiError } | { kind: "building" } | { kind: "ready"; voice: Voice } | { kind: "write"; voice: Voice };
+type State = { kind: "loading" } | { kind: "none"; error?: UiError } | { kind: "building" } | { kind: "ready"; voice: Voice };
 
-export function VoiceSection() {
+export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -20,8 +19,6 @@ export function VoiceSection() {
       const [first] = await host.listVoices();
       if (!first) return setState({ kind: mockScene() === "building" ? "building" : "none" });
       const voice = await host.getVoice(first.id);
-      const scene = mockScene();
-      if (voice && scene?.startsWith("write")) return setState({ kind: "write", voice });
       setState(voice ? { kind: "ready", voice } : { kind: "none" });
     } catch (e) {
       setState({ kind: "none", error: asUiError(e) });
@@ -55,10 +52,8 @@ export function VoiceSection() {
           voice={state.voice}
           onChange={(voice) => setState({ kind: "ready", voice })}
           onStartOver={() => void startOver(state.voice)}
-          onWrite={() => setState({ kind: "write", voice: state.voice })}
+          onWrite={() => onWrite(state.voice.id)}
         />
       );
-    case "write":
-      return <WriteScreen voice={state.voice} onBack={() => setState({ kind: "ready", voice: state.voice })} />;
   }
 }
