@@ -2,7 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
@@ -90,7 +90,7 @@ impl GoogleSignIn {
 
         open_browser(&auth_url)?;
 
-        let callback = wait_for_callback(&listener, self.timeout)?;
+        let callback = wait_for_callback(listener, self.timeout)?;
         if callback.state != *csrf.secret() {
             bail!("the browser came back with a state we did not send");
         }
@@ -123,33 +123,38 @@ impl GoogleSignIn {
     }
 }
 
+#[derive(Debug)]
 struct Callback {
     code: String,
     state: String,
 }
 
-/// Accepts exactly one request on the loopback listener and pulls the
-/// authorization response out of its query string. Anything else (favicon
-/// requests, a stray tab) gets a 404 and we keep waiting.
-fn wait_for_callback(listener: &TcpListener, timeout: Duration) -> Result<Callback> {
-    listener.set_nonblocking(true)?;
-    let deadline = Instant::now() + timeout;
-    loop {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(false)?;
-                if let Some(cb) = handle_request(stream)? {
-                    return Ok(cb);
+/// Accepts requests on the loopback listener until one carries the
+/// authorization response. Anything else (favicon requests, a stray tab)
+/// gets a 404 and we keep waiting. Accepting happens on its own thread so
+/// the timeout does not depend on non-blocking sockets, which behave
+/// differently across platforms.
+fn wait_for_callback(listener: TcpListener, timeout: Duration) -> Result<Callback> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let outcome = stream.map_err(Into::into).and_then(handle_request);
+            match outcome {
+                Ok(None) => continue,
+                Ok(Some(cb)) => {
+                    let _ = tx.send(Ok(cb));
+                    return;
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                    return;
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    bail!("timed out waiting for the browser");
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(e) => return Err(e.into()),
         }
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(_) => bail!("timed out waiting for the browser"),
     }
 }
 
@@ -158,10 +163,16 @@ fn handle_request(mut stream: TcpStream) -> Result<Option<Callback>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
-    // Drain headers so the browser sees a clean close.
+    // Drain headers up to the blank line so the browser sees a clean close.
+    // Do not read past it: a GET has no body, and on macOS a read that hits
+    // the socket timeout surfaces as EAGAIN rather than a clean timeout.
     let mut line = String::new();
-    while reader.read_line(&mut line)? > 1 {
+    loop {
         line.clear();
+        let n = reader.read_line(&mut line)?;
+        if n == 0 || line.trim_end_matches(['\r', '\n']).is_empty() {
+            break;
+        }
     }
 
     let path = request_line.split_whitespace().nth(1).unwrap_or("/");
@@ -211,4 +222,54 @@ fn page(title: &str, text: &str) -> String {
          <style>body{{font-family:system-ui;margin:4rem auto;max-width:32rem;text-align:center}}</style></head>\
          <body><h1>{title}</h1><p>{text}</p></body></html>"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    fn request(port: u16, path: &str) -> String {
+        let mut c = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(c, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: */*\r\n\r\n").unwrap();
+        let mut out = String::new();
+        c.read_to_string(&mut out).unwrap();
+        out
+    }
+
+    #[test]
+    fn callback_is_parsed_and_stray_requests_are_ignored() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let waiter = std::thread::spawn(move || wait_for_callback(listener, Duration::from_secs(5)));
+
+        let stray = request(port, "/favicon.ico");
+        assert!(stray.starts_with("HTTP/1.1 404"), "{stray}");
+
+        let ok = request(port, "/?state=abc&code=4%2Fxyz&scope=email");
+        assert!(ok.starts_with("HTTP/1.1 200"), "{ok}");
+        assert!(ok.contains("Signed in to Lita"));
+
+        let cb = waiter.join().unwrap().unwrap();
+        assert_eq!(cb.code, "4/xyz");
+        assert_eq!(cb.state, "abc");
+    }
+
+    #[test]
+    fn google_error_is_reported() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let waiter = std::thread::spawn(move || wait_for_callback(listener, Duration::from_secs(5)));
+        let page = request(port, "/?error=access_denied&state=abc");
+        assert!(page.contains("cancelled"));
+        let err = waiter.join().unwrap().unwrap_err();
+        assert!(err.to_string().contains("access_denied"), "{err}");
+    }
+
+    #[test]
+    fn waiting_times_out() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let err = wait_for_callback(listener, Duration::from_millis(100)).unwrap_err();
+        assert!(err.to_string().contains("timed out"));
+    }
 }
