@@ -45,7 +45,7 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 0. **v0.2 の 3 柱（#49、D-44〜D-46）を段階ごとに進める**: 1 スキーマ・ストア・コマンド（完了）→ 2 Shell＋記事一覧＋エディタ（自動保存）（完了）→ 3 版履歴（完了）→ 4 長文生成（完了）→ 5 Voice 複数・試し書き比較（完了）→ 6 モックで UX 再レビュー（完了）。**v0.2 の実装は一通り揃った。次は本人のドッグフーディングと配布（#25）**。計画は `~/.claude-profiles/personal/config/plans/shimmering-exploring-anchor.md`
 1. **本人のドッグフーディング（2026-09-23 開始）** — `/Applications/Lita.app`（`npm run tauri build` の ad-hoc 署名ビルド、本人の Mac でのみ動く）で実投稿を書く。違和感は backlog へ。特に抽出が汎用語を特徴語に拾う件
-2. **配布（B-26 / #25、v0.2）** — 署名・公証・Homebrew cask。未使用の「Lita desktop」OAuth クライアントは 2026-09-22 に削除済み（30 日は復元可）
+2. **配布（#25）— 進行中（2026-09-23）**。できたもの: PATH 修正（`fix-path-env`）、メニュー（Lita › アップデートを確認…、編集、ウインドウ）、アプリ内アップデーター（`tauri-plugin-updater`、鍵はキーチェーン `lita-tauri-updater-key` ＋ Secret `TAURI_SIGNING_PRIVATE_KEY`）、`release.yml`（`v*` タグで GitHub Releases に公開）、`homebrew.yml`（公開時に tap `Papillon6814/homebrew-lita` の cask を更新）、`npm run release -- x.y.z`。**残り（本人待ち）**: Apple Developer Program 加入 → Developer ID 証明書と App Store Connect API キー → Secrets（`APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` / `KEYCHAIN_PASSWORD` / `APPLE_SIGNING_IDENTITY` / `APPLE_API_ISSUER` / `APPLE_API_KEY` / `APPLE_API_KEY_CONTENT`）。Homebrew 用に fine-grained PAT（tap の contents: write）を Secret `HOMEBREW_TAP_TOKEN` に。初回リリース `v0.2.0` を打って一周を確認。決定は D-47〜D-50
 
 ## 触る前に知っておくこと
 

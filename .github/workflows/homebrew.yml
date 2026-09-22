@@ -1,0 +1,84 @@
+# When a release is published, rewrites the cask in Papillon6814/homebrew-lita
+# so `brew install --cask papillon6814/lita/lita` gets the new version.
+#
+# Secret: HOMEBREW_TAP_TOKEN — a fine-grained PAT with contents: write on the tap.
+name: homebrew
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.2.0"
+        required: true
+permissions:
+  contents: read
+jobs:
+  cask:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          ASSET="Lita_${VERSION}_aarch64.dmg"
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${ASSET}"
+          curl -fsSL -o app.dmg "$URL"
+          SHA=$(shasum -a 256 app.dmg | cut -d' ' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Papillon6814/homebrew-lita
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Write the cask
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          SHA: ${{ steps.rel.outputs.sha }}
+        run: |
+          mkdir -p tap/Casks
+          cat > tap/Casks/lita.rb <<EOF
+          cask "lita" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/Papillon6814/lita/releases/download/v#{version}/Lita_#{version}_aarch64.dmg",
+                verified: "github.com/Papillon6814/lita/"
+            name "Lita"
+            desc "Writes your posts in your own voice, using the Codex CLI login you already have"
+            homepage "https://lita.muumoo.online/"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            auto_updates true
+            depends_on macos: ">= :monterey"
+            depends_on arch: :arm64
+
+            app "Lita.app"
+
+            zap trash: [
+              "~/Library/Application Support/com.papillon6814.lita",
+              "~/Library/Caches/com.papillon6814.lita",
+              "~/Library/Preferences/com.papillon6814.lita.plist",
+              "~/Library/WebKit/com.papillon6814.lita",
+            ]
+
+            caveats <<~CAVEATS
+              Lita needs the Codex CLI installed and logged in (codex login).
+              Your Lita sign-in is kept in the macOS keychain; remove it there if you want it gone after uninstalling.
+            CAVEATS
+          end
+          EOF
+          cd tap
+          git config user.name "lita-release-bot"
+          git config user.email "noreply@muumoo.online"
+          git add Casks/lita.rb
+          git commit -m "lita ${VERSION}" || echo "nothing to commit"
+          git push

@@ -96,6 +96,11 @@ export type ArticleVersion = {
 export type ArticleWritten = { article: Article; version: ArticleVersion; voice_notes: string };
 export type UserSettings = { default_voice_id: string | null };
 export type Trial = { title: string; text: string; voice_notes: string; elapsed_ms: number };
+export type UpdateInfo = { version: string; current_version: string; notes: string | null; date: string | null };
+export type DownloadEvent =
+  | { event: "started"; data: { content_length: number | null } }
+  | { event: "progress"; data: { downloaded: number; content_length: number | null } }
+  | { event: "finished"; data: null };
 export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
 
 
@@ -132,6 +137,11 @@ export type Host = {
   getSettings: () => Promise<UserSettings>;
   setDefaultVoice: (voiceId: string | null) => Promise<void>;
   trialWrite: (voiceId: string, brief: string, platformId: string, effort: Effort) => Promise<Trial>;
+  appVersion: () => Promise<string>;
+  fetchUpdate: () => Promise<UpdateInfo | null>;
+  installUpdate: (onEvent: (e: DownloadEvent) => void) => Promise<void>;
+  restartApp: () => Promise<void>;
+  onCheckUpdate: (handler: () => void) => Promise<Unlisten>;
   copyText: (text: string) => Promise<void>;
   importNote: (account: string) => Promise<Imported>;
   importMedium: (handle: string) => Promise<Imported>;

@@ -296,3 +296,14 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .trial-card.prev { background: var(--soft); }
 .trial-label { color: var(--mute); font-size: 0.82rem; margin-bottom: 6px; font-weight: 500; }
 .trial-text { margin: 0; line-height: 1.8; white-space: pre-wrap; }
+
+/* Updates */
+.update-pill { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--mint-ink); font-weight: 700; text-align: left; }
+.update-pill:hover { background: var(--mint-soft); }
+.modal-backdrop { position: fixed; inset: 0; background: rgb(43 42 39 / 0.35); display: grid; place-items: center; z-index: 50; }
+.modal { background: #fff; border-radius: var(--r-box); padding: 22px 24px; width: min(480px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgb(0 0 0 / 0.2); }
+.modal-title { margin: 0 0 8px; font-size: 1.1rem; font-weight: 700; }
+.modal-actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+.notes-box { max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; line-height: 1.6; margin: 10px 0 0; }
+.progress { height: 8px; background: var(--soft); border-radius: 999px; overflow: hidden; margin-top: 12px; }
+.progress-bar { height: 100%; background: var(--mint-ink); transition: width .2s; }

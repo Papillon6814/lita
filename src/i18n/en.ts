@@ -230,6 +230,18 @@ export const en = {
   "trial.result": "Result",
   "article.emptyNoVoice": "Start by teaching Lita how you write. Gather some writing, build a Voice, and write from here.",
   "article.goVoices": "Build a Voice",
+  "update.pill": "v{v} is available",
+  "update.checking": "Checking for updates…",
+  "update.latest": "You are up to date (v{v}).",
+  "update.available": "Version v{v} is available.",
+  "update.current": "You have v{v}.",
+  "update.install": "Update now",
+  "update.later": "Later",
+  "update.downloading": "Downloading v{v}…",
+  "update.ready": "v{v} is ready.",
+  "update.readyHint": "Restart to use the new version. Your writing is saved.",
+  "update.restart": "Restart",
+  "update.failed": "The update could not be installed.",
   "privacy.note": "Lita never touches your OpenAI credentials; it only starts the codex command. Codex receives only your writing when building a Voice, and your brief plus the Voice summary when writing. Results are stored with your Lita account.",
 } as const;
 

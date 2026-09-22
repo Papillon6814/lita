@@ -85,6 +85,17 @@ Brief, in the editor ──────────────┘
   (`codex login`)
 - A Google account, for signing in to Lita
 
+## Installing
+
+Apple Silicon Macs, macOS 12 or later.
+
+```
+brew install --cask papillon6814/lita/lita
+```
+
+Or download the DMG from the [latest release](https://github.com/Papillon6814/lita/releases/latest).
+Lita checks for updates when it starts and from **Lita › アップデートを確認…**.
+
 ## Running from source
 
 You need Rust (stable), Node.js 20+, and the
@@ -117,7 +128,7 @@ The repository is a Cargo workspace:
 | --- | --- |
 | **v0.1** (done) | Voice from note / Medium / X archive / paste · one Voice · brief → X post → approve → copy · fast/careful · prompt preview · shorter rewrite |
 | **v0.2** (done) | Articles as the home · editor with autosave and version history · long-form for note and Medium · several Voices, a default, trial write |
-| v0.3 | Signed, notarised builds and a Homebrew cask · publisher plugins (draft to platform) · other model backends |
+| v0.3 | Distribution: signed and notarised builds on GitHub Releases, in-app updates, Homebrew cask · publisher plugins (draft to platform) · other model backends |
 
 Slack as a Voice source was investigated and shelved: Marketplace listing
 requires ten active workspaces before review, which a personal OSS project

@@ -12,12 +12,14 @@ type Props = {
   codexChecking: boolean;
   onSignOut: () => void;
   onShowCodexSteps: () => void;
+  updateAvailable: string | null;
+  onUpdate: () => void;
 };
 
 const FILTERS: (ArticleStatus | "all")[] = ["all", "draft", "approved", "archived"];
 
 // Quiet when everything is fine; the Codex pill appears only when it is not.
-export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, onSignOut, onShowCodexSteps }: Props) {
+export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -66,6 +68,9 @@ export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, 
       </div>
 
       <div className="side-bottom">
+        {updateAvailable && (
+          <button className="pill quiet side-pill update-pill" onClick={onUpdate}>{t("update.pill", { v: updateAvailable })}</button>
+        )}
         {pill && (
           <div className="pill warn side-pill">
             <span>{pill}</span>

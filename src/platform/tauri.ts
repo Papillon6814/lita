@@ -1,7 +1,7 @@
 // The Tauri implementation of the host. Only this file and mock.ts know
 // how commands are reached.
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -40,6 +40,15 @@ export const tauriHost: T.Host = {
   getSettings: () => invoke<T.UserSettings>("get_settings"),
   setDefaultVoice: (voiceId) => invoke<void>("set_default_voice", { voiceId }),
   trialWrite: (voiceId, brief, platformId, effort) => invoke<T.Trial>("trial_write", { voiceId, brief, platformId, effort }),
+  appVersion: () => invoke<string>("app_version"),
+  fetchUpdate: () => invoke<T.UpdateInfo | null>("fetch_update"),
+  installUpdate: (onEvent) => {
+    const onEventChannel = new Channel<T.DownloadEvent>();
+    onEventChannel.onmessage = onEvent;
+    return invoke<void>("install_update", { onEvent: onEventChannel });
+  },
+  restartApp: () => invoke<void>("restart_app"),
+  onCheckUpdate: (handler) => listen("check-update", () => handler()),
   copyText: (text: string) => writeText(text),
   importNote: (account: string) => invoke<T.Imported>("import_note", { account }),
   importMedium: (handle: string) => invoke<T.Imported>("import_medium", { handle }),
