@@ -20,7 +20,8 @@ const ISSUER: &str = "https://accounts.google.com";
 pub struct GoogleIdentity {
     /// The raw ID token, to be exchanged with Supabase. Not stored anywhere.
     pub id_token: String,
-    /// The nonce we generated; Supabase needs it to accept the token.
+    /// The raw nonce we generated. Its SHA-256 is in the token; Supabase
+    /// needs the raw value to accept the token.
     pub nonce: String,
     pub subject: String,
     pub email: Option<String>,
@@ -81,8 +82,14 @@ impl GoogleSignIn {
         .set_redirect_uri(RedirectUrl::new(redirect)?);
 
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+        // Supabase compares the SHA-256 of the nonce we give it against the
+        // nonce claim in the ID token (verified 2026-09-22: sending the raw
+        // value both ways fails with "Nonces mismatch"). So Google gets the
+        // hash and Supabase gets the raw value.
+        let raw_nonce = Nonce::new_random();
+        let hashed_nonce = Nonce::new(sha256_hex(raw_nonce.secret()));
         let (auth_url, csrf, nonce) = client
-            .authorize_url(CoreAuthenticationFlow::AuthorizationCode, CsrfToken::new_random, Nonce::new_random)
+            .authorize_url(CoreAuthenticationFlow::AuthorizationCode, CsrfToken::new_random, || hashed_nonce)
             .add_scope(Scope::new("email".into()))
             .add_scope(Scope::new("profile".into()))
             .set_pkce_challenge(pkce_challenge)
@@ -112,7 +119,7 @@ impl GoogleSignIn {
 
         Ok(GoogleIdentity {
             id_token: id_token.to_string(),
-            nonce: nonce.secret().clone(),
+            nonce: raw_nonce.secret().clone(),
             subject: claims.subject().to_string(),
             email: claims.email().map(|e| e.to_string()),
             name: claims
@@ -121,6 +128,12 @@ impl GoogleSignIn {
                 .map(|n| n.to_string()),
         })
     }
+}
+
+fn sha256_hex(input: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(input.as_bytes());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[derive(Debug)]
@@ -264,6 +277,14 @@ mod tests {
         assert!(page.contains("cancelled"));
         let err = waiter.join().unwrap().unwrap_err();
         assert!(err.to_string().contains("access_denied"), "{err}");
+    }
+
+    #[test]
+    fn sha256_hex_matches_known_vector() {
+        assert_eq!(
+            sha256_hex("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[test]
