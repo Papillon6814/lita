@@ -2,7 +2,7 @@
 
 > 次のセッションはここを読めば再開できます。
 
-**最終更新**: 2026-09-22（v0.1 の実装項目はすべて完了。残りは公開前の運用）
+**最終更新**: 2026-09-22（v0.1 の実装項目と公開前の運用まで完了）
 
 ## 前回やったこと
 
@@ -25,6 +25,7 @@
 17. **Codex エラーの実地再現（#17）**。未ログインを空の `CODEX_HOME` で再現。`codex login status` の終了コードで事前に弾き、失敗時は `turn.failed` イベントの message で判定するよう変更（`docs/pm/2026-09-22-codex-errors.md`）。`cargo run -p lita-codex --example nologin` で枠を使わず再現できる
 18. **Voice の一文（#39）**。`VoiceProfile.one_line` を追加して Codex に書かせ、古い Voice はテンプレートで代用（`docs/pm/2026-09-22-voice-lead.md`）。`cargo run -p lita-codex --example one_line` で 1 回分の枠を使って確認できる
 19. **#40 / #41**。上限超えのときに「短く書き直す」（前の下書きを添えた `shorten_prompt`、プレビューも同じ関数を通る）。ブリーフは Voice ごとに sessionStorage で保持し、戻っても消えない
+20. **Google 同意画面を本番化した**。必須だったホームページとプライバシーポリシーを `site/` に書いて GitHub Pages（lita.muumoo.online）で公開し、DNS と Google 側の入力はブラウザ操作エージェントと本人で分担（承認済みドメイン欄の入力は権限判定が拒否したため本人が入力）
 
 ## いま決まっていること
 
@@ -34,7 +35,7 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## 次の一手（この順で）
 
-1. 公開前の運用: Google 同意画面を Testing → 本番へ。**進行中（2026-09-22）**: Google はホームページ URL とプライバシーポリシー URL を必須にしている。`site/` を GitHub Pages で https://lita.muumoo.online/ に配備（`/privacy.html`）。残りは DNS の CNAME（lita → papillon6814.github.io、ムームードメイン）→ Google 側で承認済みドメインに muumoo.online を追加し URL を入力 → 「アプリを公開」。未使用の「Lita desktop」クライアントは削除候補
+1. **配布（B-26 / #25、v0.2）** — 公開前の運用は 2026-09-22 に完了。未使用の「Lita desktop」OAuth クライアントは削除候補
 
 ## 触る前に知っておくこと
 
@@ -55,9 +56,9 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## Google Cloud（2026-09-22 作成）
 
-- 公開サイト（同意画面の必須項目）: `site/` → GitHub Pages（`.github/workflows/pages.yml`、カスタムドメイン lita.muumoo.online）。プライバシーポリシーは `site/privacy.html`。扱うデータが変わったらここも直す
+- 公開サイト（同意画面の必須項目）: `site/` → GitHub Pages（`.github/workflows/pages.yml`、カスタムドメイン lita.muumoo.online。DNS はムームードメインの設定2 に `lita CNAME papillon6814.github.io`）。プライバシーポリシーは `site/privacy.html`。扱うデータが変わったらここも直す
 
-- プロジェクト `lita-509404`（組織 muumoo.online）。同意画面は External / Testing、テストユーザーは kuno@muumoo.online のみ。**公開前に同意画面を本番に切り替える必要がある**
+- プロジェクト `lita-509404`（組織 muumoo.online）。同意画面は External / **本番環境（2026-09-22 公開）**。スコープは openid / email / profile のみなので検証提出は不要だった。ブランディング: ホームページ https://lita.muumoo.online/、プライバシーポリシー https://lita.muumoo.online/privacy.html、承認済みドメインに muumoo.online と csfvqpqzvcorqlsmfjwb.supabase.co
 - OAuth クライアント: 「Lita (Supabase)」（Web application、使用中）と「Lita desktop」（Desktop app、方式 A の検証用で未使用）。ID とシークレットはキーチェーン `lita-google-web-client-*` / `lita-google-client-*`
 
 ## Supabase（2026-09-22 作成）
