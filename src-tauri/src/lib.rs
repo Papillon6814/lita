@@ -6,10 +6,11 @@ mod config;
 use std::sync::Mutex;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
-use lita_codex::{CodexCli, Preflight};
-use lita_store::Store;
-use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use lita_codex::voice::VoiceProfile;
+use lita_codex::{CodexCli, Effort, Preflight, Request};
+use lita_store::{NewSource, SourceKind, Store, Voice, VoiceSummary};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 /// What the UI needs to know about Codex before anything else can happen.
@@ -54,7 +55,6 @@ impl From<Option<&Session>> for SessionStatus {
 /// Everything the commands share. `session` is `None` when signed out.
 pub struct AppState {
     auth: SupabaseAuth,
-    #[allow(dead_code)] // used by the next commands (voices, briefs, drafts)
     store: Store,
     keychain: SessionStore,
     session: Mutex<Option<Session>>,
@@ -97,6 +97,20 @@ impl AppState {
     fn status(&self) -> SessionStatus {
         SessionStatus::from(self.session.lock().unwrap().as_ref())
     }
+
+    /// The current access token, or a message the UI can show.
+    fn access_token(&self) -> Result<String, String> {
+        self.session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|s| s.access_token.clone())
+            .ok_or_else(|| "not signed in".to_string())
+    }
+}
+
+fn fail(e: anyhow::Error) -> String {
+    format!("{e:#}")
 }
 
 /// Runs `codex doctor --json` off the main thread, because it takes about a
@@ -144,6 +158,113 @@ fn sign_out(state: State<'_, AppState>) -> Result<SessionStatus, String> {
     Ok(state.status())
 }
 
+// ----- voices ----------------------------------------------------------------
+
+#[tauri::command]
+async fn list_voices(app: AppHandle) -> Result<Vec<VoiceSummary>, String> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).voices().map_err(fail)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn get_voice(app: AppHandle, id: String) -> Result<Option<Voice>, String> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).voice(&id).map_err(fail)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_voice(app: AppHandle, id: String) -> Result<bool, String> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).delete_voice(&id).map_err(fail)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// One piece of writing handed in by the UI.
+#[derive(Debug, Deserialize)]
+pub struct SourceInput {
+    pub kind: SourceKind,
+    pub origin: Option<String>,
+    pub body: String,
+}
+
+/// Progress of a Voice build, for the stage display (D-26). Codex reports
+/// only four coarse events, so these are milestones, not a percentage.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "stage", rename_all = "snake_case")]
+pub enum VoiceProgress {
+    Started,
+    Thinking,
+    Extracted,
+    Saved,
+}
+
+/// Builds a Voice from the given writing: Codex extracts the profile
+/// (45–65 s measured), then it is stored with its sources. Emits
+/// `voice-progress` events along the way.
+#[tauri::command]
+async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -> Result<Voice, String> {
+    let sources: Vec<NewSource> = sources
+        .into_iter()
+        .map(|s| NewSource { kind: s.kind, origin: s.origin, body: s.body.trim().to_string() })
+        .filter(|s| !s.body.is_empty())
+        .collect();
+    if sources.is_empty() {
+        return Err("paste at least one piece of writing".into());
+    }
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("give the voice a name".into());
+    }
+
+    let token = app.state::<AppState>().access_token()?;
+    let working_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<Voice, String> {
+        std::fs::create_dir_all(&working_dir).map_err(|e| e.to_string())?;
+        let _ = app.emit("voice-progress", VoiceProgress::Started);
+
+        let samples: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
+        let req = Request {
+            prompt: VoiceProfile::extraction_prompt(&samples),
+            schema: VoiceProfile::extraction_schema(),
+            model: None,
+            effort: Effort::Quality,
+            working_dir,
+        };
+        let emitter = app.clone();
+        let run = CodexCli::on_path()
+            .run_typed::<VoiceProfile>(&req, |event| {
+                if event.kind == "turn.started" {
+                    let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
+                }
+            })
+            .map_err(fail)?;
+        let _ = app.emit("voice-progress", VoiceProgress::Extracted);
+
+        let voice = app
+            .state::<AppState>()
+            .store
+            .as_user(token)
+            .create_voice(&name, &run.value, &sources)
+            .map_err(fail)?;
+        let _ = app.emit("voice-progress", VoiceProgress::Saved);
+        Ok(voice)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new().expect("Supabase configuration is valid");
@@ -156,7 +277,16 @@ pub fn run() {
             tauri::async_runtime::spawn_blocking(move || handle.state::<AppState>().restore());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![codex_status, session_status, sign_in, sign_out])
+        .invoke_handler(tauri::generate_handler![
+            codex_status,
+            session_status,
+            sign_in,
+            sign_out,
+            list_voices,
+            get_voice,
+            delete_voice,
+            create_voice
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
