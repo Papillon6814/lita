@@ -9,6 +9,13 @@ export const en = {
   "codex.error": "Could not check Codex.",
   "action.install": "Install Codex",
   "action.retry": "Check again",
+  "session.checking": "Checking your session…",
+  "session.signedOut": "Sign in to keep your voices and drafts on every computer you use.",
+  "session.signedIn": "Signed in as {email}.",
+  "session.waiting": "Finish signing in with Google in your browser…",
+  "session.error": "Sign-in did not complete.",
+  "action.signIn": "Sign in with Google",
+  "action.signOut": "Sign out",
   "privacy.note": "Lita never reads or stores your OpenAI credentials. It only starts the codex command.",
 } as const;
 

@@ -1,14 +1,44 @@
 import { useCallback, useEffect, useState } from "react";
-import { host, type CodexStatus } from "./platform/host";
+import { host, type CodexStatus, type SessionStatus } from "./platform/host";
 import { t } from "./i18n";
 import "./App.css";
 
 const CODEX_INSTALL_URL = "https://developers.openai.com/codex/cli";
 
 type View = { kind: "checking" } | { kind: "done"; status: CodexStatus };
+type Auth =
+  | { kind: "checking" }
+  | { kind: "waiting" }
+  | { kind: "done"; status: SessionStatus; error?: string };
 
 export default function App() {
   const [view, setView] = useState<View>({ kind: "checking" });
+  const [auth, setAuth] = useState<Auth>({ kind: "checking" });
+
+  const loadSession = useCallback(async () => {
+    try {
+      setAuth({ kind: "done", status: await host.sessionStatus() });
+    } catch (e) {
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+    }
+  }, []);
+
+  const signIn = useCallback(async () => {
+    setAuth({ kind: "waiting" });
+    try {
+      setAuth({ kind: "done", status: await host.signIn() });
+    } catch (e) {
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+    }
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      setAuth({ kind: "done", status: await host.signOut() });
+    } catch (e) {
+      setAuth({ kind: "done", status: { status: "signed_out" }, error: String(e) });
+    }
+  }, []);
 
   const check = useCallback(async () => {
     setView({ kind: "checking" });
@@ -21,7 +51,11 @@ export default function App() {
 
   useEffect(() => {
     void check();
-  }, [check]);
+    // The native side refreshes the stored session on launch; give it a
+    // moment before the first read so we do not flash "signed out".
+    const timer = setTimeout(() => void loadSession(), 400);
+    return () => clearTimeout(timer);
+  }, [check, loadSession]);
 
   return (
     <main className="shell">
@@ -29,6 +63,10 @@ export default function App() {
         <h1>Lita</h1>
         <p className="tagline">{t("app.tagline")}</p>
       </header>
+
+      <section className="card" aria-live="polite">
+        <SessionBody auth={auth} onSignIn={signIn} onSignOut={signOut} />
+      </section>
 
       <section className="card" aria-live="polite">
         {view.kind === "checking" ? (
@@ -40,6 +78,31 @@ export default function App() {
 
       <footer className="privacy">{t("privacy.note")}</footer>
     </main>
+  );
+}
+
+function SessionBody({ auth, onSignIn, onSignOut }: { auth: Auth; onSignIn: () => void; onSignOut: () => void }) {
+  if (auth.kind === "checking") return <p className="muted">{t("session.checking")}</p>;
+  if (auth.kind === "waiting") return <p className="muted">{t("session.waiting")}</p>;
+  if (auth.status.status === "signed_in") {
+    return (
+      <div className="row">
+        <p className="ok">{t("session.signedIn", { email: auth.status.email ?? "" })}</p>
+        <button className="secondary" onClick={onSignOut}>{t("action.signOut")}</button>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p>{t("session.signedOut")}</p>
+      {auth.error && (
+        <>
+          <p className="warn">{t("session.error")}</p>
+          <pre>{auth.error}</pre>
+        </>
+      )}
+      <button onClick={onSignIn}>{t("action.signIn")}</button>
+    </>
   );
 }
 
