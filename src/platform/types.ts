@@ -29,6 +29,8 @@ export type VoiceProfile = {
   closes_with: string;
   uses_emoji: boolean;
   representative_excerpts: { excerpt: string; why: string }[];
+  /** Codex's one sentence about the voice; empty on older profiles. */
+  one_line: string;
 };
 
 export type VoiceSource = {

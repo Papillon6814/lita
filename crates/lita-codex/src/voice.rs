@@ -36,6 +36,12 @@ pub struct VoiceProfile {
     /// Verbatim passages with what each reveals. Kept for the person to read;
     /// never sent to generation.
     pub representative_excerpts: Vec<Excerpt>,
+    /// One sentence about the voice, in the samples' language, for the top
+    /// of the Voice screen. Display only; never sent to generation. Empty on
+    /// profiles extracted before 2026-09-22, where the UI falls back to a
+    /// template (src/summary.ts).
+    #[serde(default)]
+    pub one_line: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -55,7 +61,7 @@ impl VoiceProfile {
             "required": [
                 "language", "first_person", "formality", "tone", "sentence_endings",
                 "avg_sentence_length_chars", "preferred_words", "avoided_words",
-                "opens_with", "closes_with", "uses_emoji", "representative_excerpts"
+                "opens_with", "closes_with", "uses_emoji", "representative_excerpts", "one_line"
             ],
             "properties": {
                 "language": { "type": "string", "description":
@@ -92,7 +98,9 @@ impl VoiceProfile {
                             "why": { "type": "string", "description": "What this passage reveals about the voice." }
                         }
                     }
-                }
+                },
+                "one_line": { "type": "string", "description":
+                    "One sentence, in the samples' language, addressed to the author and starting with the equivalent of 'Your writing …' (Japanese: 「あなたの文章は、」). Name the formality, one or two tone words, one or two signature words, and how sentences tend to close. Concrete, no praise, no hedging. At most 70 characters in Japanese or 30 words in English." }
             }
         })
     }
@@ -152,6 +160,7 @@ mod tests {
                 excerpt: "x".into(),
                 why: "y".into(),
             }],
+            one_line: "あなたの文章は、です・ます調で率直。".into(),
         }
     }
 
@@ -197,6 +206,7 @@ mod tests {
     fn generation_never_sees_the_excerpts() {
         let view = sample().generation_view();
         assert!(view.get("representative_excerpts").is_none());
+        assert!(view.get("one_line").is_none());
         assert_eq!(view["preferred_words"][0], "結局は");
     }
 }
