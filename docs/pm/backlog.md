@@ -8,8 +8,8 @@
 - [ ] **B-14 Voice 生成のステージ表示** (#15) — 演出であることを前提に、1分近い無音を埋める（D-26）
 - [ ] **B-12 貼り付け／ファイル取り込みの UI** (#12) — 文章を20件ほど受け取って Voice の材料にする。v0.1 の入口（D-20）。保存先はサーバ（D-36）
 - [ ] **B-11 未ログイン・利用上限の実地再現** (#17) — 現在は stderr の文字列マッチで分類しており脆い。より確かな判定手段がないか確かめる
-- [ ] **B-40 バックエンド基盤の決定** — 調査済み（[`2026-09-22-backend-options.md`](2026-09-22-backend-options.md)）。本人の決定待ち
-- [ ] **B-30 Google ログインの実機検証** — Desktop app クライアント＋ループバック＋PKCE を Tauri で通す。シークレット省略でコード交換が通るか確かめる（D-37）
+- [ ] **B-41 Supabase プロジェクト（東京）と Google Cloud OAuth クライアントの作成（本人）** — アカウントが要るのでエージェントは代行できない
+- [ ] **B-30 Google ログインの実機検証** (#26) — Desktop app クライアント＋ループバック＋PKCE を Tauri で通す。シークレット省略でコード交換が通るか確かめる（D-37）
 - [ ] **B-06 サーバ側スキーマと API クライアント** (#11) — ~~SQLite~~ → サーバ（2026-09-22 変更、D-36）。`feat/11-sqlite` の設計（voices / voice_sources / briefs / drafts / platforms）を `user_id` 付きで移植
 - [ ] **B-07 ブリーフ入力 → 生成 → 承認 → コピーの UI** (#13)
 - [ ] **B-08 送信内容の可視化** (#16) — 何が OpenAI に送られるかを生成前に見せる
@@ -28,6 +28,8 @@
 - [ ] B-26 配布まわり（コード署名・公証・Homebrew cask） (#25)（2026-09-22 保留）
 
 ## 完了
+
+- [x] **B-40 バックエンド基盤の決定** — 2026-09-22 完了。Supabase（D-40）。調査記録は [`2026-09-22-backend-options.md`](2026-09-22-backend-options.md)
 
 - [x] **B-00 リポジトリ初期化と PM 運用の土台** — 2026-09-22 完了。LICENSE / README / .gitignore / `.claude/agents/lita-pm.md` / `docs/pm/` を作成
 - [x] **B-05 Tauri v2 スキャフォールド** — 2026-09-22 完了。React + TS + Vite、`codex_status` コマンドで Codex の状態を表示、i18n（en/ja）と `src/platform` 境界を敷設（D-31〜D-35）。deep-link / keyring は Slack と一緒に v0.2 へ
