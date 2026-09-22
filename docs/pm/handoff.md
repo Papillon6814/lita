@@ -17,7 +17,7 @@
 9. **Tauri アプリの骨格を立てた**（Issue #9）— React + TS + Vite、`codex_status` コマンドで Codex の状態を表示。en/ja の i18n と `src/platform` 境界を敷設（D-31〜D-35）
 10. **バックログ全 15 件を GitHub Issue 化した**（#11〜#25）
 11. **保存方式をサーバへ転換した**。SQLite 実装（#11）の途中で「別 PC でも引き継ぎたい」要件が出て、オンライン専用・Google OAuth・v0.1 に含める、と決定（D-36〜D-39）。基盤候補 18 件を調査して Notion 子ページにまとめた。同日 **Supabase に決定（D-40）**
-12. **Supabase にスキーマを適用し、Google ログインを実機で通した**（PR #27、#26）。Google はデスクトップ用クライアントでもシークレットを要求すると確定し、Supabase 経由の OAuth に切り替えた（D-41）。`crates/lita-auth` がログインとリフレッシュを担う
+12. **Supabase にスキーマを適用し、Google ログインを実機で通し、API クライアント `lita-store` を作った**（PR #27、#26）。Google はデスクトップ用クライアントでもシークレットを要求すると確定し、Supabase 経由の OAuth に切り替えた（D-41）。`crates/lita-auth` がログインとリフレッシュを担う
 
 ## いま決まっていること
 
@@ -27,8 +27,8 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 
 ## 次の一手（この順で）
 
-1. **Rust の API クライアント（B-06 / #11 の後半）** — PostgREST をユーザーの JWT で叩く。スキーマは PR #27 で適用済み（`supabase/migrations/20260922000000_init.sql`）
-2. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
+1. **Tauri にログインを組み込む** — `lita-auth` を `sign_in` / `session_status` コマンドにし、セッションは OS キーチェーンに保存。UI にサインインボタン。これがないと以降の画面が作れない
+2. **貼り付け／ファイル取り込みの UI（B-12 / #12）** — `lita-store::UserStore::create_voice` に流す — v0.1 の入口。文章を受け取って `VoiceProfile::extraction_prompt` に渡す
 3. **ブリーフ → 生成 → 承認 → コピーの UI（B-07 / #13）**、速度／品質の切り替え（B-13 / #14）、Voice 生成のステージ表示（B-14 / #15）
 
 ## 触る前に知っておくこと
@@ -38,6 +38,7 @@ v0.1 の入口は **Slack 連携ではなく「気に入っている文章を20�
 - 決定を変えるときは、**Notion の決定事項表**と **`docs/pm/decisions.md`** の両方を更新します。覆った決定は消さず「（日付 改訂）」を付けて残します。
 - Codex のトークンには触りません。`codex` を起動するだけです。
 - `cargo run -p lita-codex --bin probe` / `--bin corpus` / `--bin schema` は**アカウントの Codex 利用枠を消費します**（約70秒／約60秒／約3分）。
+- データアクセスは `lita-store::Store::as_user(access_token)` 経由のみ。RLS が所有者チェックを担うので、クレート側でユーザー絞り込みはしない。`cargo run -p lita-store --example roundtrip` で本番に対する一周検証ができる（ブラウザでのログインが1回要る。後始末込み）
 - Voice の生成プロンプトには必ず `VoiceProfile::generation_view()` を使ってください。プロファイル全体を渡してはいけません（D-28）。
 - v0.1 の完成定義に入らない提案は backlog に落とします。
 - SQLite に戻す提案が出たら、まず D-36 の理由（別 PC での引き継ぎ）を確認してください。ローカル優先＋同期は保留項目（B-31）です。

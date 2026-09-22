@@ -18,6 +18,7 @@
 | 待ち時間の扱い | 完了。**問題設定が誤っていた（短文は6.6秒）。D-23〜D-26 を決定** |
 | Voice スキーマの確定 | 完了。**12フィールド、`voice.rs` が正。引用は生成に渡さない（D-27〜D-30）** |
 | Voice に必要な発言数の実測 | 完了。**4件でほぼ安定**、24件との差は語彙の豊かさのみ |
+| `crates/lita-auth` / `crates/lita-store` | ログイン（Supabase 経由 PKCE）とデータアクセス（PostgREST）。単体テスト 8 件、本番向け example 2 本 |
 | `crates/lita-codex` | Codex CLI のラッパー、`VoiceProfile` 型、`probe` / `corpus` / `schema` の3バイナリ、ユニットテスト9件 |
 | **Tauri アプリの骨格** | **完了（2026-09-22）。`npm run tauri dev` で起動し、Codex の状態（ready / 未ログイン / 未インストール）を表示する。en/ja 対応** |
 
@@ -30,7 +31,7 @@
 | Google OAuth クライアント | 完了（`lita-509404`、Web クライアント「Lita (Supabase)」） |
 | Google ログイン | 完了（#26）。Supabase 経由の PKCE＋ループバック。`crates/lita-auth` |
 | サーバ側スキーマ | 完了（PR #27）。RLS 付きで本番に適用済み |
-| Rust の API クライアント | 未着手 |
+| Rust の API クライアント | 完了（#11、`crates/lita-store`）。本番で一周検証済み |
 | 貼り付け／ファイル取り込みの UI | 未着手（v0.1 の入口） |
 
 ## いま効いている制約
