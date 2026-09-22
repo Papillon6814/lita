@@ -147,6 +147,15 @@ function CodexSteps({ status, onRetry }: { status: CodexStatus; onRetry: () => v
           </div>
         </>
       );
+    case "config_broken":
+      return (
+        <>
+          <h2>{t("codex.configBroken")}</h2>
+          <p className="muted">{t("codex.configBroken.hint")}</p>
+          <pre>{status.message}</pre>
+          <button className="btn pri" onClick={onRetry}>{t("action.retry")}</button>
+        </>
+      );
     case "error":
       return (
         <>

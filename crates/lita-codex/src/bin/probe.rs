@@ -87,6 +87,9 @@ fn main() -> Result<()> {
         Preflight::NotInstalled => {
             bail!("no `codex` binary on PATH. Install the Codex CLI and retry.");
         }
+        Preflight::ConfigBroken { version, detail } => {
+            bail!("codex {version} cannot load its configuration: {detail}. Run `codex doctor` and fix it.");
+        }
     };
 
     // Run somewhere that is deliberately NOT a git repository. Lita's data

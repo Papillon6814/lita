@@ -35,6 +35,10 @@ pub enum Preflight {
     NotLoggedIn { version: String },
     /// No `codex` binary was found.
     NotInstalled,
+    /// Installed, but the CLI cannot load its own configuration (for
+    /// example a duplicate key in `~/.codex/config.toml`), so nothing else
+    /// can be checked. `detail` is the CLI's own summary.
+    ConfigBroken { version: String, detail: String },
 }
 
 /// One line of the CLI's JSONL event stream, reduced to what a progress UI needs.
@@ -181,11 +185,19 @@ impl CodexCli {
             .as_str()
             .unwrap_or("unknown")
             .to_string();
-        let auth_ok = report["checks"]["auth.credentials"]["status"]
-            .as_str()
-            .is_some_and(|s| s == "ok");
-
-        Ok(if auth_ok {
+        // A broken config makes `doctor` skip the auth check entirely; that
+        // must not read as "not logged in" (seen 2026-09-23 with a duplicate
+        // key in config.toml).
+        let config = &report["checks"]["config.load"];
+        if config["status"].as_str().is_some_and(|s| s != "ok") {
+            let detail = config["summary"].as_str().unwrap_or("the Codex configuration could not be loaded").to_string();
+            return Ok(Preflight::ConfigBroken { version, detail });
+        }
+        let auth = &report["checks"]["auth.credentials"]["status"];
+        if auth.is_null() {
+            return Ok(Preflight::ConfigBroken { version, detail: "codex doctor did not report on credentials".into() });
+        }
+        Ok(if auth.as_str() == Some("ok") {
             Preflight::Ready { version }
         } else {
             Preflight::NotLoggedIn { version }
@@ -199,13 +211,14 @@ impl CodexCli {
     /// seconds retrying a 401 (verified against codex-cli 0.155.1).
     /// Returns `None` if the command itself could not be run.
     pub fn logged_in(&self) -> Option<bool> {
-        Command::new(&self.program)
-            .args(["login", "status"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok()
-            .map(|st| st.success())
+        let out = Command::new(&self.program).args(["login", "status"]).output().ok()?;
+        if out.status.success() {
+            return Some(true);
+        }
+        // Exit 1 also covers a configuration the CLI cannot load; only the
+        // CLI's own words settle it.
+        let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)).to_lowercase();
+        if text.contains("not logged in") { Some(false) } else { None }
     }
 
     /// Runs one prompt and deserializes the final message into `T`.

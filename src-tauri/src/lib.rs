@@ -29,6 +29,7 @@ pub enum CodexStatus {
     Ready { version: String },
     NotLoggedIn { version: String },
     NotInstalled,
+    ConfigBroken { version: String, message: String },
     Error { message: String },
 }
 
@@ -38,6 +39,7 @@ impl From<Preflight> for CodexStatus {
             Preflight::Ready { version } => CodexStatus::Ready { version },
             Preflight::NotLoggedIn { version } => CodexStatus::NotLoggedIn { version },
             Preflight::NotInstalled => CodexStatus::NotInstalled,
+            Preflight::ConfigBroken { version, detail } => CodexStatus::ConfigBroken { version, message: detail },
         }
     }
 }
