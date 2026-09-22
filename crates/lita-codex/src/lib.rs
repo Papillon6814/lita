@@ -6,6 +6,9 @@
 //! rule: if a change here would require touching `~/.codex/auth.json`, it is
 //! the wrong change.
 
+pub mod sample;
+pub mod voice;
+
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
