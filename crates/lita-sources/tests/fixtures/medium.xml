@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+<channel>
+<title>Stories by Someone on Medium</title>
+<item>
+<title><![CDATA[First post]]></title>
+<link>https://medium.com/@someone/first-post-1</link>
+<pubDate>Mon, 01 Sep 2026 10:00:00 GMT</pubDate>
+<content:encoded><![CDATA[<h3>First post</h3><p>Hello, this is the body.</p><p>Second paragraph.</p>]]></content:encoded>
+</item>
+<item>
+<title><![CDATA[Second post]]></title>
+<link>https://medium.com/@someone/second-post-2</link>
+<pubDate>Tue, 02 Sep 2026 10:00:00 GMT</pubDate>
+<content:encoded><![CDATA[<p>Another body.</p>]]></content:encoded>
+</item>
+<item>
+<title><![CDATA[Empty]]></title>
+<link>https://medium.com/@someone/empty-3</link>
+<content:encoded><![CDATA[]]></content:encoded>
+</item>
+</channel>
+</rss>

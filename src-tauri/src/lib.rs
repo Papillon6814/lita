@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::voice::VoiceProfile;
 use lita_codex::{CodexCli, Effort, Preflight, Request};
+use lita_sources::Piece;
 use lita_store::{NewSource, SourceKind, Store, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -265,6 +266,59 @@ async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -
     .map_err(|e| e.to_string())?
 }
 
+// ----- sources (D-43) ---------------------------------------------------------
+
+/// What an import found, beyond the pieces themselves.
+#[derive(Debug, Serialize)]
+pub struct Imported {
+    pub pieces: Vec<Piece>,
+    /// Everything the account has published, when the source reports it.
+    pub total: Option<u64>,
+    /// Paid articles that were left out.
+    pub skipped_paid: usize,
+    /// Whether the source only exposes its most recent items.
+    pub recent_only: bool,
+}
+
+/// Up to twenty: D-20 measured that a Voice is stable from four pieces and
+/// twenty mostly adds vocabulary.
+const IMPORT_MAX: usize = 20;
+
+#[tauri::command]
+async fn import_note(account: String) -> Result<Imported, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (listing, pieces) = lita_sources::note::import(&account, IMPORT_MAX).map_err(fail)?;
+        Ok(Imported { pieces, total: Some(listing.total_count), skipped_paid: listing.skipped_paid, recent_only: false })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn import_medium(handle: String) -> Result<Imported, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let pieces = lita_sources::medium::import(&handle).map_err(fail)?;
+        Ok(Imported { pieces, total: None, skipped_paid: 0, recent_only: true })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// `contents` is the text of `data/tweets.js` from the archive, read by
+/// the UI. Newest posts first, capped like the other imports.
+#[tauri::command]
+async fn import_x_archive(contents: String, handle: Option<String>, include_replies: bool) -> Result<Imported, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let opts = lita_sources::x::Options { include_replies, ..Default::default() };
+        let mut pieces = lita_sources::x::parse_tweets_js(&contents, handle.as_deref(), opts).map_err(fail)?;
+        let total = pieces.len() as u64;
+        pieces.truncate(IMPORT_MAX);
+        Ok(Imported { pieces, total: Some(total), skipped_paid: 0, recent_only: false })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new().expect("Supabase configuration is valid");
@@ -285,7 +339,10 @@ pub fn run() {
             list_voices,
             get_voice,
             delete_voice,
-            create_voice
+            create_voice,
+            import_note,
+            import_medium,
+            import_x_archive
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

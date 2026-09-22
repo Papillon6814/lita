@@ -52,6 +52,12 @@ pub struct Voice {
 pub enum SourceKind {
     Paste,
     File,
+    /// A note.com article; `origin` is its URL.
+    Note,
+    /// A Medium post; `origin` is its URL.
+    Medium,
+    /// A post from an X archive; `origin` is its URL when the handle was known.
+    X,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
