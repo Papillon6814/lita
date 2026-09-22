@@ -29,7 +29,8 @@
 | Supabase プロジェクト | 完了（org `muumoo`、project `lita`、東京、ref `csfvqpqzvcorqlsmfjwb`） |
 | Google OAuth クライアント | 作成中 |
 | Google ログイン | 未着手 |
-| サーバ側スキーマと API クライアント | 未着手（`feat/11-sqlite` の設計を移植） |
+| サーバ側スキーマ | 完了（PR #27）。RLS 付きで本番に適用済み |
+| Rust の API クライアント | 未着手 |
 | 貼り付け／ファイル取り込みの UI | 未着手（v0.1 の入口） |
 
 ## いま効いている制約
