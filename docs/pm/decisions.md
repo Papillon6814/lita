@@ -110,3 +110,12 @@
 | D-44 | v0.2 の情報設計（D-13 / D-21 を改訂） | **アプリは「文体（Voice）」「記事」「エディタ」の 3 柱。ホームは記事一覧。サイドバー（記事 / 文体）＋メイン（一覧・エディタ・Voice）。エディタはプレーンテキストで長文（note / Medium）に対応。Voice は複数、記事ごとに選び、既定 Voice を持つ** | 本人の実感（2026-09-23）「文体調整・過去記事の管理・文章エディタの 3 つから成る」。参考は iA Writer / Ulysses の Library–Editor。配布（#25）より先にやる |
 | D-45 | 記事と版のモデル | **`briefs` + `drafts` を廃止し、`articles`（title / body / brief / voice_id / platform_id / status: draft・approved・archived）と `article_versions`（kind: generated・shortened・edited・restored・manual、生成時は prompt_sent と elapsed_ms）に置き換え。生成は常に記事の本文を書き換え、版が増える。既存データは移行（brief 1 件＝記事 1 件、drafts＝generated 版）し、旧テーブルは drop** | v0.1 のモデルは「1 回の生成」しか表せず、編集し続ける文書を扱えない。利用者は本人のみなので移行して drop |
 | D-46 | 自動保存と版の規則 | **自動保存は 600 ms の trailing debounce ＋ 5 s の max wait。表示は「保存しました（n 分前）/ 保存中 / 保存できませんでした」。失敗時はローカルに退避して再試行。版は生成・短く・復元・「版を残す」・編集中 10 分ごと・記事を閉じるとき（差分あり）に snapshot。同じ内容なら作らない。`edited` は記事あたり最新 50 件に間引く（DB trigger）。復元は元の状態を `edited` で残してから `restored` 版を作る（履歴は常に直線）** | 137foundry「autosave は debounce ＋ max wait、失敗状態を必ず出す」、uxpatternsguide「復元は新しい版を作る」 |
+
+## 2026-09-23 — 配布（#25）
+
+| # | 論点 | 決定 | 理由・補足 |
+| --- | --- | --- | --- |
+| D-47 | バンドル識別子（D-35 の「仮」を解消） | **`com.papillon6814.lita` で確定** | 署名・アップデーター・キーチェーン（セッションの service 名）に紐づくので、配布後は変えられない。個人アカウントのまま行く |
+| D-48 | 配布経路 | **GitHub Releases が正。`v*` タグの push で Actions がビルドして公開し、アプリ内アップデーター（`releases/latest/download/latest.json`）と Homebrew cask（`Papillon6814/homebrew-lita`）はそれを読む。Apple Silicon のみ** | 置き場所を一つにして、更新の経路を増やさない。Intel は要望が出たら matrix に 1 行足す |
+| D-49 | 公開の運用 | **タグを push したら自動で公開する（ドラフトにしない）** | 本人の選択（2026-09-23）。誤配布の歯止めはタグを打つ行為そのもの（`npm run release -- x.y.z` → `git push --tags`）。署名鍵: アップデーターの minisign 秘密鍵はキーチェーン `lita-tauri-updater-key` と GitHub Secret、公開鍵は `tauri.conf.json`。Apple の署名・公証は Developer Program 加入後に Secrets を足すだけで有効になる（workflow は無ければ ad-hoc） |
+| D-50 | 更新の見せ方 | **起動時に静かに確認し、あればサイドバー下に「vX が利用できます」のピル。メニュー「Lita › アップデートを確認…」からはダイアログ。更新内容は GitHub の自動リリースノート** | 正常時は静か、の原則（2026-09-22 の UX 批評）。ダウンロード → 「再起動」で切り替わる |

@@ -18,6 +18,8 @@ use lita_sources::Piece;
 use lita_store::{Article, ArticlePatch, ArticleStatus, ArticleSummary, ArticleVersion, NewArticle, NewSource, NewVersion, Platform, SourceKind, Store, StoredEffort, UserSettings, VersionKind, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_opener::OpenerExt;
 
 /// What the UI needs to know about Codex before anything else can happen.
@@ -818,14 +820,134 @@ async fn import_x_archive(contents: String, handle: Option<String>, include_repl
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+// ----- updates (#25) -------------------------------------------------------
+
+/// An update the updater found, kept until the person decides to install it.
+#[derive(Default)]
+pub struct PendingUpdate(Mutex<Option<tauri_plugin_updater::Update>>);
+
+#[derive(Debug, Serialize)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub current_version: String,
+    pub notes: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "event", content = "data", rename_all = "snake_case")]
+pub enum DownloadEvent {
+    Started { content_length: Option<u64> },
+    Progress { downloaded: usize, content_length: Option<u64> },
+    Finished,
+}
+
+/// Asks the release feed whether a newer version exists. `None` means this
+/// is the latest. Errors are ordinary UiErrors (network etc.).
+#[tauri::command]
+async fn fetch_update(app: AppHandle, pending: State<'_, PendingUpdate>) -> Result<Option<UpdateInfo>, UiError> {
+    let update = app
+        .updater()
+        .map_err(|e| UiError::unknown(e.to_string()))?
+        .check()
+        .await
+        .map_err(|e| UiError::unknown(format!("checking for updates: {e}")))?;
+    let info = update.as_ref().map(|u| UpdateInfo {
+        version: u.version.clone(),
+        current_version: u.current_version.clone(),
+        notes: u.body.clone(),
+        date: u.date.map(|d| d.to_string()),
+    });
+    *pending.0.lock().map_err(|_| UiError::unknown("update state poisoned"))? = update;
+    Ok(info)
+}
+
+/// Downloads and installs the pending update, reporting progress on
+/// `on_event`. The app must be restarted afterwards (`restart_app`).
+#[tauri::command]
+async fn install_update(pending: State<'_, PendingUpdate>, on_event: tauri::ipc::Channel<DownloadEvent>) -> Result<(), UiError> {
+    let update = pending
+        .0
+        .lock()
+        .map_err(|_| UiError::unknown("update state poisoned"))?
+        .take()
+        .ok_or_else(|| UiError::invalid("no update is pending; check first"))?;
+    let mut downloaded = 0usize;
+    let mut started = false;
+    update
+        .download_and_install(
+            |chunk, total| {
+                if !started {
+                    started = true;
+                    let _ = on_event.send(DownloadEvent::Started { content_length: total });
+                }
+                downloaded += chunk;
+                let _ = on_event.send(DownloadEvent::Progress { downloaded, content_length: total });
+            },
+            || {
+                let _ = on_event.send(DownloadEvent::Finished);
+            },
+        )
+        .await
+        .map_err(|e| UiError::unknown(format!("installing the update: {e}")))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GUI apps do not inherit the shell's PATH; without this `codex` (npm,
+    // Homebrew) is invisible on a distributed build.
+    let _ = fix_path_env::fix();
     let state = AppState::new().expect("Supabase configuration is valid");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_process::init())
         .manage(state)
+        .manage(PendingUpdate::default())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
+            // The menu bar. On macOS the first submenu is the app menu; the
+            // Edit items are the predefined ones so text fields keep their
+            // shortcuts. "Check for updates" is the one custom item (#25).
+            let check = MenuItemBuilder::with_id("check_update", "アップデートを確認…").build(app)?;
+            let app_menu = SubmenuBuilder::new(app, "Lita")
+                .item(&PredefinedMenuItem::about(app, None, None)?)
+                .separator()
+                .item(&check)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+            let edit = SubmenuBuilder::new(app, "編集")
+                .undo().redo().separator().cut().copy().paste().select_all()
+                .build()?;
+            let window = SubmenuBuilder::new(app, "ウインドウ").minimize().maximize().separator().close_window().build()?;
+            let menu = MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|handle, event| {
+                if event.id().0 == "check_update" {
+                    let _ = handle.emit("check-update", ());
+                }
+            });
+
             // Off the main thread: the refresh is a network round trip.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn_blocking(move || handle.state::<AppState>().restore());
@@ -864,7 +986,11 @@ pub fn run() {
             set_default_voice,
             import_note,
             import_medium,
-            import_x_archive
+            import_x_archive,
+            fetch_update,
+            install_update,
+            restart_app,
+            app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

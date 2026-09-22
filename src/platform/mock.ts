@@ -5,7 +5,8 @@
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
-// profile without one_line), voices (two voices), articles-first-run, voice-trial,
+// profile without one_line), voices (two voices), articles-first-run,
+// update-available, update-downloading, update-latest, voice-trial,
 // voice-trial-generating, voice-trial-compare, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
@@ -132,6 +133,20 @@ export const mockHost: T.Host = {
     versions.unshift(v);
     return { article: { ...a }, version: v, voice_notes: "常体で、問いで締める癖と「エクイティ」「ファイナンス」を使った。" };
   },
+  appVersion: async () => "0.2.0",
+  fetchUpdate: async () => {
+    await wait(300);
+    if (scene === "update-latest") return null;
+    return { version: "0.3.0", current_version: "0.2.0", notes: "## Lita v0.3.0\n\n- 版履歴に差分表示\n- note の下書き保存", date: "2026-09-30T00:00:00Z" };
+  },
+  installUpdate: async (onEvent) => {
+    onEvent({ event: "started", data: { content_length: 12_000_000 } });
+    for (let i = 1; i <= (scene === "update-downloading" ? 4 : 10); i++) { await wait(150); onEvent({ event: "progress", data: { downloaded: i * 1_200_000, content_length: 12_000_000 } }); }
+    if (scene === "update-downloading") return never();
+    onEvent({ event: "finished", data: null });
+  },
+  restartApp: async () => {},
+  onCheckUpdate: async () => () => {},
   getSettings: async () => ({ default_voice_id: defaultVoice }),
   setDefaultVoice: async (id) => { defaultVoice = id; },
   trialWrite: async (_v, _b, _p, _e) => { if (scene === "voice-trial-generating") return never(); await wait(400); trialCount += 1; return { title: "", text: trialCount % 2 ? draftBody : "資本政策で最初に聞くのは何を諦められるかだ。エクイティは時間と自由を先に売る契約ではないか。", voice_notes: "常体で、問いで締めた。", elapsed_ms: 6600 }; },
