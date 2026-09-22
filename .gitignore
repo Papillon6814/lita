@@ -28,3 +28,22 @@ auth.json
 
 # Tauri
 src-tauri/gen/
+
+# Frontend (from create-tauri-app)
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Cargo build output (workspace root and any nested crate)
+target/

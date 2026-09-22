@@ -58,6 +58,20 @@ with the prompt on stdin. Notes:
 
 Reference: https://developers.openai.com/codex/cli/reference
 
+## Layout
+
+```
+crates/lita-codex/   drives the Codex CLI; owns VoiceProfile (src/voice.rs)
+src-tauri/           Tauri shell — #[tauri::command]s only, logic lives in crates/
+src/                 React + TypeScript frontend (Vite)
+src/platform/        the ONLY place that imports @tauri-apps/*
+src/i18n/            English default; every locale must cover every key
+docs/pm/             decisions, backlog, state, handoff
+```
+
+Commands: `npm run tauri dev`, `npm run tauri build`, `npm run build`
+(type-check + bundle the frontend), `cargo test`.
+
 ## Working agreement
 
 - Code changes happen on a feature branch in a git worktree, never on `main`.
