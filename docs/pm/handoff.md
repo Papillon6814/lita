@@ -17,7 +17,9 @@
 9. **Tauri アプリの骨格を立てた**（Issue #9）— React + TS + Vite、`codex_status` コマンドで Codex の状態を表示。en/ja の i18n と `src/platform` 境界を敷設（D-31〜D-35）
 10. **バックログ全 15 件を GitHub Issue 化した**（#11〜#25）
 11. **保存方式をサーバへ転換した**。SQLite 実装（#11）の途中で「別 PC でも引き継ぎたい」要件が出て、オンライン専用・Google OAuth・v0.1 に含める、と決定（D-36〜D-39）。基盤候補 18 件を調査して Notion 子ページにまとめた。同日 **Supabase に決定（D-40）**
-12. **Supabase にスキーマを適用し、Google ログインを実機で通し、API クライアント `lita-store` を作り、アプリ内サインインまで通した**（PR #27〜#31）（PR #27、#26）。Google はデスクトップ用クライアントでもシークレットを要求すると確定し、Supabase 経由の OAuth に切り替えた（D-41）。`crates/lita-auth` がログインとリフレッシュを担う
+12. **Supabase にスキーマを適用し、Google ログインを実機で通し、API クライアント `lita-store` を作り、アプリ内サインインまで通した**（PR #27〜#31）
+13. **貼り付け UI と note / Medium / X の取り込みを入れた**（PR #34、#35）
+14. **UI/UX を作り直した**（PR #36）。4つのレビュースキルで批評 → Notion の「UI/UX レビュー」ページ → HTML モックで方向を4案 → 絞り込み → ハイエンド UX 批評を全反映、の順で見本を確定し、その通りに実装。見本は Claude Artifact（https://claude.ai/artifact/7m4i2ZmhNvQ1oMcZeJ1Mia）（PR #27、#26）。Google はデスクトップ用クライアントでもシークレットを要求すると確定し、Supabase 経由の OAuth に切り替えた（D-41）。`crates/lita-auth` がログインとリフレッシュを担う
 
 ## いま決まっていること
 
@@ -35,6 +37,8 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 - コード変更は必ず worktree + feature branch で行います。main 直コミットは禁止です。worktree を切ったら `npm install` を忘れずに。
 - `@tauri-apps/*` を import してよいのは `src/platform/` だけです（D-32）。
+- **見た目の正は Claude Artifact のモック**（https://claude.ai/artifact/7m4i2ZmhNvQ1oMcZeJ1Mia）と `src/App.css` のトークンです。ライトのみ、生成りの紙色、ミント1色（文字と塗りは濃い #1d7f70、淡色は背景と縁取りだけ）、角丸は操作部品 8px / 入れ物 12px、書体は Zen Kaku Gothic New（`@fontsource` で同梱）。新しい画面はこのトークンだけで組みます。
+- UI の原則（2026-09-22 の UX 批評で決定）: 正常時の状態表示は出さない（異常時だけ琥珀色のピル）。数字や内部制約を見せない（「足りているか」で言う）。エラーは平易な一文＋「詳細を表示」。Voice の一文の主語は常に「あなたの文章は」。名前は既定名で後から変える。
 - 決定を変えるときは、**Notion の決定事項表**と **`docs/pm/decisions.md`** の両方を更新します。覆った決定は消さず「（日付 改訂）」を付けて残します。
 - Codex のトークンには触りません。`codex` を起動するだけです。
 - `cargo run -p lita-codex --bin probe` / `--bin corpus` / `--bin schema` は**アカウントの Codex 利用枠を消費します**（約70秒／約60秒／約3分）。
