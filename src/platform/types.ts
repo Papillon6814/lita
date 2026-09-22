@@ -5,6 +5,7 @@ export type CodexStatus =
   | { status: "ready"; version: string }
   | { status: "not_logged_in"; version: string }
   | { status: "not_installed" }
+  | { status: "config_broken"; version: string; message: string }
   | { status: "error"; message: string };
 
 export type SessionStatus =

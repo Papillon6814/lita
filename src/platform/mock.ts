@@ -6,7 +6,7 @@
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
 // profile without one_line), articles, articles-empty, editor, editor-empty,
-// editor-generating, editor-over, editor-save-failed, editor-versions, write, write-generating,
+// editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
 
 import type * as T from "./types";
@@ -84,7 +84,7 @@ const articles: T.Article[] = scene === "articles-empty" ? [] : articleBodies.ma
   status: a.status as T.ArticleStatus, created_at: a.at, updated_at: a.at,
 }));
 // The editor scenes open a2 (a draft with a brief).
-if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === "a2"); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
+if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === (scene === "editor-note" ? "a3" : "a2")); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
 const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
   { id: "v3", article_id: "a1", kind: "edited", title: "", body: draftBody, prompt_sent: null, elapsed_ms: null, created_at: ago(3) },
   { id: "v2", article_id: "a1", kind: "shortened", title: "", body: draftBody, prompt_sent: "…", elapsed_ms: 6000, created_at: ago(25) },
@@ -140,7 +140,7 @@ export const mockHost: T.Host = {
   createVoice: () => never(),
   cancelVoiceBuild: async () => {},
   materialBudget: async () => ({ per_piece_chars: 1500, total_chars: 20000 }),
-  platforms: async () => [{ id: "x", name: "X", max_chars: 280, rules: "" }],
+  platforms: async () => [{ id: "medium", name: "Medium", max_chars: null, rules: "" }, { id: "note", name: "note", max_chars: null, rules: "" }, { id: "x", name: "X", max_chars: 280, rules: "" }],
   previewPrompt: async (_v, brief) => `You are writing as the author described below.\n\nVoice:\n${JSON.stringify(profile, null, 2)}\n\nBrief:\n${brief}\n\nPlatform: X (280 chars)`,
   generateDraft: async (_v, _b, _p, _e, previous) => {
     if (scene === "write-generating") return never();

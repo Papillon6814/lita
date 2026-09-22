@@ -44,18 +44,29 @@ pub fn post_schema() -> Value {
 /// The exact prompt sent to Codex. Shown to the person before sending (B-08),
 /// so it must contain nothing the person would not want to see.
 pub fn generation_prompt(profile: &VoiceProfile, brief: &str, platform: &PlatformRules) -> String {
-    let limit = platform
-        .max_chars
-        .map(|n| format!("Stay under {n} characters.\n"))
-        .unwrap_or_default();
+    // A destination with a hard limit gets a post; one without gets an
+    // article with its own title, paragraphs and a length the brief implies.
+    let (what, shape) = match platform.max_chars {
+        Some(n) => ("a single post".to_string(), format!("Stay under {n} characters. `title` is an empty string.\n")),
+        None => (
+            "a full article".to_string(),
+            "Put the title in `title` (one line, no quotes) and only the body in `text`. Paragraphs are \
+             separated by one blank line. Use a heading line starting with \"## \" only where the argument \
+             turns; most articles need two or three, short ones none. Length follows the brief; if it says \
+             nothing, aim for what a reader finishes in four to six minutes (about 1,500 to 2,500 characters \
+             in Japanese, 700 to 1,200 words in English). Open with the point, not a preamble; end the way the \
+             profile says the person ends.\n"
+                .to_string(),
+        ),
+    };
     format!(
-        "Write a single post for {name} in the voice described by this profile.\n\n\
+        "Write {what} for {name} in the voice described by this profile.\n\n\
          VOICE PROFILE:\n{profile}\n\n\
          BRIEF:\n{brief}\n\n\
-         RULES FOR {name}:\n{rules}\n{limit}\
+         RULES FOR {name}:\n{rules}\n{shape}\
          Write in the profile's language ({language}). Match the profile's first person, \
          sentence endings, preferred words and emoji habit exactly; the profile is a contract, \
-         not a suggestion. Do not explain the post, do not add hashtags or links unless the brief \
+         not a suggestion. Do not explain the text, do not add hashtags or links unless the brief \
          asks for them. `char_count` is the character count of `text`.",
         name = platform.name,
         profile = serde_json::to_string_pretty(&profile.generation_view()).unwrap_or_default(),
@@ -136,5 +147,21 @@ mod tests {
         assert!(p.contains("twelve chars"));
         assert!(p.contains("2 characters over the limit of 10"));
         assert!(p.contains("BRIEF:\nbrief"));
+    }
+
+    #[test]
+    fn long_form_prompt_asks_for_a_title_and_paragraphs() {
+        let profile = VoiceProfile {
+            language: "ja".into(), first_person: "私".into(), formality: "常体".into(), tone: vec![],
+            sentence_endings: vec![], avg_sentence_length_chars: 30, preferred_words: vec![], avoided_words: vec![],
+            opens_with: String::new(), closes_with: String::new(), uses_emoji: false, representative_excerpts: vec![],
+            one_line: String::new(),
+        };
+        let note = PlatformRules { name: "note".into(), max_chars: None, rules: "Plain text.".into() };
+        let p = generation_prompt(&profile, "b", &note);
+        assert!(p.contains("a full article") && p.contains("`title`") && p.contains("## "));
+        let x = PlatformRules { name: "X".into(), max_chars: Some(280), rules: "".into() };
+        let q = generation_prompt(&profile, "b", &x);
+        assert!(q.contains("a single post") && q.contains("Stay under 280"));
     }
 }

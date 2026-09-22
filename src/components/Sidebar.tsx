@@ -35,6 +35,7 @@ export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, 
     codexChecking ? null
     : codex?.status === "not_logged_in" ? t("codex.pill.notLoggedIn")
     : codex?.status === "not_installed" ? t("codex.pill.notInstalled")
+    : codex?.status === "config_broken" ? t("codex.pill.configBroken")
     : codex?.status === "error" ? t("codex.pill.error")
     : null;
   const inArticles = route.kind === "articles" || route.kind === "article";

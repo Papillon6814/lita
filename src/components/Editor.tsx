@@ -102,7 +102,15 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
   const platform = platforms.find((p) => p.id === article?.platform_id) ?? null;
   const count = [...text.body].length;
   const over = platform?.max_chars != null && count > platform.max_chars ? count - platform.max_chars : 0;
-  const readMinutes = useMemo(() => Math.max(1, Math.round(count / 500)), [count]);
+  // Reading time: Japanese at about 500 characters a minute, English at
+  // about 200 words; which one by the share of ASCII letters.
+  const readMinutes = useMemo(() => {
+    const ascii = (text.body.match(/[A-Za-z]/g) ?? []).length;
+    const latin = count > 0 && ascii / count > 0.5;
+    const units = latin ? text.body.trim().split(/\s+/).filter(Boolean).length / 200 : count / 500;
+    return Math.max(1, Math.round(units));
+  }, [count, text.body]);
+  const longForm = platform?.max_chars == null;
   const canWrite = !!article?.voice_id && text.brief.trim().length > 0 && gen.kind !== "generating";
 
   useEffect(() => {
@@ -223,7 +231,7 @@ export function Editor({ id, onBack, onDeleted }: { id: string; onBack: () => vo
                 <button key={e} role="tab" aria-selected={effort === e} className={effort === e ? "on" : ""} onClick={() => setEffort(e)}>{t(e === "fast" ? "effort.fast" : "effort.quality")}</button>
               ))}
             </div>
-            <span className="hint inline">{t(effort === "fast" ? "effort.fastHint" : "effort.qualityHint")}</span>
+            <span className="hint inline">{t(longForm ? (effort === "fast" ? "effort.fastHintLong" : "effort.qualityHintLong") : (effort === "fast" ? "effort.fastHint" : "effort.qualityHint"))}</span>
           </div>
 
           {gen.kind === "generating" ? (
