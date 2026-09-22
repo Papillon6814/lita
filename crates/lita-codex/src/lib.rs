@@ -6,6 +6,7 @@
 //! rule: if a change here would require touching `~/.codex/auth.json`, it is
 //! the wrong change.
 
+pub mod post;
 pub mod sample;
 pub mod voice;
 

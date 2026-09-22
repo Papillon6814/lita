@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 export type CodexStatus =
   | { status: "ready"; version: string }
@@ -69,6 +70,15 @@ export type Piece = { title: string | null; url: string | null; published_at: st
 export type UiError = { code: string; detail: string };
 
 export type MaterialBudget = { per_piece_chars: number; total_chars: number };
+
+export type Platform = { id: string; name: string; max_chars: number | null; rules: string };
+export type Effort = "fast" | "quality";
+export type DraftStatus = "pending" | "approved" | "discarded";
+export type Draft = {
+  id: string; brief_id: string; body: string; prompt_sent: string; model: string | null;
+  elapsed_ms: number; status: DraftStatus; created_at: string; decided_at: string | null;
+};
+export type Generated = { draft: Draft; voice_notes: string };
 export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
 
 export const host = {
@@ -85,6 +95,14 @@ export const host = {
   createVoice: (name: string, sources: SourceInput[]) => invoke<Voice>("create_voice", { name, sources }),
   cancelVoiceBuild: () => invoke<void>("cancel_voice_build"),
   materialBudget: () => invoke<MaterialBudget>("material_budget"),
+  platforms: () => invoke<Platform[]>("platforms"),
+  previewPrompt: (voiceId: string, brief: string, platformId: string) =>
+    invoke<string>("preview_prompt", { voiceId, brief, platformId }),
+  generateDraft: (voiceId: string, brief: string, platformId: string, effort: Effort) =>
+    invoke<Generated>("generate_draft", { voiceId, brief, platformId, effort }),
+  cancelGenerate: () => invoke<void>("cancel_generate"),
+  setDraftStatus: (id: string, status: DraftStatus) => invoke<void>("set_draft_status", { id, status }),
+  copyText: (text: string) => writeText(text),
   importNote: (account: string) => invoke<Imported>("import_note", { account }),
   importMedium: (handle: string) => invoke<Imported>("import_medium", { handle }),
   importXArchive: (contents: string, handle: string | null, includeReplies: boolean) =>
