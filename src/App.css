@@ -25,4 +25,7 @@ pre { background: var(--bg); padding: 10px 12px; border-radius: 8px; overflow-x:
 .actions { display: flex; gap: 8px; }
 button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid transparent; background: var(--accent); color: #fff; cursor: pointer; }
 button:hover { filter: brightness(1.08); }
+button.secondary { background: transparent; color: var(--fg); border-color: var(--muted); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row p { margin: 0; }
 .privacy { color: var(--muted); font-size: 0.85rem; }

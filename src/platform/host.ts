@@ -11,7 +11,14 @@ export type CodexStatus =
   | { status: "not_installed" }
   | { status: "error"; message: string };
 
+export type SessionStatus =
+  | { status: "signed_out" }
+  | { status: "signed_in"; email: string | null };
+
 export const host = {
   codexStatus: () => invoke<CodexStatus>("codex_status"),
+  sessionStatus: () => invoke<SessionStatus>("session_status"),
+  signIn: () => invoke<SessionStatus>("sign_in"),
+  signOut: () => invoke<SessionStatus>("sign_out"),
   openExternal: (url: string) => openUrl(url),
 };

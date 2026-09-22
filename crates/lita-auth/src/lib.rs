@@ -7,7 +7,9 @@
 //! which is what Google recommends for native apps and needs no custom URI
 //! scheme. Only the Supabase session is ever stored, in the OS keychain.
 
+pub mod keychain;
 mod loopback;
 pub mod supabase;
 
+pub use keychain::SessionStore;
 pub use supabase::{Session, SupabaseAuth, User};
