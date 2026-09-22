@@ -47,3 +47,5 @@ npm-debug.log*
 
 # Cargo build output (workspace root and any nested crate)
 target/
+src-tauri/icons/android/
+src-tauri/icons/ios/
