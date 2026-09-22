@@ -4,7 +4,7 @@ import { asUiError } from "./errors";
 import { t } from "./i18n";
 import { ErrorNote } from "./components/ErrorNote";
 import { TopBar } from "./components/TopBar";
-import { VoiceSection } from "./components/VoiceSection";
+import { Shell } from "./components/Shell";
 import "./App.css";
 
 const CODEX_INSTALL_URL = "https://developers.openai.com/codex/cli";
@@ -62,6 +62,18 @@ export default function App() {
   const codex = view.kind === "done" ? view.status : null;
   const codexReady = codex?.status === "ready";
 
+  if (signedIn && codexReady) {
+    return (
+      <Shell
+        session={session}
+        codex={codex}
+        codexChecking={view.kind === "checking"}
+        onSignOut={() => void signOut()}
+        onShowCodexSteps={() => void check()}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <TopBar
@@ -85,8 +97,6 @@ export default function App() {
             {view.kind === "checking" ? <p className="muted">{t("codex.checking")}</p> : <CodexSteps status={view.status} onRetry={() => void check()} />}
           </section>
         )}
-
-        {signedIn && codexReady && <VoiceSection />}
 
         <footer className="privacy">{t("privacy.note")}</footer>
       </main>

@@ -5,7 +5,8 @@
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
-// profile without one_line), write, write-generating,
+// profile without one_line), articles, articles-empty, editor, editor-empty,
+// editor-generating, editor-over, editor-save-failed, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
 
 import type * as T from "./types";
@@ -68,7 +69,60 @@ const session: T.SessionStatus =
 
 const hasVoice = !["intake", "intake-loaded", "building"].includes(scene);
 
+// ----- articles (in-memory) -------------------------------------------------
+
+const now = new Date();
+const ago = (mins: number) => new Date(now.getTime() - mins * 60000).toISOString();
+const articleBodies = [
+  { title: "資本政策は諦める順番を決める作業", body: draftBody, brief: "資本政策の相談を受けたときに最初に聞くことについて。創業者に向けて、エクイティは時間を売る契約だと伝えたい。", platform: "x", status: "approved", at: ago(35) },
+  { title: "", body: scene === "editor-over" ? longBody : (scene === "editor-empty" ? "" : draftBody), brief: scene === "editor-empty" ? "" : "利益率の議論が空回りする理由について、経営者向けに。分母を揃える話を一つだけ。", platform: "x", status: "draft", at: ago(3) },
+  { title: "投資家との最初の会話で聞くこと", body: "投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。\n\nリターンの話は後からいくらでもできる。恐れが分かれば、こちらの提案の形はほとんど決まる。\n\n## 恐れは三つに分かれる\n\n一つ目は時間、二つ目は評判、三つ目は次の資金調達だ。", brief: "投資家との初回面談で何を聞くべきか。note 向けに 1,500 字ほど。", platform: "note", status: "draft", at: ago(60 * 26) },
+  { title: "ファイナンスは時間を買う話", body: draftBody, brief: "ファイナンスの選択肢の話。", platform: "x", status: "archived", at: ago(60 * 24 * 4) },
+];
+const articles: T.Article[] = scene === "articles-empty" ? [] : articleBodies.map((a, i) => ({
+  id: `a${i + 1}`, voice_id: "v1", platform_id: a.platform, title: a.title, body: a.body, brief: a.brief,
+  status: a.status as T.ArticleStatus, created_at: a.at, updated_at: a.at,
+}));
+// The editor scenes open a2 (a draft with a brief).
+if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === "a2"); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
+const versions: T.ArticleVersion[] = [];
+let nextId = 100;
+const excerpt = (b: string) => (b.trim().split("\n").find((l) => l.trim()) ?? "").slice(0, 80);
+
 export const mockHost: T.Host = {
+  listArticles: async (status) => articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })),
+  getArticle: async (id) => articles.find((a) => a.id === id) ?? null,
+  createArticle: async (platformId, voiceId) => {
+    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    articles.unshift(a); return a;
+  },
+  updateArticle: async (id, patch) => {
+    if (scene === "editor-save-failed") throw { code: "network", detail: "fetch failed: ENOTFOUND csfvqpqzvcorqlsmfjwb.supabase.co" };
+    const a = articles.find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: new Date().toISOString() });
+  },
+  deleteArticle: async (id) => { const i = articles.findIndex((a) => a.id === id); if (i >= 0) articles.splice(i, 1); return i >= 0; },
+  listVersions: async (articleId) => versions.filter((v) => v.article_id === articleId),
+  snapshotArticle: async (articleId, manual) => {
+    const a = articles.find((x) => x.id === articleId); if (!a) return null;
+    const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: manual ? "manual" : "edited", title: a.title, body: a.body, prompt_sent: null, elapsed_ms: null, created_at: new Date().toISOString() };
+    versions.unshift(v); return v;
+  },
+  restoreVersion: async (versionId) => {
+    const v = versions.find((x) => x.id === versionId)!; const a = articles.find((x) => x.id === v.article_id)!;
+    Object.assign(a, { title: v.title, body: v.body }); return a;
+  },
+  generateIntoArticle: async (articleId, _effort, previous) => {
+    if (scene === "editor-generating") return never();
+    await wait(400);
+    const a = articles.find((x) => x.id === articleId)!;
+    a.body = previous ? draftBody : (a.platform_id === "x" ? draftBody : longBody);
+    if (a.platform_id !== "x" && !a.title) a.title = "資本政策は諦める順番を決める作業";
+    const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: previous ? "shortened" : "generated", title: a.title, body: a.body, prompt_sent: "…", elapsed_ms: 6600, created_at: new Date().toISOString() };
+    versions.unshift(v);
+    return { article: { ...a }, version: v, voice_notes: "常体で、問いで締める癖と「エクイティ」「ファイナンス」を使った。" };
+  },
+  getSettings: async () => ({ default_voice_id: "v1" }),
+  setDefaultVoice: async () => {},
   codexStatus: async () => codex,
   sessionStatus: async () => session,
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
