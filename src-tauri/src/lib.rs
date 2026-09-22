@@ -15,7 +15,7 @@ use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema}
 use lita_codex::voice::{Budget, VoiceProfile, select_material};
 use lita_codex::{CodexCli, Effort, Preflight, Request};
 use lita_sources::Piece;
-use lita_store::{Draft, DraftStatus, NewBrief, NewDraft, NewSource, Platform, SourceKind, Store, StoredEffort, Voice, VoiceSummary};
+use lita_store::{Article, ArticlePatch, ArticleStatus, ArticleSummary, ArticleVersion, NewArticle, NewSource, NewVersion, Platform, SourceKind, Store, StoredEffort, UserSettings, VersionKind, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -396,10 +396,26 @@ async fn preview_prompt(app: AppHandle, voice_id: String, brief: String, platfor
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// What the write screen gets back from a generation. `draft` mirrors the
+/// v0.1 shape (id = the article's id) so the current UI keeps working until
+/// the editor replaces it (v0.2 phase 2).
 #[derive(Debug, Serialize)]
 pub struct Generated {
-    pub draft: Draft,
+    pub draft: DraftView,
     pub voice_notes: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DraftView {
+    pub id: String,
+    pub brief_id: String,
+    pub body: String,
+    pub prompt_sent: String,
+    pub model: Option<String>,
+    pub elapsed_ms: i64,
+    pub status: &'static str,
+    pub created_at: String,
+    pub decided_at: Option<String>,
 }
 
 /// One place decides between a fresh draft and a shorter rewrite (#40), so
@@ -411,11 +427,72 @@ fn prompt_for(profile: &lita_codex::voice::VoiceProfile, brief: &str, rules: &li
     }
 }
 
-/// Brief → Codex → Draft. The brief is stored before the run so a failed
-/// run still leaves what was asked. Measured 6.6 s (Fast) / 10.8 s
-/// (Quality) for a short X post (D-24).
+/// Runs Codex for one article and records the result as a version and as
+/// the article's current text. Shared by the v0.1 write screen and the
+/// editor. Measured 6.6 s (Fast) / 10.8 s (Quality) for a short X post (D-24).
+fn write_article(
+    app: &AppHandle,
+    token: String,
+    cancel: Arc<AtomicBool>,
+    working_dir: std::path::PathBuf,
+    article_id: &str,
+    effort: StoredEffort,
+    previous: Option<String>,
+) -> Result<(Article, ArticleVersion, String), UiError> {
+    std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+    let state = app.state::<AppState>();
+    let store = state.store.as_user(token);
+    let article = store.article(article_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such article"))?;
+    if article.brief.trim().is_empty() {
+        return Err(UiError::invalid("write a brief first"));
+    }
+    let voice_id = article.voice_id.clone().ok_or_else(|| UiError::invalid("pick a voice first"))?;
+    let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
+    let platform = store
+        .platforms()
+        .map_err(fail)?
+        .into_iter()
+        .find(|p| p.id == article.platform_id)
+        .ok_or_else(|| UiError::invalid("no such platform"))?;
+
+    let prompt = prompt_for(&voice.profile, &article.brief, &rules_of(&platform), previous.as_deref());
+    let req = Request { prompt: prompt.clone(), schema: post_schema(), model: None, effort: effort.into(), working_dir };
+    let run = CodexCli::on_path()
+        .run_typed_cancellable::<PostDraft>(&req, |_| {}, cancel)
+        .map_err(fail)?;
+
+    let body = run.value.text.trim().to_string();
+    let title = if run.value.title.trim().is_empty() { article.title.clone() } else { run.value.title.trim().to_string() };
+    let version = store
+        .create_version(&NewVersion {
+            article_id: article.id.clone(),
+            kind: if previous.is_some() { VersionKind::Shortened } else { VersionKind::Generated },
+            title: title.clone(),
+            body: body.clone(),
+            prompt_sent: Some(prompt),
+            elapsed_ms: Some(run.elapsed.as_millis() as i64),
+        })
+        .map_err(fail)?;
+    store
+        .update_article(&article.id, &ArticlePatch { body: Some(body), title: Some(title), ..Default::default() })
+        .map_err(fail)?;
+    let article = store.article(&article.id).map_err(fail)?.ok_or_else(|| UiError::invalid("article vanished"))?;
+    Ok((article, version, run.value.voice_notes))
+}
+
+/// v0.1 write screen: brief → a new article → Codex → its first version.
+/// `previous` (the over-long text) asks for a shorter rewrite of the same
+/// article instead of a new one; the article is found by `article_id`.
 #[tauri::command]
-async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platform_id: String, effort: StoredEffort, previous: Option<String>) -> Result<Generated, UiError> {
+async fn generate_draft(
+    app: AppHandle,
+    voice_id: String,
+    brief: String,
+    platform_id: String,
+    effort: StoredEffort,
+    previous: Option<String>,
+    article_id: Option<String>,
+) -> Result<Generated, UiError> {
     let brief = brief.trim().to_string();
     if brief.is_empty() {
         return Err(UiError::invalid("write a brief first"));
@@ -428,40 +505,62 @@ async fn generate_draft(app: AppHandle, voice_id: String, brief: String, platfor
     let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
 
     tauri::async_runtime::spawn_blocking(move || -> Result<Generated, UiError> {
-        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
-        let state = app.state::<AppState>();
-        let store = state.store.as_user(token);
-        let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
-        let platform = store
-            .platforms()
-            .map_err(fail)?
-            .into_iter()
-            .find(|p| p.id == platform_id)
-            .ok_or_else(|| UiError::invalid("no such platform"))?;
-
-        let stored_brief = store
-            .create_brief(&NewBrief { voice_id: voice.id.clone(), platform_id: platform.id.clone(), body: brief.clone(), effort })
-            .map_err(fail)?;
-
-        let prompt = prompt_for(&voice.profile, &brief, &rules_of(&platform), previous.as_deref());
-        let req = Request { prompt: prompt.clone(), schema: post_schema(), model: None, effort: effort.into(), working_dir };
-        let run = CodexCli::on_path()
-            .run_typed_cancellable::<PostDraft>(&req, |_| {}, cancel)
-            .map_err(fail)?;
-
-        let draft = store
-            .create_draft(&NewDraft {
-                brief_id: stored_brief.id,
-                body: run.value.text.trim().to_string(),
-                prompt_sent: prompt,
+        let id = {
+            let state = app.state::<AppState>();
+            let store = state.store.as_user(token.clone());
+            match article_id {
+                Some(id) => {
+                    store.update_article(&id, &ArticlePatch { brief: Some(brief.clone()), ..Default::default() }).map_err(fail)?;
+                    id
+                }
+                None => store
+                    .create_article(&NewArticle { voice_id: Some(voice_id.clone()), platform_id: platform_id.clone(), brief: brief.clone(), ..Default::default() })
+                    .map_err(fail)?
+                    .id,
+            }
+        };
+        let (article, version, voice_notes) = write_article(&app, token, cancel, working_dir, &id, effort, previous)?;
+        Ok(Generated {
+            draft: DraftView {
+                id: article.id,
+                brief_id: id,
+                body: article.body,
+                prompt_sent: version.prompt_sent.unwrap_or_default(),
                 model: None,
-                elapsed_ms: run.elapsed.as_millis() as i64,
-            })
-            .map_err(fail)?;
-        Ok(Generated { draft, voice_notes: run.value.voice_notes })
+                elapsed_ms: version.elapsed_ms.unwrap_or(0),
+                status: "pending",
+                created_at: version.created_at,
+                decided_at: None,
+            },
+            voice_notes,
+        })
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Editor: (re)write an article's text from its brief, or shorten `previous`.
+#[tauri::command]
+async fn generate_into_article(app: AppHandle, article_id: String, effort: StoredEffort, previous: Option<String>) -> Result<ArticleWritten, UiError> {
+    let (token, cancel) = {
+        let state = app.state::<AppState>();
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        (state.access_token()?, Arc::clone(&state.generate_cancel))
+    };
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (article, version, voice_notes) = write_article(&app, token, cancel, working_dir, &article_id, effort, previous)?;
+        Ok(ArticleWritten { article, version, voice_notes })
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArticleWritten {
+    pub article: Article,
+    pub version: ArticleVersion,
+    pub voice_notes: String,
 }
 
 #[tauri::command]
@@ -469,14 +568,157 @@ fn cancel_generate(state: State<'_, AppState>) {
     state.generate_cancel.store(true, Ordering::Relaxed);
 }
 
+/// v0.1 compat: the write screen's decision, applied to the article.
 #[tauri::command]
-async fn set_draft_status(app: AppHandle, id: String, status: DraftStatus) -> Result<(), UiError> {
+async fn set_draft_status(app: AppHandle, id: String, status: String) -> Result<(), UiError> {
+    let status = match status.as_str() {
+        "approved" => ArticleStatus::Approved,
+        "discarded" => ArticleStatus::Archived,
+        _ => ArticleStatus::Draft,
+    };
+    update_article(app, id, ArticlePatch { status: Some(status), ..Default::default() }).await
+}
+
+// ----- articles -------------------------------------------------------------
+
+#[tauri::command]
+async fn list_articles(app: AppHandle, status: Option<ArticleStatus>) -> Result<Vec<ArticleSummary>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).articles(status).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn get_article(app: AppHandle, id: String) -> Result<Option<Article>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).article(&id).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// A new, empty article. The voice defaults to the person's default voice,
+/// then to the newest voice, so "新しく書く" never asks first.
+#[tauri::command]
+async fn create_article(app: AppHandle, platform_id: Option<String>, voice_id: Option<String>) -> Result<Article, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<AppState>().store.as_user(token).set_draft_status(&id, status).map_err(fail)
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let voice_id = match voice_id {
+            Some(v) => Some(v),
+            None => match store.settings().map_err(fail)?.default_voice_id {
+                Some(v) => Some(v),
+                None => store.voices().map_err(fail)?.into_iter().next().map(|v| v.id),
+            },
+        };
+        store
+            .create_article(&NewArticle { voice_id, platform_id: platform_id.unwrap_or_else(|| "x".into()), ..Default::default() })
+            .map_err(fail)
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn update_article(app: AppHandle, id: String, patch: ArticlePatch) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).update_article(&id, &patch).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn delete_article(app: AppHandle, id: String) -> Result<bool, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).delete_article(&id).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn list_versions(app: AppHandle, article_id: String) -> Result<Vec<ArticleVersion>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).versions(&article_id).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Snapshots the article's current text (`edited`, or `manual` when the
+/// person asked for it). Skipped when the newest version already has this
+/// text, so periodic snapshots never pile up identical rows.
+#[tauri::command]
+async fn snapshot_article(app: AppHandle, article_id: String, manual: bool) -> Result<Option<ArticleVersion>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let article = store.article(&article_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such article"))?;
+        let newest = store.versions(&article_id).map_err(fail)?.into_iter().next();
+        if !manual && newest.as_ref().is_some_and(|v| v.body == article.body && v.title == article.title) {
+            return Ok(None);
+        }
+        store
+            .create_version(&NewVersion {
+                article_id,
+                kind: if manual { VersionKind::Manual } else { VersionKind::Edited },
+                title: article.title,
+                body: article.body,
+                prompt_sent: None,
+                elapsed_ms: None,
+            })
+            .map(Some)
+            .map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Makes an earlier version the current text. The state being left is kept
+/// as an `edited` snapshot first, and the restore itself is recorded as a
+/// `restored` version, so nothing is lost and history stays linear.
+#[tauri::command]
+async fn restore_version(app: AppHandle, version_id: String) -> Result<Article, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let version = store.version(&version_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such version"))?;
+        let article = store.article(&version.article_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such article"))?;
+        if article.body != version.body || article.title != version.title {
+            let newest = store.versions(&article.id).map_err(fail)?.into_iter().next();
+            if !newest.as_ref().is_some_and(|v| v.body == article.body && v.title == article.title) {
+                store
+                    .create_version(&NewVersion { article_id: article.id.clone(), kind: VersionKind::Edited, title: article.title.clone(), body: article.body.clone(), prompt_sent: None, elapsed_ms: None })
+                    .map_err(fail)?;
+            }
+        }
+        store
+            .create_version(&NewVersion { article_id: article.id.clone(), kind: VersionKind::Restored, title: version.title.clone(), body: version.body.clone(), prompt_sent: None, elapsed_ms: None })
+            .map_err(fail)?;
+        store
+            .update_article(&article.id, &ArticlePatch { title: Some(version.title), body: Some(version.body), ..Default::default() })
+            .map_err(fail)?;
+        store.article(&article.id).map_err(fail)?.ok_or_else(|| UiError::invalid("article vanished"))
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn get_settings(app: AppHandle) -> Result<UserSettings, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).settings().map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn set_default_voice(app: AppHandle, voice_id: Option<String>) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).set_default_voice(voice_id.as_deref()).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
 // ----- sources (D-43) ---------------------------------------------------------
@@ -564,6 +806,17 @@ pub fn run() {
             generate_draft,
             cancel_generate,
             set_draft_status,
+            generate_into_article,
+            list_articles,
+            get_article,
+            create_article,
+            update_article,
+            delete_article,
+            list_versions,
+            snapshot_article,
+            restore_version,
+            get_settings,
+            set_default_voice,
             import_note,
             import_medium,
             import_x_archive
