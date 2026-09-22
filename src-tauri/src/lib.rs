@@ -214,6 +214,35 @@ async fn delete_voice(app: AppHandle, id: String) -> Result<bool, UiError> {
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+#[tauri::command]
+async fn rename_voice(app: AppHandle, id: String, name: String) -> Result<(), UiError> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(UiError::invalid("give the voice a name"));
+    }
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().store.as_user(token).rename_voice(&id, &name).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// The person corrected part of the profile. Stored as given; the UI owns
+/// the editing rules.
+#[tauri::command]
+async fn update_voice_profile(app: AppHandle, id: String, profile: VoiceProfile) -> Result<Option<Voice>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let me = app.state::<AppState>();
+        let store = me.store.as_user(token);
+        store.update_profile(&id, &profile).map_err(fail)?;
+        store.voice(&id).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
 /// One piece of writing handed in by the UI.
 #[derive(Debug, Deserialize)]
 pub struct SourceInput {
@@ -392,6 +421,8 @@ pub fn run() {
             list_voices,
             get_voice,
             delete_voice,
+            rename_voice,
+            update_voice_profile,
             create_voice,
             cancel_voice_build,
             material_budget,

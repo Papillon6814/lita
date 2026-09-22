@@ -19,9 +19,9 @@ export function BuildingVoice({ onCancel }: { onCancel: () => void }) {
   const current = STAGES.indexOf(reached);
   return (
     <div className="building" aria-live="polite">
-      <div className="row">
+      <div className="row between">
         <h2>{t("voice.building.title")}</h2>
-        <button className="secondary" onClick={onCancel}>{t("voice.building.cancel")}</button>
+        <button className="btn" onClick={onCancel}>{t("voice.building.cancel")}</button>
       </div>
       <ol className="stages">
         {STAGES.map((s, i) => (
