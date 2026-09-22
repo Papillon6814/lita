@@ -2078,6 +2078,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lita-store"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "lita-auth",
+ "lita-codex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
