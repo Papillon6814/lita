@@ -32,7 +32,6 @@ export function VoiceList({ onOpen, onNew }: Props) {
         <h2>{t("nav.voices")}</h2>
         <button className="btn sm" onClick={onNew}>{t("voice.list.new")}</button>
       </div>
-      <p className="sub">{t("voice.list.lead")}</p>
       {error && <ErrorNote error={error} />}
       {rows === null && <p className="muted">{t("voice.loading")}</p>}
       {rows && (

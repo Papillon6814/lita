@@ -4,7 +4,9 @@
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
-// intake, intake-open (note row unfolded), intake-loaded, building, voice, voice-open, voice-sources (mixed connections), voice-template (older
+// intake, intake-open (note row unfolded), intake-loaded, building, voice,
+// voice-open (same as voice: the eight items are no longer folded),
+// voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,

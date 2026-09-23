@@ -8,7 +8,8 @@ import { connectionsOf } from "./VoiceIntake";
 
 type Props = { voice: Voice; onChange: (v: Voice) => void; onRebuild: () => void };
 
-// The learning sources of a voice (#68): each connection (note account,
+// The writing a voice was built from (#68; called 学習ソース in the code
+// only, "元にした文章" on screen): each connection (note account,
 // Medium handle, X archive, pasted / files) with what it contributed. New
 // articles can be pulled from a connection, a connection dropped, another
 // added; relearning from the whole pile is a separate, explicit step.
@@ -23,6 +24,7 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
   const connections = connectionsOf(voice.voice_sources);
   const known = useMemo(() => new Set(voice.voice_sources.map((s) => s.origin).filter((o): o is string => !!o)), [voice.voice_sources]);
   const newer = voice.voice_sources.some((s) => s.created_at > voice.updated_at);
+  const learned = new Date(voice.updated_at).toLocaleDateString();
 
   const apply = async (label: string, work: () => Promise<Voice | null>) => {
     setBusy(label); setError(null); setNote(null);
@@ -80,8 +82,12 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
 
   return (
     <section className="sources">
-      <h3>{t("voice.sources.title")}</h3>
-      <p className="hint">{t("voice.sources.lead")}</p>
+      <div className="sources-head">
+        <h3>{t("voice.sources.title")}</h3>
+        <span className="muted small">{t("voice.sources.meta", { n: String(voice.voice_sources.length), date: learned })}</span>
+        {newer && <span className="hint">{t("voice.sources.newer")}</span>}
+        <button className={newer ? "btn pri sm" : "btn sm"} disabled={busy !== null || connections.length === 0} onClick={rebuild}>{t("voice.sources.rebuild")}</button>
+      </div>
       <SourceBox known={known} connected={connections} onGathered={add} onRemove={remove} onRefresh={refresh} refreshing={busy} />
       <input ref={xInput} type="file" accept=".js,.json,text/javascript,application/json" hidden onChange={(e) => void onXFile(e.target.files)} />
       {paste !== null && (
@@ -95,10 +101,6 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
       )}
       {note && <p className="hint" role="status">{note}</p>}
       {error && <ErrorNote error={error} />}
-      <div className="relearn">
-        {newer && <span className="hint">{t("voice.sources.newer")}</span>}
-        <button className={newer ? "btn pri sm" : "btn sm"} disabled={busy !== null || connections.length === 0} onClick={rebuild}>{t("voice.sources.rebuild")}</button>
-      </div>
     </section>
   );
 }
