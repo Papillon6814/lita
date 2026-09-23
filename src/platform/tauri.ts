@@ -44,6 +44,7 @@ export const tauriHost: T.Host = {
   getPolicy: () => invoke<T.Policy>("get_policy"),
   setPolicy: (policy) => invoke<void>("set_policy", { policy }),
   draftPolicy: () => invoke<T.Policy>("draft_policy"),
+  suggestBrief: (articleId) => invoke<string>("suggest_brief", { articleId }),
   suggestTopics: (direction) => invoke<string[]>("suggest_topics", { direction }),
   enqueueArticles: (titles, voiceId, platformId, effort, direction) =>
     invoke<T.ArticleSummary[]>("enqueue_articles", { titles, voiceId, platformId, effort, direction }),

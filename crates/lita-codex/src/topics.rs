@@ -201,6 +201,48 @@ pub fn policy_prompt(samples: &[&str], existing: &[Existing], lang: Lang) -> Str
     )
 }
 
+/// What the brief suggestion returns.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestedBrief {
+    pub brief: String,
+}
+
+pub fn brief_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["brief"],
+        "properties": {
+            "brief": { "type": "string", "description": "The brief: two to four short sentences in the person's language saying what the article is about, who it is for, and the two or three points it makes from the person's own experience. Plain prose, no headings, no bullets, no title line." }
+        }
+    })
+}
+
+/// The prompt that drafts a brief for one article from its title (#97).
+/// The person edits the result before writing; nothing is saved from here.
+pub fn brief_prompt(title: &str, policy: &Policy, samples: &[&str], existing: &[Existing], lang: Lang) -> String {
+    let language = match lang {
+        Lang::Ja => "Japanese",
+        Lang::En => "English",
+    };
+    let policy_lines = policy.lines(lang);
+    let policy_block = if policy_lines.is_empty() { "(none written yet)".to_string() } else { policy_lines.join("\n") };
+    let existing_block = existing_block(existing);
+    let existing_block = if existing_block.is_empty() { "(none yet)".to_string() } else { existing_block };
+    format!(
+        "Write the brief for an article this person is about to write, titled:\n{title}\n\n\
+         A brief says what the article is about, who it is for, and the two or three points it makes. \
+         Two to four short sentences in {language}, in the person's own words as if they wrote the note to \
+         themselves. Draw the points from what their writing shows they know and think; do not invent \
+         facts, figures or events, and do not add research. Do not repeat an article they already wrote.\n\n\
+         EDITORIAL POLICY:\n{policy_block}\n\n\
+         WRITING SAMPLES BY THIS PERSON:\n{samples}\n\n\
+         ARTICLES ALREADY WRITTEN:\n{existing_block}",
+        title = title.trim(),
+        samples = samples_block(samples),
+    )
+}
+
 /// The brief a queued article starts with. This is how the policy, the
 /// direction, the length and the no-research rule reach generation without
 /// changing `post::generation_prompt` (D-28/D-29/D-59). The person sees and
@@ -294,6 +336,16 @@ mod tests {
         assert!(prompt.contains("exactly 10 titles"));
         let b = brief_for("題", &p, "", Lang::Ja);
         assert_eq!(b.lines().count(), 3);
+    }
+
+    #[test]
+    fn brief_prompt_carries_title_and_policy() {
+        let policy = Policy { audience: "経営者".into(), ..Default::default() };
+        let p = brief_prompt("撤退の基準は、始める前に決める", &policy, &["本文"], &[existing("前の記事")], Lang::Ja);
+        assert!(p.contains("titled:\n撤退の基準は、始める前に決める"));
+        assert!(p.contains("誰に向けて: 経営者"));
+        assert!(p.contains("- 前の記事"));
+        assert!(p.contains("Japanese"));
     }
 
     #[test]

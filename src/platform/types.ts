@@ -115,7 +115,8 @@ export type UiError = { code: string; detail: string };
 export type MaterialBudget = { per_piece_chars: number; total_chars: number };
 
 export type Platform = { id: string; name: string; max_chars: number | null; rules: string };
-export type Effort = "fast" | "quality";
+/** "best" is what every article is written with (D-63); the others remain for older callers and experiments. */
+export type Effort = "fast" | "quality" | "best";
 export type DraftStatus = "pending" | "approved" | "discarded";
 export type Draft = {
   id: string; brief_id: string; body: string; prompt_sent: string; model: string | null;
@@ -197,6 +198,8 @@ export type Host = {
   setPolicy: (policy: Policy) => Promise<void>;
   /** Codex drafts the four fields from the voices' sources and past articles. Does not save. */
   draftPolicy: () => Promise<Policy>;
+  /** A brief drafted from the article's title (needs a title). Not saved. Stopped by `cancelGenerate`. */
+  suggestBrief: (articleId: string) => Promise<string>;
   /** Ten titles, none already used. `direction` may be empty. */
   suggestTopics: (direction: string) => Promise<string[]>;
   /** One draft per title, brief filled, queued in order. Starts the queue. */

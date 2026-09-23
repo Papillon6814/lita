@@ -12,7 +12,7 @@ use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
-use lita_codex::topics::{self, Existing, Lang, Policy, Topics};
+use lita_codex::topics::{self, Existing, Lang, Policy, SuggestedBrief, Topics};
 use lita_codex::voice::{VoiceProfile, pipeline};
 use lita_codex::{CodexCli, Preflight, Request};
 use lita_sources::Piece;
@@ -99,7 +99,7 @@ impl AppState {
             build_cancel: Arc::new(AtomicBool::new(false)),
             generate_cancel: Arc::new(AtomicBool::new(false)),
             queue_running: AtomicBool::new(false),
-            queue_effort: Mutex::new(StoredEffort::Quality),
+            queue_effort: Mutex::new(StoredEffort::Best),
         })
     }
 
@@ -753,6 +753,35 @@ async fn draft_policy(app: AppHandle) -> Result<Policy, UiError> {
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// A brief for one article, drafted from its title (#97). Not saved: the
+/// person edits it in the editor and the autosave keeps it.
+#[tauri::command]
+async fn suggest_brief(app: AppHandle, article_id: String) -> Result<String, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let article = store.article(&article_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such article"))?;
+        if article.title.trim().is_empty() {
+            return Err(UiError::invalid("write a title first"));
+        }
+        let policy = store.settings().map_err(fail)?.policy;
+        let (samples, existing, lang) = topic_material(&store)?;
+        let existing: Vec<Existing> = existing.into_iter().filter(|e| e.title.trim() != article.title.trim()).collect();
+        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        let req = Request { prompt: topics::brief_prompt(&article.title, &policy, &refs, &existing, lang), schema: topics::brief_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
+        // Stopped by the same `cancel_generate` the editor already has.
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        let cancel = Arc::clone(&state.generate_cancel);
+        let run = CodexCli::on_path().run_typed_cancellable::<SuggestedBrief>(&req, |_| {}, cancel).map_err(fail)?;
+        Ok(run.value.brief.trim().to_string())
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
 /// Ten titles the person could write next, none already written.
 #[tauri::command]
 async fn suggest_topics(app: AppHandle, direction: String) -> Result<Vec<String>, UiError> {
@@ -1301,6 +1330,7 @@ pub fn run() {
             set_policy,
             draft_policy,
             suggest_topics,
+            suggest_brief,
             enqueue_articles,
             start_queue,
             dequeue_article,

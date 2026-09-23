@@ -108,6 +108,9 @@ pub enum Effort {
     /// Codex's own default.
     #[default]
     Quality,
+    /// As much reasoning as Codex allows. Articles are always written with
+    /// this (D-63, 2026-09-24): the person asked for the best, not a choice.
+    Best,
 }
 
 impl Effort {
@@ -115,6 +118,7 @@ impl Effort {
         match self {
             Effort::Fast => "low",
             Effort::Quality => "medium",
+            Effort::Best => "high",
         }
     }
 }
@@ -529,6 +533,7 @@ mod tests {
     fn effort_maps_to_codex_reasoning_levels() {
         assert_eq!(Effort::Fast.as_config_value(), "low");
         assert_eq!(Effort::Quality.as_config_value(), "medium");
+        assert_eq!(Effort::Best.as_config_value(), "high");
         assert_eq!(Effort::default(), Effort::Quality);
     }
 

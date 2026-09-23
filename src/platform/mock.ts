@@ -12,7 +12,11 @@
 // voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
-// editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
+// editor-generating, editor-over, editor-save-failed, editor-versions, editor-note,
+// editor-brief-suggesting (Lita is working out what to write),
+// editor-brief-suggested (the suggestion has just landed, with a way back),
+// editor-generating-long (writing a note article, where the wait is minutes),
+// write, write-generating,
 // write-result, write-over, write-error,
 // topics (picking titles, policy empty), topics-picked (ten titles, three
 // picked, policy filled), articles-queued (one writing, two waiting),
@@ -162,7 +166,7 @@ const now = new Date();
 const ago = (mins: number) => new Date(now.getTime() - mins * 60000).toISOString();
 const articleBodies = [
   { title: "資本政策は諦める順番を決める作業", body: draftBody, brief: "資本政策の相談を受けたときに最初に聞くことについて。創業者に向けて、エクイティは時間を売る契約だと伝えたい。", platform: "x", status: "approved", at: ago(35) },
-  { title: "", body: scene === "editor-over" ? longBody : (scene === "editor-empty" ? "" : draftBody), brief: scene === "editor-empty" ? "" : "利益率の議論が空回りする理由について、経営者向けに。分母を揃える話を一つだけ。", platform: "x", status: "draft", at: ago(3) },
+  { title: scene.startsWith("editor-brief") ? "利益率の議論が空回りする理由" : "", body: scene === "editor-over" ? longBody : (scene === "editor-empty" ? "" : draftBody), brief: scene === "editor-empty" ? "" : (scene.startsWith("editor-brief") ? "利益率の議論が空回りする理由について、経営者向けに。分母を揃える話を一つだけ。\n長さは 1,500〜3,000 字。\n外部の事実は調べず、自分の経験と意見の範囲で書く。" : "利益率の議論が空回りする理由について、経営者向けに。分母を揃える話を一つだけ。"), platform: "x", status: "draft", at: ago(3) },
   { title: "投資家との最初の会話で聞くこと", body: "投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。\n\nリターンの話は後からいくらでもできる。恐れが分かれば、こちらの提案の形はほとんど決まる。\n\n## 恐れは三つに分かれる\n\n一つ目は時間、二つ目は評判、三つ目は次の資金調達だ。", brief: "投資家との初回面談で何を聞くべきか。note 向けに 1,500 字ほど。", platform: "note", status: "draft", at: ago(60 * 26) },
   { title: "ファイナンスは時間を買う話", body: draftBody, brief: "ファイナンスの選択肢の話。", platform: "x", status: "archived", at: ago(60 * 24 * 4) },
 ];
@@ -171,7 +175,7 @@ const articles: T.Article[] = scene === "articles-empty" || scene === "articles-
   status: a.status as T.ArticleStatus, queue: null, created_at: a.at, updated_at: a.at,
 }));
 // The editor scenes open a2 (a draft with a brief).
-if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === (scene === "editor-note" ? "a3" : "a2")); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
+if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === (scene === "editor-note" || scene === "editor-generating-long" ? "a3" : "a2")); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
 
 // ----- the queue (article-queue, 2026-09-23) --------------------------------
 
@@ -287,7 +291,7 @@ export const mockHost: T.Host = {
     Object.assign(a, { title: v.title, body: v.body }); return a;
   },
   generateIntoArticle: async (articleId, _effort, previous) => {
-    if (scene === "editor-generating") return never();
+    if (scene === "editor-generating" || scene === "editor-generating-long") return never();
     await wait(400);
     const a = articles.find((x) => x.id === articleId)!;
     a.body = previous ? draftBody : (a.platform_id === "x" ? draftBody : longBody);
@@ -295,6 +299,15 @@ export const mockHost: T.Host = {
     const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: previous ? "shortened" : "generated", title: a.title, body: a.body, prompt_sent: "…", elapsed_ms: 6600, created_at: new Date().toISOString() };
     versions.unshift(v);
     return { article: { ...a }, version: v, voice_notes: "常体で、問いで締める癖と「エクイティ」「ファイナンス」を使った。" };
+  },
+  // A brief written from the title (never saved). The native side takes ten
+  // to twenty seconds; here one second is enough to see the waiting face.
+  suggestBrief: async (articleId) => {
+    if (scene === "editor-brief-suggesting") return never();
+    await wait(readDelay || 1000);
+    const a = articles.find((x) => x.id === articleId);
+    const title = a?.title.trim() || "この題";
+    return `「${title}」について、数字の話に入る前に前提を揃える一本です。自分で売上や利益を見ている経営者に向けて書きます。同じ利益率でも分母の取り方で意味が変わること、そして自分の会社では何を分母にすべきかを、手元の例で示します。読み終えたあとに、自社の数字を一度だけ計算し直したくなる形にします。`;
   },
   getPolicy: async () => policy,
   setPolicy: async (p) => { policy = p; },
