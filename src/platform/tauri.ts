@@ -21,6 +21,7 @@ export const tauriHost: T.Host = {
   createVoice: (name: string, sources: T.SourceInput[]) => invoke<T.Voice>("create_voice", { name, sources }),
   addVoiceSources: (voiceId, sources) => invoke<T.Voice | null>("add_voice_sources", { voiceId, sources }),
   removeVoiceSources: (voiceId, kind, account) => invoke<T.Voice | null>("remove_voice_sources", { voiceId, kind, account }),
+  removeVoiceSource: (voiceId, sourceId) => invoke<T.Voice | null>("remove_voice_source", { voiceId, sourceId }),
   rebuildVoice: (voiceId) => invoke<T.Voice>("rebuild_voice", { voiceId }),
   cancelVoiceBuild: () => invoke<void>("cancel_voice_build"),
   materialBudget: () => invoke<T.MaterialBudget>("material_budget"),

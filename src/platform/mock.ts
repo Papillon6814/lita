@@ -5,7 +5,8 @@
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-open (note row unfolded), intake-connecting (note import
-// running, never finishing), intake-loaded, building, voice,
+// running, never finishing), intake-loaded, intake-manual (three pieces
+// pasted by hand), building, voice,
 // voice-open (same as voice: the eight items are no longer folded),
 // voice-evidence (one row's quotes already open),
 // voice-sources (mixed connections), voice-template (older
@@ -112,11 +113,16 @@ const voice2: T.Voice = {
   id: "v2", name: "貼った文章", profile: { ...profile, formality: "です・ます調", tone: ["落ち着いた", "丁寧"], sentence_endings: ["と思います。", "ではないでしょうか。"], one_line: "あなたの文章は、です・ます調で落ち着いて丁寧。「ではないでしょうか」と問いかけて締める。" },
   created_at: "2026-09-23T01:00:00Z", updated_at: "2026-09-23T01:00:00Z", voice_sources: sources.slice(0, 2),
 };
+const handBodies = [
+  "エクイティは返さなくていい金ではなく、いちばん高い金です。返済期限がないぶん、会社の持ち分を削ります。",
+  "買収の相談で最初に聞くのは値段ではありません。売り手が何を手放したくないか、です。",
+  "小さな会社の資金繰りは、月末ではなく週で見ます。遅れている入金と、動かせる支払いが分けて見えます。",
+];
 const mixedSources: T.VoiceSource[] = [
   ...sources,
   { id: "m1", kind: "medium", origin: "https://medium.com/@kuno/a", account: "kuno", body: "…", created_at: "2026-09-23T02:00:00Z" },
   { id: "m2", kind: "medium", origin: "https://medium.com/@kuno/b", account: "kuno", body: "…", created_at: "2026-09-23T02:00:00Z" },
-  { id: "p1", kind: "paste", origin: null, account: null, body: "貼った一段落。", created_at: "2026-09-23T02:30:00Z" },
+  ...handBodies.map((body, i) => ({ id: `p${i + 1}`, kind: "paste" as const, origin: null, account: null, body, created_at: "2026-09-23T02:30:00Z" })),
 ];
 let voice: T.Voice = {
   id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
@@ -139,7 +145,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "building", "articles-first-run"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "building", "articles-first-run"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -227,6 +233,7 @@ export const mockHost: T.Host = {
   updateVoiceProfile: async (_id, profile) => (voice = { ...voice, profile }),
   createVoice: () => never(),
   addVoiceSources: async (_id, added) => { await wait(300); voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
+  removeVoiceSource: async (_id, sourceId) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => s.id !== sourceId) }; return voice; },
   removeVoiceSources: async (_id, kind, account) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => !(s.kind === kind && s.account === account)) }; return voice; },
   rebuildVoice: () => never(),
   cancelVoiceBuild: async () => {},

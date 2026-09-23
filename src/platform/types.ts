@@ -164,6 +164,8 @@ export type Host = {
   createVoice: (name: string, sources: SourceInput[]) => Promise<Voice>;
   addVoiceSources: (voiceId: string, sources: SourceInput[]) => Promise<Voice | null>;
   removeVoiceSources: (voiceId: string, kind: SourceKind, account: string | null) => Promise<Voice | null>;
+  /** Drops one piece by id (manual intake). */
+  removeVoiceSource: (voiceId: string, sourceId: string) => Promise<Voice | null>;
   rebuildVoice: (voiceId: string) => Promise<Voice>;
   cancelVoiceBuild: () => Promise<void>;
   materialBudget: () => Promise<MaterialBudget>;

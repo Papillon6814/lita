@@ -390,6 +390,20 @@ async fn remove_voice_sources(app: AppHandle, voice_id: String, kind: SourceKind
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// Drops a single piece (manual intake: one pasted post or one file).
+#[tauri::command]
+async fn remove_voice_source(app: AppHandle, voice_id: String, source_id: String) -> Result<Option<Voice>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        store.delete_source(&voice_id, &source_id).map_err(fail)?;
+        store.voice(&voice_id).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
 /// Reads the profile again from everything the voice now has. Hand edits
 /// to the details are overwritten; the UI says so before calling this.
 #[tauri::command]
@@ -986,6 +1000,7 @@ pub fn run() {
             create_voice,
             add_voice_sources,
             remove_voice_sources,
+            remove_voice_source,
             rebuild_voice,
             cancel_voice_build,
             material_budget,
