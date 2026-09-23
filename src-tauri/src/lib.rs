@@ -12,8 +12,8 @@ use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
-use lita_codex::voice::{Budget, VoiceProfile, select_material};
-use lita_codex::{CodexCli, Effort, Preflight, Request};
+use lita_codex::voice::{VoiceProfile, pipeline};
+use lita_codex::{CodexCli, Preflight, Request};
 use lita_sources::Piece;
 use lita_store::{Article, ArticlePatch, ArticleStatus, ArticleSummary, ArticleVersion, NewArticle, NewSource, NewVersion, Platform, SourceKind, Store, StoredEffort, VersionKind, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
@@ -278,44 +278,41 @@ fn to_sources(sources: Vec<SourceInput>) -> Vec<NewSource> {
         .collect()
 }
 
-/// Reads a voice profile out of `sources` with Codex, reporting the stages
-/// on `voice-progress`. Shared by the first build and by relearning (#68).
+/// Reads a voice profile out of `sources` with the careful four-stage
+/// pipeline (measure → read each piece → synthesise → check), reporting
+/// the real stages on `voice-progress`. Shared by the first build and by
+/// relearning (#68). Falls back to the single call inside the pipeline.
 fn extract_profile(app: &AppHandle, sources: &[NewSource], cancel: Arc<AtomicBool>, working_dir: std::path::PathBuf) -> Result<VoiceProfile, UiError> {
     std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
-    let _ = app.emit("voice-progress", VoiceProgress::Started);
     let bodies: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
-    let material = select_material(&bodies, Budget::default());
-    let samples: Vec<&str> = material.samples.iter().map(String::as_str).collect();
-    let req = Request {
-        prompt: VoiceProfile::extraction_prompt(&samples),
-        schema: VoiceProfile::extraction_schema(),
-        model: None,
-        effort: Effort::Quality,
-        working_dir,
-    };
     let emitter = app.clone();
-    let run = CodexCli::on_path()
-        .run_typed_cancellable::<VoiceProfile>(
-            &req,
-            |event| {
-                if event.kind == "turn.started" {
-                    let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
-                }
-            },
-            cancel,
-        )
-        .map_err(fail)?;
-    let _ = app.emit("voice-progress", VoiceProgress::Extracted);
-    Ok(run.value)
+    let outcome = pipeline::extract(&CodexCli::on_path(), &bodies, &pipeline::Config::default(), working_dir, cancel, |stage| {
+        let p = match stage {
+            pipeline::Stage::Measuring => VoiceProgress::Started,
+            pipeline::Stage::Reading { done, total } => VoiceProgress::Reading { done, total },
+            pipeline::Stage::Synthesising => VoiceProgress::Thinking,
+            pipeline::Stage::Checking => VoiceProgress::Checking,
+            pipeline::Stage::Done => VoiceProgress::Extracted,
+        };
+        let _ = emitter.emit("voice-progress", p);
+    })
+    .map_err(fail)?;
+    if outcome.report.fell_back {
+        eprintln!("voice extraction fell back to the single call: {:?}", outcome.report.notes);
+    }
+    Ok(outcome.profile)
 }
 
-/// Progress of a Voice build, for the stage display (D-26). Codex reports
-/// only four coarse events, so these are milestones, not a percentage.
+/// Progress of a Voice build, for the stage display. Since 2026-09-23 the
+/// stages are real (voice quality requirement, must 17): measuring, reading
+/// piece n of m, synthesising, checking, done, saved.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "stage", rename_all = "snake_case")]
 pub enum VoiceProgress {
     Started,
+    Reading { done: usize, total: usize },
     Thinking,
+    Checking,
     Extracted,
     Saved,
 }
@@ -329,14 +326,14 @@ pub struct MaterialBudget {
 
 #[tauri::command]
 fn material_budget() -> MaterialBudget {
-    let b = Budget::default();
-    MaterialBudget { per_piece_chars: b.per_piece_chars, total_chars: b.total_chars }
+    let c = pipeline::Config::default();
+    MaterialBudget { per_piece_chars: c.head_chars + c.tail_chars, total_chars: c.total_chars }
 }
 
-/// Builds a Voice from the given writing: Codex extracts the profile
-/// (45–65 s measured), then it is stored with its sources. Emits
+/// Builds a Voice from the given writing: the four-stage pipeline reads the
+/// profile (a few minutes), then it is stored with its sources. Emits
 /// `voice-progress` events along the way. Material is capped by
-/// `Budget::default()` (R-1); the sources are stored in full regardless.
+/// `pipeline::Config::default()`; the sources are stored in full regardless.
 #[tauri::command]
 async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -> Result<Voice, UiError> {
     let sources = to_sources(sources);

@@ -32,6 +32,47 @@ export type VoiceProfile = {
   representative_excerpts: { excerpt: string; why: string }[];
   /** Codex's one sentence about the voice; empty on older profiles. */
   one_line: string;
+  // Everything below arrives from the stricter extraction (2026-09-23) and is
+  // absent on profiles made before it. The screen shows nothing extra when a
+  // field is missing or empty.
+  /** Counted by Rust, not guessed. Not shown on screen (no numbers). */
+  measured?: Measured;
+  /** Words this writer spells in kana (出来る→できる). */
+  kana_choices?: string[];
+  /** How the writing moves: repetition, turns, the shape of an argument. */
+  rhetoric?: string;
+  /** Whether examples are lived or general, and how numbers appear. */
+  examples_and_numbers?: string;
+  /** Things this writer never does, though writing of this kind often does. */
+  never_does?: string[];
+  /** How a word that sounds like you is actually used. */
+  word_usage?: { word: string; usage: string }[];
+  /** Kept for the data only: topics, not voice. Never shown, never generated from. */
+  topic_words?: string[];
+  /** Per field: how sure the extraction is, and the quotes behind it. */
+  backing?: Record<string, Backing>;
+};
+
+export type Measured = {
+  pieces: number;
+  chars: number;
+  sentences: number;
+  sentence_length: { median: number; p10: number; p90: number; short_pct: number; long_pct: number };
+  paragraphs: { count: number; median_chars: number; sentences_per_paragraph_x10: number; one_sentence_pct: number };
+  punctuation: Record<string, number>;
+  script: { kanji_pct: number; hiragana_pct: number; katakana_pct: number; latin_pct: number };
+  endings: { form: string; count: number; pieces: number }[];
+  first_person: { form: string; count: number; pieces: number }[];
+  emoji: number;
+};
+
+export type Confidence = "high" | "medium" | "low";
+
+/** `piece` indexes into `voice.voice_sources`, in the same order. */
+export type Backing = {
+  confidence: Confidence;
+  evidence: { piece: number; quote: string }[];
+  note?: string;
 };
 
 export type VoiceSource = {
@@ -61,7 +102,9 @@ export type VoiceSummary = {
   source_count: number;
 };
 
-export type VoiceProgress = { stage: "started" | "thinking" | "extracted" | "saved" };
+export type VoiceProgress =
+  | { stage: "started" | "thinking" | "checking" | "extracted" | "saved" }
+  | { stage: "reading"; done: number; total: number };
 
 export type Piece = { title: string | null; url: string | null; published_at: string | null; text: string };
 

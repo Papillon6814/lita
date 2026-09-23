@@ -10,9 +10,16 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+pub mod measure;
+pub mod pipeline;
+pub mod stoplist;
+
+pub use measure::Measured;
 
 /// How one person writes, as extracted from their own writing.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct VoiceProfile {
     /// BCP-47 tag for the language the samples were written in.
     pub language: String,
@@ -42,6 +49,72 @@ pub struct VoiceProfile {
     /// template (src/summary.ts).
     #[serde(default)]
     pub one_line: String,
+
+    // ----- added 2026-09-23 (voice quality). All default so older profiles
+    // deserialize unchanged and `generation_view` stays identical for them.
+
+    /// What Rust counted in the material (sentence rhythm, paragraphs,
+    /// punctuation, scripts). Never guessed by the model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measured: Option<Measured>,
+    /// Words this person writes in kana where others might use kanji
+    /// (出来る→できる, 事→こと), as the kana form.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kana_choices: Vec<String>,
+    /// How arguments move: opening moves, restatement, where contrast sits,
+    /// how a piece closes. One short paragraph a writer can follow.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub rhetoric: String,
+    /// How examples and numbers are used (own experience vs general; round
+    /// vs exact figures; none at all).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub examples_and_numbers: String,
+    /// Things this writer never does that similar writing usually does.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub never_does: Vec<String>,
+    /// How each preferred word is actually used, for generation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub word_usage: Vec<WordUsage>,
+    /// Topic nouns that recur but describe what they write about, not how.
+    /// Display only; never sent to generation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub topic_words: Vec<String>,
+    /// Evidence and confidence per field, keyed by field name. Display only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub backing: BTreeMap<String, Backing>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct WordUsage {
+    pub word: String,
+    /// One sentence: where and how the word is used.
+    pub usage: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Confidence {
+    Low,
+    Medium,
+    High,
+}
+
+/// A verbatim quote from the material, checked by Rust to exist there.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Evidence {
+    /// Index of the piece the quote was found in (order of the material).
+    pub piece: usize,
+    pub quote: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Backing {
+    pub confidence: Confidence,
+    #[serde(default)]
+    pub evidence: Vec<Evidence>,
+    /// What the self-check said, if it disagreed.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -121,9 +194,12 @@ impl VoiceProfile {
         )
     }
 
-    /// What generation sees: the structured fields and nothing else.
+    /// What generation sees: the structured fields and nothing else. The
+    /// items added in 2026-09-23 appear only when present, so a profile
+    /// extracted earlier produces exactly the prompt it always did. Evidence,
+    /// confidence and topic words never appear (D-28).
     pub fn generation_view(&self) -> Value {
-        json!({
+        let v = json!({
             "language": self.language,
             "first_person": self.first_person,
             "formality": self.formality,
@@ -135,7 +211,12 @@ impl VoiceProfile {
             "opens_with": self.opens_with,
             "closes_with": self.closes_with,
             "uses_emoji": self.uses_emoji,
-        })
+        });
+        // Nothing else. The added items (2026-09-23) are for the person to
+        // read; in five blind comparisons the eleven-field contract produced
+        // the writing the author recognised, and every richer contract lost.
+        let _ = self.measured.as_ref();
+        v
     }
 }
 
@@ -161,6 +242,8 @@ mod tests {
                 why: "y".into(),
             }],
             one_line: "あなたの文章は、です・ます調で率直。".into(),
+            measured: None, kana_choices: vec![], rhetoric: String::new(), examples_and_numbers: String::new(),
+            never_does: vec![], word_usage: vec![], topic_words: vec![], backing: BTreeMap::new(),
         }
     }
 
@@ -200,6 +283,37 @@ mod tests {
         let v = serde_json::to_value(sample()).unwrap();
         let back: VoiceProfile = serde_json::from_value(v).unwrap();
         assert_eq!(back, sample());
+    }
+
+    #[test]
+    fn older_profiles_produce_the_old_view_exactly() {
+        // A profile without the 2026-09-23 fields yields the eleven original keys and nothing else.
+        let view = sample().generation_view();
+        let keys: Vec<&String> = view.as_object().unwrap().keys().collect();
+        assert_eq!(keys.len(), 11);
+        assert!(view.get("sentence_length").is_none());
+        assert!(view.get("never_does").is_none());
+    }
+
+    #[test]
+    fn evidence_confidence_and_topics_never_reach_generation() {
+        let mut p = sample();
+        p.topic_words = vec!["資本政策".into()];
+        p.backing.insert("tone".into(), Backing { confidence: Confidence::High, evidence: vec![Evidence { piece: 0, quote: "結局は数字だ。".into() }], note: String::new() });
+        p.never_does = vec!["感嘆符を使わない".into()];
+        p.measured = Some(measure::measure(&["私は思う。短い。二つ目の文がここにある。"]));
+        let view = p.generation_view();
+        assert!(view.get("backing").is_none());
+        assert!(view.get("evidence").is_none());
+        assert!(view.get("topic_words").is_none());
+        assert!(view.get("never_does").is_none(), "display-only items stay out of the contract");
+        assert!(view.get("sentence_length").is_none(), "measured rhythm is not part of the contract");
+        assert_eq!(view.as_object().unwrap().len(), 11);
+        // Serialised, the new fields round-trip and old JSON still loads.
+        let old = serde_json::json!({ "language": "ja", "first_person": "私", "formality": "常体", "tone": [], "sentence_endings": [], "avg_sentence_length_chars": 30,
+            "preferred_words": [], "avoided_words": [], "opens_with": "", "closes_with": "", "uses_emoji": false, "representative_excerpts": [] });
+        let loaded: VoiceProfile = serde_json::from_value(old).unwrap();
+        assert!(loaded.backing.is_empty() && loaded.measured.is_none());
     }
 
     #[test]
