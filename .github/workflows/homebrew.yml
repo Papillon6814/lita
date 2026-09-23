@@ -16,6 +16,8 @@ permissions:
 jobs:
   cask:
     runs-on: ubuntu-latest
+    # Skipped until the tap token exists (personal-use phase, D-51).
+    if: ${{ vars.HOMEBREW_TAP_ENABLED == 'true' }}
     steps:
       - name: Resolve the release
         id: rel

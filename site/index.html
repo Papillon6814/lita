@@ -25,9 +25,10 @@
   <p>Lita は API キーを求めません。手元にインストール済みの <a href="https://developers.openai.com/codex/cli">OpenAI Codex CLI</a> を起動するだけで、認証情報には触れません。Codex に送る内容は、生成の前にそのまま確認できます。</p>
 
   <h2>インストール</h2>
-  <p>Apple Silicon の Mac（macOS 12 以降）向けです。Homebrew なら:</p>
-  <pre>brew install --cask papillon6814/lita/lita</pre>
-  <p>または <a href="https://github.com/Papillon6814/lita/releases/latest">最新のリリース</a>から DMG をダウンロードしてください。更新は起動時に確認され、メニューの「Lita › アップデートを確認…」からも行えます。</p>
+  <p>Apple Silicon の Mac（macOS 12 以降）向けです。<a href="https://github.com/Papillon6814/lita/releases/latest">最新のリリース</a>から DMG をダウンロードしてください。</p>
+  <p>まだ Apple の署名を付けていないため、初回は macOS が開くのを拒みます。「システム設定 › プライバシーとセキュリティ › このまま開く」を押すか、ターミナルで次を実行してください。</p>
+  <pre>xattr -d com.apple.quarantine /Applications/Lita.app</pre>
+  <p>入れたあとは、起動時とメニューの「Lita › アップデートを確認…」から更新できます。</p>
   <div class="box"><strong>状態:</strong> 個人開発の OSS（MIT）です。</div>
 </main>
 <footer>© 2026 muumoo. <a href="https://github.com/Papillon6814/lita">Papillon6814/lita</a> · <a href="/privacy.html">プライバシーポリシー</a></footer>
