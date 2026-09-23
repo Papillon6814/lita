@@ -101,7 +101,7 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
         onAdd={addByHand}
         onRemove={removeOne}
       />
-      <p className="or">{t("intake.or")}</p>
+      <p className="both-note">{t("intake.both")}</p>
       <section className="box connect-box" aria-label={t("intake.box.connect")}>
         <h3 className="box-head">{t("intake.box.connect")}</h3>
         <SourceBox known={known} connected={connections} onGathered={add} onRemove={remove} onRefresh={refresh} refreshing={busy} />

@@ -140,7 +140,8 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
    radius; only the heading tells them apart. */
 .box { background: var(--soft); border-radius: var(--r-box); padding: 12px var(--pad-x) 16px; margin-top: var(--gap); }
 .box-head { font-size: 0.95rem; font-weight: 700; margin: 0 0 8px; }
-.or { color: var(--mute); font-size: 0.85rem; text-align: center; margin: 10px 0 0; }
+/* The line between the two boxes: a sentence, not a fork (2026-09-24). */
+.both-note { color: var(--mute); font-size: 0.85rem; text-align: center; margin: 10px 0 0; }
 .connect-box { padding-bottom: 4px; }
 .connect-box .srcbox { background: none; padding: 0; margin-top: 0; }
 .paste-area { width: 100%; font: inherit; line-height: 1.7; resize: vertical; }

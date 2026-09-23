@@ -6,7 +6,8 @@
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-open (note row unfolded), intake-connecting (note import
 // running, never finishing), intake-loaded, intake-manual (three pieces
-// pasted by hand), building, voice,
+// pasted by hand), intake-both (one pasted piece plus a note import),
+// building, voice,
 // voice-open (same as voice: the eight items are no longer folded),
 // voice-evidence (one row's quotes already open),
 // voice-sources (mixed connections), voice-template (older
@@ -158,7 +159,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "building", "articles-first-run"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 

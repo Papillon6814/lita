@@ -71,6 +71,12 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
+    if (mockScene() === "intake-both") {
+      addManual([
+        { kind: "paste", origin: null, body: "エクイティは返さなくていい金ではなく、いちばん高い金です。返済期限がないぶん、会社の持ち分を削ります。" },
+      ]);
+      void host.importNote("kuno").then((r) => add(r.pieces.map((p) => ({ kind: "note" as const, origin: p.url, account: "kuno", title: p.title, body: p.text }))));
+    }
     if (mockScene() === "intake-loaded") {
       void host.importNote("kuno").then((r) => add(r.pieces.map((p) => ({ kind: "note" as const, origin: p.url, account: "kuno", title: p.title, body: p.text }))));
     }
@@ -87,6 +93,13 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
   const use = useMemo(() => usage(selected, budget), [selected, budget]);
   const empty = pieces.length === 0;
   const connections = connectionsOf(selected);
+  // What the voice is built from, said by where it came from rather than by a
+  // count: with both boxes filled the line names both, so "both" is visible
+  // without a number per origin (principle 6).
+  const fromNames = [
+    ...(selected.some((p) => byHand(p.kind)) ? [t("ready.pasted")] : []),
+    ...connectionsOf(selected.filter((p) => !byHand(p.kind))).map((c) => connectionLabel(c.kind, c.account)),
+  ];
   const first = connections[0];
   const name = uniqueName(first ? connectionLabel(first.kind, first.account) : t("voice.name.pasted"), existing);
 
@@ -141,7 +154,10 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
         onMerge={(id) => mergeUp(Number(id))}
       />
 
-      <p className="or">{t("intake.or")}</p>
+      {/* Not "or" (2026-09-24): the two boxes are added up, not chosen
+          between. One sentence, in the ability form, so either box alone
+          still reads as enough. */}
+      <p className="both-note">{t("intake.both")}</p>
 
       <section className="box connect-box" aria-label={t("intake.box.connect")}>
         <h3 className="box-head">{t("intake.box.connect")}</h3>
@@ -151,7 +167,7 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
       {!empty && (
         <>
           <p className="using-line">
-            {use.count === 0 ? t("ready.none") : t("voice.intake.usingLine", { n: String(use.count) })}
+            {use.count === 0 ? t("ready.none") : t("ready.from", { names: fromNames.join(t("ready.and")) })}
             {use.truncated > 0 && <> {t("ready.truncated", { n: String(use.truncated) })}</>}
             {use.dropped > 0 && <> {t("ready.dropped", { n: String(use.dropped) })}</>}
             {connected.length > 0 && (
