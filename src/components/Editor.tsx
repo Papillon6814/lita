@@ -7,6 +7,7 @@ import { useAutosave } from "../hooks/useAutosave";
 import { ErrorNote } from "./ErrorNote";
 import { relativeDate } from "./ArticleList";
 import { VersionHistory } from "./VersionHistory";
+import { Delayed } from "./Delayed";
 
 // Editing snapshots (D-46): every ten minutes of active editing, and when
 // the article is closed with changes since the last snapshot.
@@ -185,7 +186,9 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   };
   const onKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canWrite) { e.preventDefault(); void write(); } };
 
-  if (!article) return <div className="editor"><p className="muted">{error ? "" : t("article.loading")}</p>{error && <ErrorNote error={error} />}</div>;
+  // An article that opens quickly shows no sentence at all: the paper just
+  // appears. Only a slow read says it is reading.
+  if (!article) return <div className="editor">{!error && <Delayed><p className="muted">{t("article.loading")}</p></Delayed>}{error && <ErrorNote error={error} />}</div>;
 
   const saveLabel =
     auto.state.kind === "saving" ? t("save.saving")

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { host, type UiError, type Voice, type VoiceSummary } from "../platform/host";
-import { asUiError } from "../errors";
+import { useCallback } from "react";
+import { host, type Voice, type VoiceSummary } from "../platform/host";
+import { useQuietLoad, prime, voiceKey, VOICES_KEY } from "../hooks/useQuietLoad";
 import { t } from "../i18n";
 import { leadSentence } from "../summary";
 import { ErrorNote } from "./ErrorNote";
@@ -11,20 +11,24 @@ type Props = { onOpen: (id: string) => void; onNew: () => void };
 // All the voices, most recently touched first. Each row carries Lita's one
 // sentence about that writing, so the list reads like a cast, not a table.
 export function VoiceList({ onOpen, onNew }: Props) {
-  const [rows, setRows] = useState<VoiceSummary[] | null>(null);
-  const [full, setFull] = useState<Record<string, Voice>>({});
-  const [error, setError] = useState<UiError | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    void host.listVoices().then(async (list) => {
-      if (!live) return;
-      setRows([...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
+  // Names and their one sentence arrive together, so no row is ever drawn
+  // twice; coming back to the list paints the remembered rows at once.
+  const q = useQuietLoad<{ rows: VoiceSummary[]; full: Record<string, Voice> }>(
+    "voiceRows",
+    useCallback(async () => {
+      const list = await host.listVoices();
+      prime(VOICES_KEY, list);
       const loaded = await Promise.all(list.map((v) => host.getVoice(v.id)));
-      if (live) setFull(Object.fromEntries(loaded.filter((v): v is Voice => !!v).map((v) => [v.id, v])));
-    }).catch((e) => { if (live) setError(asUiError(e)); });
-    return () => { live = false; };
-  }, []);
+      for (const v of loaded) if (v) prime(voiceKey(v.id), v);
+      return {
+        rows: [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+        full: Object.fromEntries(loaded.filter((v): v is Voice => !!v).map((v) => [v.id, v])),
+      };
+    }, []),
+  );
+  const rows = q.value?.rows ?? null;
+  const full = q.value?.full ?? {};
+  const error = q.error;
 
   return (
     <div className="voices-page">
@@ -33,7 +37,7 @@ export function VoiceList({ onOpen, onNew }: Props) {
         <button className="btn sm" onClick={onNew}>{t("voice.list.new")}</button>
       </div>
       {error && <ErrorNote error={error} />}
-      {rows === null && <p className="muted">{t("voice.loading")}</p>}
+      {q.slow && <p className="muted">{t("voice.loading")}</p>}
       {rows && (
         <ul className="voice-rows">
           {rows.map((v) => {

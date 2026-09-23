@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { forgetAll } from "./hooks/useQuietLoad";
 import { host, type CodexStatus, type SessionStatus, type UiError } from "./platform/host";
 import { asUiError } from "./errors";
 import { t } from "./i18n";
@@ -48,6 +49,7 @@ export default function App() {
   }, []);
 
   const signOut = useCallback(async () => {
+    forgetAll();
     try { setAuth({ kind: "done", status: await host.signOut() }); }
     catch (e) { setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) }); }
   }, []);

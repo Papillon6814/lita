@@ -302,6 +302,8 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .badge.status-approved { background: var(--mint-ink); color: #fff; }
 .badge.status-archived { background: var(--soft); color: var(--mute); }
 .head-right { display: flex; align-items: center; gap: 10px; }
+/* Keeps its place so the heading row never shifts when a fetch returns. */
+.hidden-keep { visibility: hidden; pointer-events: none; }
 .page-head .search { width: 220px; }
 
 /* A queued row carries its own way out, so the row is a flex line and the

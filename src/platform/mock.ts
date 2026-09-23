@@ -18,6 +18,8 @@
 // picked, policy filled), articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
+// `&delay=<ms>` slows every read (the lists, one article, one voice), so the
+// loading rules can be watched: under 300 ms nothing is said at all.
 
 import type * as T from "./types";
 
@@ -31,7 +33,10 @@ export function mockScene(): string | null {
 
 const never = <T,>() => new Promise<T>(() => {});
 const noteName = scene === "voices" ? "note・kuno" : "test";
-const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const wait = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve());
+
+/** `?delay=800` makes every read that slow, to watch the loading rules. */
+const readDelay = Math.max(0, Number(params.get("delay") ?? "0")) || 0;
 
 const profile: T.VoiceProfile = {
   language: "ja",
@@ -257,8 +262,8 @@ const importHandlers = new Set<(p: T.ImportProgress) => void>();
 const emitImport = (p: T.ImportProgress) => importHandlers.forEach((h) => h(p));
 
 export const mockHost: T.Host = {
-  listArticles: async (status) => articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })),
-  getArticle: async (id) => articles.find((a) => a.id === id) ?? null,
+  listArticles: async (status) => { await wait(readDelay); return articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })); },
+  getArticle: async (id) => { await wait(readDelay); return articles.find((a) => a.id === id) ?? null; },
   createArticle: async (platformId, voiceId) => {
     const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     articles.unshift(a); return a;
@@ -364,8 +369,8 @@ export const mockHost: T.Host = {
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),
-  listVoices: async () => (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []),
-  getVoice: async (id) => (id === "v2" ? voice2 : voice),
+  listVoices: async () => { await wait(readDelay); return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
+  getVoice: async (id) => { await wait(readDelay); return id === "v2" ? voice2 : voice; },
   deleteVoice: async () => true,
   renameVoice: async (_id, name) => { voice = { ...voice, name }; },
   updateVoiceProfile: async (_id, profile) => (voice = { ...voice, profile }),
