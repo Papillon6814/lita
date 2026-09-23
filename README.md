@@ -87,14 +87,20 @@ Brief, in the editor ──────────────┘
 
 ## Installing
 
-Apple Silicon Macs, macOS 12 or later.
+Apple Silicon Macs, macOS 12 or later. Download the DMG from the
+[latest release](https://github.com/Papillon6814/lita/releases/latest).
+
+Builds are not yet signed with an Apple Developer ID, so macOS will refuse to
+open the app the first time. Either allow it under System Settings › Privacy &
+Security › "Open Anyway", or run:
 
 ```
-brew install --cask papillon6814/lita/lita
+xattr -d com.apple.quarantine /Applications/Lita.app
 ```
 
-Or download the DMG from the [latest release](https://github.com/Papillon6814/lita/releases/latest).
-Lita checks for updates when it starts and from **Lita › アップデートを確認…**.
+Once installed, Lita checks for updates when it starts and from
+**Lita › アップデートを確認…**. A Homebrew cask (`papillon6814/lita/lita`) will
+follow once builds are signed.
 
 ## Running from source
 

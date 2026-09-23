@@ -119,3 +119,4 @@
 | D-48 | 配布経路 | **GitHub Releases が正。`v*` タグの push で Actions がビルドして公開し、アプリ内アップデーター（`releases/latest/download/latest.json`）と Homebrew cask（`Papillon6814/homebrew-lita`）はそれを読む。Apple Silicon のみ** | 置き場所を一つにして、更新の経路を増やさない。Intel は要望が出たら matrix に 1 行足す |
 | D-49 | 公開の運用 | **タグを push したら自動で公開する（ドラフトにしない）** | 本人の選択（2026-09-23）。誤配布の歯止めはタグを打つ行為そのもの（`npm run release -- x.y.z` → `git push --tags`）。署名鍵: アップデーターの minisign 秘密鍵はキーチェーン `lita-tauri-updater-key` と GitHub Secret、公開鍵は `tauri.conf.json`。Apple の署名・公証は Developer Program 加入後に Secrets を足すだけで有効になる（workflow は無ければ ad-hoc） |
 | D-50 | 更新の見せ方 | **起動時に静かに確認し、あればサイドバー下に「vX が利用できます」のピル。メニュー「Lita › アップデートを確認…」からはダイアログ。更新内容は GitHub の自動リリースノート** | 正常時は静か、の原則（2026-09-22 の UX 批評）。ダウンロード → 「再起動」で切り替わる |
+| D-51 | Apple 署名・公証の時期 | **当面は本人用のみ（ad-hoc 署名の Release）。使い心地に自信が持てたら Apple Developer Program に加入して署名・公証を足す** | 本人の判断（2026-09-23）。作ること自体に Apple は不要で、必要なのは他人に配るときだけ。workflow は Secrets が揃えば自動で署名に切り替わる |
