@@ -102,6 +102,7 @@ export type VoiceSummary = {
   source_count: number;
 };
 
+export type ImportProgress = { kind: "note" | "medium"; done: number; total: number | null };
 export type VoiceProgress =
   | { stage: "started" | "thinking" | "checking" | "extracted" | "saved" }
   | { stage: "reading"; done: number; total: number };
@@ -190,5 +191,7 @@ export type Host = {
   importMedium: (handle: string) => Promise<Imported>;
   importXArchive: (contents: string, handle: string | null, includeReplies: boolean) => Promise<Imported>;
   onVoiceProgress: (handler: (p: VoiceProgress) => void) => Promise<Unlisten>;
+  /** Real progress of a service import: done / total (total unknown until the listing arrived). */
+  onImportProgress: (handler: (p: ImportProgress) => void) => Promise<Unlisten>;
   openExternal: (url: string) => Promise<void>;
 };

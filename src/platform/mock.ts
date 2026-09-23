@@ -4,7 +4,8 @@
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
-// intake, intake-open (note row unfolded), intake-loaded, building, voice,
+// intake, intake-open (note row unfolded), intake-connecting (note import
+// running, never finishing), intake-loaded, building, voice,
 // voice-open (same as voice: the eight items are no longer folded),
 // voice-evidence (one row's quotes already open),
 // voice-sources (mixed connections), voice-template (older
@@ -138,7 +139,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-loaded", "building", "articles-first-run"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "building", "articles-first-run"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -163,6 +164,10 @@ const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
 ] : [];
 let nextId = 100;
 const excerpt = (b: string) => (b.trim().split("\n").find((l) => l.trim()) ?? "").slice(0, 80);
+
+// Listeners for import-progress, as the native side has; importNote feeds them.
+const importHandlers = new Set<(p: T.ImportProgress) => void>();
+const emitImport = (p: T.ImportProgress) => importHandlers.forEach((h) => h(p));
 
 export const mockHost: T.Host = {
   listArticles: async (status) => articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })),
@@ -242,9 +247,21 @@ export const mockHost: T.Host = {
   cancelGenerate: async () => {},
   setDraftStatus: async () => {},
   copyText: async () => {},
-  importNote: async () => { await wait(300); return { pieces, total: 12, skipped_paid: 1, recent_only: false }; },
+  importNote: async () => {
+    // Play a plausible article-by-article read over the wait; the connecting scene
+    // stops partway so a screenshot catches the count mid-climb.
+    const steps = scene === "intake-connecting" ? [0, 1, 2, 3, 4] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const timers = steps.map((i) => setTimeout(() => emitImport({ kind: "note", done: i, total: 10 }), 60 * i + 40));
+    try {
+      await wait(scene === "intake-connecting" ? 60_000 : 800);
+    } finally {
+      timers.forEach(clearTimeout);
+    }
+    return { pieces, total: 12, skipped_paid: 1, recent_only: false };
+  },
   importMedium: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: true }; },
   importXArchive: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: false }; },
+  onImportProgress: async (handler) => { importHandlers.add(handler); return () => { importHandlers.delete(handler); }; },
   onVoiceProgress: async (handler) => {
     const stages: T.VoiceProgress[] = [{ stage: "reading", done: 0, total: 3 }, { stage: "reading", done: 2, total: 3 }, { stage: "thinking" }, { stage: "checking" }, { stage: "extracted" }];
     const timers = stages.map((p, i) => setTimeout(() => handler(p), 800 * (i + 1)));

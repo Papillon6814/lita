@@ -217,3 +217,33 @@
 
 - 1 行に「直す」「根拠」の 2 語が並びます。色で差を付けましたが、幅の狭い窓では値の折り返しと重なって読みにくくなる可能性があります。
 - 引用は最大 4 つで切ります。5 つ目以降を見る道は用意していません（材料そのものは「元にした文章」から辿れます）。
+
+## つなぐ中のローディング
+
+要件: `docs/pm/requirements/2026-09-23-connect-loading.md`。実装は `src/components/SourceBox.tsx`（`RowState.working` に `done` / `total`）、`src/App.css`（`.src-working`）、`src/i18n/ja.ts` / `en.ts`（`import.listing` / `readingArticles` / `readingArticlesN` / `readingArchive` / `retry`）、`src/platform/mock.ts`（`import-progress` の配信と `intake-connecting` の自動開始）。
+
+つなぐを押した行は、回るしるし（`.spinner`、13px）と一文だけを `.src-hint` の位置に出します。note は一覧を待つ間「記事の一覧を見ています」、本数が届いたら「記事を読んでいます（4／10 本）」に変わります。Medium は数字なしの一文、X は「アーカイブを読んでいます」。進捗バーも中止も足していません。行の高さは変わりません。
+
+### 判定（撮影 1120×900、倍率 1、日本語）
+
+| 受け入れ条件 | 判定 | 根拠 |
+| --- | --- | --- |
+| 1. 押した直後から終わるまで、しるしと一文が出る | ○ | `voice-feature/loading-intake-connecting.png`。`run()` が最初に `working` を立て、終わるまで戻さない |
+| 2. 「（n／m 本）」の n が増えていく | ○ | 同 PNG が 4／10 の途中を捉えている。`onImportProgress` が `working` の行だけを書き換える |
+| 3. 取り込み中も別の行を開いて貼れる。作業中の行は畳めない | ○ | 同 PNG で Medium・X・手作業が並んだまま。`close()` は `busy(service)` のとき何もしない（Escape も同じ道を通る） |
+| 4. 失敗しても名前が残り、平易な一文が出る | ○ | `run()` の `catch` は入力を消さず `ErrorNote` を出し、ボタンは「もう一度つなぐ」に変わる |
+| 5. X でちらつかない | ○ | `MIN_SPIN_MS = 600` を成功・失敗の両方で待ってから行を閉じる |
+| 読み上げ・動きの配慮 | ○ | 一文に `role="status"` と `aria-live="polite"`、行に `aria-busy`。回転は `.spinner` の `prefers-reduced-motion` をそのまま使う |
+
+手数は前後とも 3（行を開く・名前を入れる・つなぐ）で変わりません。
+
+### 撮った画
+
+- `docs/pm/ux/voice-feature/loading-intake.png`（押す前）
+- `docs/pm/ux/voice-feature/loading-intake-connecting.png`（読んでいる途中）
+- `docs/pm/ux/voice-feature/loading-intake-loaded.png`（終わった後の ✓ と件数）
+
+### 残った懸念
+
+- 任意項目の「15 秒を超えたら『時間がかかっています。』を足す」は入れていません。行に文が 2 つ並ぶと静けさが崩れるためで、必要なら次に足します。
+- 失敗したときのフォーカスは入力欄へ戻します。読み上げは `ErrorNote` の `role="alert"` が担います。

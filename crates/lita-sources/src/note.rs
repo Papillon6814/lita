@@ -118,8 +118,16 @@ pub fn fetch(summary: &Summary) -> Result<Piece> {
 /// Lists and fetches in one go, pausing briefly between bodies so a
 /// twenty-article import does not look like a scrape.
 pub fn import(urlname: &str, max: usize) -> Result<(Listing, Vec<Piece>)> {
+    import_with(urlname, max, |_, _| {})
+}
+
+/// Like [`import`], reporting `(done, total)` after the listing and after
+/// each body, so a UI can show real progress (#83).
+pub fn import_with(urlname: &str, max: usize, mut on_progress: impl FnMut(usize, usize)) -> Result<(Listing, Vec<Piece>)> {
     let listing = list(urlname, max)?;
-    let mut pieces = Vec::with_capacity(listing.notes.len());
+    let total = listing.notes.len();
+    on_progress(0, total);
+    let mut pieces = Vec::with_capacity(total);
     for (i, s) in listing.notes.iter().enumerate() {
         if i > 0 {
             std::thread::sleep(std::time::Duration::from_millis(250));
@@ -128,6 +136,7 @@ pub fn import(urlname: &str, max: usize) -> Result<(Listing, Vec<Piece>)> {
         if !piece.text.trim().is_empty() {
             pieces.push(piece);
         }
+        on_progress(i + 1, total);
     }
     Ok((listing, pieces))
 }

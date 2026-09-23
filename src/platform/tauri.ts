@@ -54,6 +54,8 @@ export const tauriHost: T.Host = {
   importMedium: (handle: string) => invoke<T.Imported>("import_medium", { handle }),
   importXArchive: (contents: string, handle: string | null, includeReplies: boolean) =>
     invoke<T.Imported>("import_x_archive", { contents, handle, includeReplies }),
+  onImportProgress: (handler: (p: T.ImportProgress) => void): Promise<UnlistenFn> =>
+    listen<T.ImportProgress>("import-progress", (e) => handler(e.payload)),
   onVoiceProgress: (handler: (p: T.VoiceProgress) => void): Promise<UnlistenFn> =>
     listen<T.VoiceProgress>("voice-progress", (e) => handler(e.payload)),
   openExternal: (url: string) => openUrl(url),

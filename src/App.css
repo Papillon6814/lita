@@ -144,6 +144,9 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .src-body input { width: 100%; }
 .src-body.manual { flex-direction: row; gap: 14px; flex-wrap: wrap; padding-top: 8px; font-size: 0.92rem; }
 .src-hint { color: var(--mute); font-size: 0.82rem; line-height: 1.5; }
+/* A working row: the same hint line, with the turning mark ahead of it. Row height is unchanged. */
+.src-working { display: flex; align-items: center; gap: 8px; min-height: 18px; }
+.src-working .spinner { width: 13px; height: 13px; border-width: 2px; }
 .src-actions { display: flex; gap: 14px; align-items: center; padding-top: 4px; font-size: 0.88rem; white-space: nowrap; }
 /* Folded rows (2026-09-23): a place not yet connected is one line, name + hint, in the
    same "▸" idiom as 詳細を見る; it opens its input on click. Ticked rows stay heaviest,
