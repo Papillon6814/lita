@@ -180,28 +180,7 @@ impl CodexCli {
 
         let report: Value = serde_json::from_slice(&out.stdout)
             .context("`codex doctor --json` did not produce JSON")?;
-
-        let version = report["codexVersion"]
-            .as_str()
-            .unwrap_or("unknown")
-            .to_string();
-        // A broken config makes `doctor` skip the auth check entirely; that
-        // must not read as "not logged in" (seen 2026-09-23 with a duplicate
-        // key in config.toml).
-        let config = &report["checks"]["config.load"];
-        if config["status"].as_str().is_some_and(|s| s != "ok") {
-            let detail = config["summary"].as_str().unwrap_or("the Codex configuration could not be loaded").to_string();
-            return Ok(Preflight::ConfigBroken { version, detail });
-        }
-        let auth = &report["checks"]["auth.credentials"]["status"];
-        if auth.is_null() {
-            return Ok(Preflight::ConfigBroken { version, detail: "codex doctor did not report on credentials".into() });
-        }
-        Ok(if auth.as_str() == Some("ok") {
-            Preflight::Ready { version }
-        } else {
-            Preflight::NotLoggedIn { version }
-        })
+        Ok(interpret_doctor(&report))
     }
 
     /// Whether the CLI has credentials, without touching the network.
@@ -507,6 +486,40 @@ pub fn assert_no_credentials(prompt: &str) {
     }
 }
 
+/// Reads a `codex doctor --json` report into a [`Preflight`].
+///
+/// A broken config makes `doctor` skip the auth check entirely; that must
+/// not read as "not logged in" (seen 2026-09-23 with a duplicate key in
+/// config.toml). Only an `error` on `config.load`, or a config.toml that
+/// did not parse, counts as broken: `doctor` also reports `warning` for
+/// harmless things such as a deprecated setting, and the config loaded
+/// fine in that case (seen 2026-09-23 with `analytics_enabled`).
+fn interpret_doctor(report: &Value) -> Preflight {
+    let version = report["codexVersion"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+    let config = &report["checks"]["config.load"];
+    let status = config["status"].as_str();
+    let parsed = config["details"]["config.toml parse"].as_str();
+    if status == Some("error") || parsed.is_some_and(|p| p != "ok") {
+        let detail = config["summary"]
+            .as_str()
+            .unwrap_or("the Codex configuration could not be loaded")
+            .to_string();
+        return Preflight::ConfigBroken { version, detail };
+    }
+    let auth = &report["checks"]["auth.credentials"]["status"];
+    if auth.is_null() {
+        return Preflight::ConfigBroken { version, detail: "codex doctor did not report on credentials".into() };
+    }
+    if auth.as_str() == Some("ok") {
+        Preflight::Ready { version }
+    } else {
+        Preflight::NotLoggedIn { version }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,5 +587,30 @@ mod tests {
     #[test]
     fn tail_leaves_a_short_string_alone() {
         assert_eq!(tail("short"), "short");
+    }
+
+    fn doctor(config_status: &str, parse: &str, auth: Option<&str>) -> Value {
+        let mut checks = serde_json::json!({
+            "config.load": { "status": config_status, "summary": "config loaded", "details": { "config.toml parse": parse } }
+        });
+        if let Some(a) = auth {
+            checks["auth.credentials"] = serde_json::json!({ "status": a });
+        }
+        serde_json::json!({ "codexVersion": "0.156.0", "checks": checks })
+    }
+
+    #[test]
+    fn doctor_warning_on_config_is_not_broken() {
+        // A deprecated setting yields status "warning" with the config loaded.
+        assert!(matches!(interpret_doctor(&doctor("warning", "ok", Some("ok"))), Preflight::Ready { .. }));
+        assert!(matches!(interpret_doctor(&doctor("warning", "ok", Some("error"))), Preflight::NotLoggedIn { .. }));
+    }
+
+    #[test]
+    fn doctor_error_or_parse_failure_is_broken() {
+        assert!(matches!(interpret_doctor(&doctor("error", "ok", None)), Preflight::ConfigBroken { .. }));
+        assert!(matches!(interpret_doctor(&doctor("warning", "failed", Some("ok"))), Preflight::ConfigBroken { .. }));
+        // No auth report at all still reads as a config problem, never as "not logged in".
+        assert!(matches!(interpret_doctor(&doctor("ok", "ok", None)), Preflight::ConfigBroken { .. }));
     }
 }
