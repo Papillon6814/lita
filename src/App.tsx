@@ -5,6 +5,8 @@ import { t } from "./i18n";
 import { ErrorNote } from "./components/ErrorNote";
 import { TopBar } from "./components/TopBar";
 import { Shell } from "./components/Shell";
+import { UpdateDialog } from "./components/UpdateDialog";
+import { useUpdates } from "./hooks/useUpdates";
 import "./App.css";
 
 const CODEX_INSTALL_URL = "https://developers.openai.com/codex/cli";
@@ -16,6 +18,10 @@ export default function App() {
   const [view, setView] = useState<View>({ kind: "checking" });
   const [auth, setAuth] = useState<Auth>({ kind: "checking" });
   const stepsRef = useRef<HTMLElement>(null);
+  const updates = useUpdates();
+  const updateDialog = updates.update && (
+    <UpdateDialog state={updates.update} onState={updates.setUpdate} onClose={() => updates.setUpdate(null)} />
+  );
 
   // The native side refreshes the stored session on launch; keep asking
   // until it has decided, so a slow network never shows as "signed out".
@@ -64,13 +70,18 @@ export default function App() {
 
   if (signedIn && codexReady) {
     return (
-      <Shell
-        session={session}
-        codex={codex}
-        codexChecking={view.kind === "checking"}
-        onSignOut={() => void signOut()}
-        onShowCodexSteps={() => void check()}
-      />
+      <>
+        <Shell
+          session={session}
+          codex={codex}
+          codexChecking={view.kind === "checking"}
+          onSignOut={() => void signOut()}
+          onShowCodexSteps={() => void check()}
+          updateAvailable={updates.available}
+          onUpdate={() => void updates.checkUpdate(true)}
+        />
+        {updateDialog}
+      </>
     );
   }
 
@@ -100,6 +111,7 @@ export default function App() {
 
         <footer className="privacy">{t("privacy.note")}</footer>
       </main>
+      {updateDialog}
     </div>
   );
 }
