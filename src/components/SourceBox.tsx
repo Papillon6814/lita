@@ -5,9 +5,10 @@ import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 
 type Service = "note" | "medium" | "x";
-type State = { kind: "idle" } | { kind: "working" } | { kind: "done"; added: number } | { kind: "error"; error: UiError };
+type RowState = { kind: "idle" } | { kind: "working" } | { kind: "done"; added: number } | { kind: "error"; error: UiError };
 
 export type Gathered = { kind: SourceKind; origin: string | null; account: string | null; title: string | null; body: string };
+export type Connected = { kind: SourceKind; account: string | null; count: number };
 
 /** The account key a service import is filed under (#68): note account, Medium handle, "archive" for X. */
 export function accountKey(service: Service, input: string) {
@@ -28,48 +29,53 @@ type Props = {
   hero?: boolean;
   /** Origins already held, so re-importing a connection adds only what is new. */
   known?: Set<string>;
-  /** Start on this service with this account filled in (refreshing a connection). */
-  preset?: { service: Service; account: string };
+  /** What is connected already; each shows as a ticked row with its count. */
+  connected: Connected[];
   onGathered: (pieces: Gathered[], from: { kind: SourceKind; account: string | null }) => void;
+  onRemove: (kind: SourceKind, account: string | null) => void;
+  /** Pull new articles from a connection (voice page). Absent on the intake, where everything is new anyway. */
+  onRefresh?: (kind: SourceKind, account: string | null) => void;
+  refreshing?: string | null;
 };
 
-// The one place writing enters Lita: a service import (note / Medium / X
-// archive) or a pasted piece / text files. Shared by the intake and by the
-// voice page's learning sources (#68).
-export function SourceBox({ hero, known, preset, onGathered }: Props) {
-  const [service, setService] = useState<Service>(preset?.service ?? "note");
-  const [account, setAccount] = useState(preset?.account ?? "");
+// The one place writing enters Lita, as a row per place it can come from:
+// note, Medium, an X archive, and by hand. A connected place turns into a
+// ticked row, and the others stay open, so it reads as "connect as many as
+// you like" rather than "pick one" (#68). Shared by the intake and by the
+// voice page's learning sources.
+export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefresh, refreshing }: Props) {
+  const [inputs, setInputs] = useState<Record<Service, string>>({ note: "", medium: "", x: "" });
+  const [rows, setRows] = useState<Partial<Record<Service, RowState>>>({});
   const [xReplies, setXReplies] = useState(false);
-  const [state, setState] = useState<State>({ kind: "idle" });
   const xInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const run = async (kind: SourceKind, key: string, fetch: () => Promise<Imported>) => {
-    setState({ kind: "working" });
+  const run = async (service: Service, kind: SourceKind, key: string, fetch: () => Promise<Imported>) => {
+    setRows((r) => ({ ...r, [service]: { kind: "working" } }));
     try {
       const result = await fetch();
       const fresh = result.pieces.filter((p) => !p.url || !known?.has(p.url));
       onGathered(fresh.map((p) => ({ kind, origin: p.url, account: key, title: p.title, body: p.text })), { kind, account: key });
-      setState({ kind: "done", added: fresh.length });
+      setRows((r) => ({ ...r, [service]: { kind: "done", added: fresh.length } }));
+      setInputs((i) => ({ ...i, [service]: "" }));
     } catch (e) {
-      setState({ kind: "error", error: asUiError(e) });
+      setRows((r) => ({ ...r, [service]: { kind: "error", error: asUiError(e) } }));
     }
   };
 
-  const submit = () => {
-    const a = account.trim();
+  const submit = (service: "note" | "medium") => {
+    const a = inputs[service].trim();
     if (!a) return;
     const key = accountKey(service, a);
-    if (service === "note") void run("note", key, () => host.importNote(a));
-    else if (service === "medium") void run("medium", key, () => host.importMedium(a));
+    void run(service, service, key, () => (service === "note" ? host.importNote(a) : host.importMedium(a)));
   };
 
   const onXFile = async (files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
     const contents = await f.text();
-    await run("x", "archive", () => host.importXArchive(contents, null, xReplies));
     if (xInput.current) xInput.current.value = "";
+    await run("x", "x", "archive", () => host.importXArchive(contents, null, xReplies));
   };
 
   const onFiles = async (files: FileList | null) => {
@@ -79,38 +85,80 @@ export function SourceBox({ hero, known, preset, onGathered }: Props) {
     if (fileInput.current) fileInput.current.value = "";
   };
 
-  const busy = state.kind === "working";
+  const of = (kind: SourceKind) => connected.filter((c) => c.kind === kind);
+  const tick = (c: Connected) => {
+    const key = `${c.kind}:${c.account}`;
+    return (
+      <div key={key} className="srcrow on">
+        <span className="src-label" aria-hidden="true">✓</span>
+        <span className="src-body"><span className="conn-name">{connectionLabel(c.kind, c.account)}</span> <span className="muted">{t("voice.sources.count", { n: String(c.count) })}</span></span>
+        <span className="src-actions">
+          {onRefresh && c.kind !== "paste" && c.kind !== "file" && (
+            <button className="link" disabled={refreshing !== null && refreshing !== undefined} onClick={() => onRefresh(c.kind, c.account)}>
+              {refreshing === key ? t("import.working") : c.kind === "x" ? t("voice.sources.refreshX") : t("voice.sources.refresh")}
+            </button>
+          )}
+          <button className="link" onClick={() => onRemove(c.kind, c.account)}>{t("voice.sources.remove")}</button>
+        </span>
+      </div>
+    );
+  };
+  const status = (service: Service, hint: string) => {
+    const s = rows[service];
+    if (!s || s.kind === "idle") return <span className="src-hint">{hint}</span>;
+    if (s.kind === "working") return <span className="src-hint" role="status">{t("import.working")}</span>;
+    if (s.kind === "done") return <span className="src-hint" role="status">{s.added === 0 ? t("import.nothingNew") : t("import.result")}</span>;
+    return <ErrorNote error={s.error} />;
+  };
+  const busy = (service: Service) => rows[service]?.kind === "working";
+
   return (
     <div className={hero ? "srcbox hero" : "srcbox"}>
-      <div className="seg" role="tablist">
-        {(["note", "medium", "x"] as Service[]).map((s) => (
-          <button key={s} role="tab" aria-selected={service === s} className={service === s ? "on" : ""} onClick={() => setService(s)}>{t(`source.${s}` as const)}</button>
-        ))}
-      </div>
-      {service === "x" ? (
-        <div className="row wrap">
-          <button className="btn pri" disabled={busy} onClick={() => xInput.current?.click()}>{t("import.xPick")}</button>
-          <label className="check"><input type="checkbox" checked={xReplies} onChange={(e) => setXReplies(e.target.checked)} /> {t("import.xReplies")}</label>
-          <input ref={xInput} type="file" accept=".js,.json,text/javascript,application/json" hidden onChange={(e) => void onXFile(e.target.files)} />
-        </div>
-      ) : (
-        <form className="row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-          <label htmlFor="import-account" className="sr-only">{t(`source.${service}` as const)}</label>
-          <input id="import-account" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={service === "note" ? t("import.notePlaceholder") : t("import.mediumPlaceholder")} disabled={busy} autoComplete="off" />
-          <button type="submit" className="btn pri" disabled={busy || !account.trim()}>{t("import.go")}</button>
+      {of("note").map(tick)}
+      {of("note").length === 0 && (
+        <form className="srcrow" onSubmit={(e) => { e.preventDefault(); submit("note"); }}>
+          <label className="src-label" htmlFor="src-note">{t("source.note")}</label>
+          <span className="src-body">
+            <input id="src-note" value={inputs.note} onChange={(e) => setInputs((i) => ({ ...i, note: e.target.value }))} placeholder={t("import.notePlaceholder")} disabled={busy("note")} autoComplete="off" />
+            {status("note", t("import.noteHint"))}
+          </span>
+          <span className="src-actions"><button type="submit" className="btn sm" disabled={busy("note") || !inputs.note.trim()}>{t("import.connect")}</button></span>
         </form>
       )}
-      <p className="hint" role="status">
-        {state.kind === "working" ? t("import.working")
-          : state.kind === "done" ? (state.added === 0 ? t("import.nothingNew") : t("import.result"))
-          : (service === "note" ? t("import.noteHint") : service === "medium" ? t("import.mediumHint") : t("import.xHint"))}
-      </p>
-      {state.kind === "error" && <ErrorNote error={state.error} />}
-      <div className="manual">
-        <span>{t("import.manual")}</span>
-        <button className="link" onClick={() => onGathered([{ kind: "paste", origin: null, account: null, title: null, body: "" }], { kind: "paste", account: null })}>{t("import.manualWrite")}</button>
-        <button className="link" onClick={() => fileInput.current?.click()}>{t("import.manualFile")}</button>
-        <input ref={fileInput} type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+      {of("medium").map(tick)}
+      {of("medium").length === 0 && (
+        <form className="srcrow" onSubmit={(e) => { e.preventDefault(); submit("medium"); }}>
+          <label className="src-label" htmlFor="src-medium">{t("source.medium")}</label>
+          <span className="src-body">
+            <input id="src-medium" value={inputs.medium} onChange={(e) => setInputs((i) => ({ ...i, medium: e.target.value }))} placeholder={t("import.mediumPlaceholder")} disabled={busy("medium")} autoComplete="off" />
+            {status("medium", t("import.mediumHint"))}
+          </span>
+          <span className="src-actions"><button type="submit" className="btn sm" disabled={busy("medium") || !inputs.medium.trim()}>{t("import.connect")}</button></span>
+        </form>
+      )}
+      {of("x").map(tick)}
+      {of("x").length === 0 && (
+        <div className="srcrow">
+          <span className="src-label">{t("source.x")}</span>
+          <span className="src-body">
+            <span className="row wrap">
+              <button className="btn sm" disabled={busy("x")} onClick={() => xInput.current?.click()}>{t("import.xPick")}</button>
+              <label className="check"><input type="checkbox" checked={xReplies} onChange={(e) => setXReplies(e.target.checked)} /> {t("import.xReplies")}</label>
+            </span>
+            {status("x", t("import.xHint"))}
+          </span>
+        </div>
+      )}
+      <input ref={xInput} type="file" accept=".js,.json,text/javascript,application/json" hidden onChange={(e) => void onXFile(e.target.files)} />
+      {of("paste").map(tick)}
+      {of("file").map(tick)}
+      <div className="srcrow">
+        <span className="src-label">{t("import.manual")}</span>
+        <span className="src-body manual">
+          <button className="link" onClick={() => onGathered([{ kind: "paste", origin: null, account: null, title: null, body: "" }], { kind: "paste", account: null })}>{t("import.manualWrite")}</button>
+          <button className="link" onClick={() => fileInput.current?.click()}>{t("import.manualFile")}</button>
+          <input ref={fileInput} type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+        </span>
       </div>
     </div>
   );

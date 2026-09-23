@@ -88,20 +88,14 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
   return (
     <div className="intake">
       <h2>{t("voice.intake.title")}</h2>
-      <p className="sub">{empty ? t("voice.intake.leadEmpty") : `${t("voice.intake.lead")} ${t("voice.intake.more")}`}</p>
+      <p className="sub">{empty ? t("voice.intake.leadEmpty") : t("voice.intake.lead")} {t("voice.intake.more")}</p>
 
-      <SourceBox hero={empty} known={known} onGathered={add} />
+      <SourceBox hero={empty} known={known} connected={connectionsOf(pieces)} onGathered={add} onRemove={(kind, account) => setPieces((ps) => ps.filter((p) => !(p.kind === kind && p.account === account)))} />
 
       {!empty && (
         <>
           <p className="using-line">
-            {use.count === 0 ? t("ready.none") : (
-              <>
-                {connections.map((c, i) => (
-                  <span key={i} className="conn">{i > 0 && <span className="sep">·</span>}{connectionLabel(c.kind, c.account)} <span className="muted">{t("voice.sources.count", { n: String(c.count) })}</span></span>
-                ))}
-              </>
-            )}
+            {use.count === 0 ? t("ready.none") : t("voice.intake.usingLine", { n: String(use.count) })}
             {use.truncated > 0 && <> {t("ready.truncated", { n: String(use.truncated), per: budget.per_piece_chars.toLocaleString() })}</>}
             {use.dropped > 0 && <> {t("ready.dropped", { n: String(use.dropped) })}</>}
             {" "}
