@@ -338,6 +338,14 @@ impl UserStore<'_> {
         Ok(())
     }
 
+    /// Drops one piece by id (a pasted post or a file the person wants out).
+    pub fn delete_source(&self, voice_id: &str, source_id: &str) -> Result<()> {
+        self.request(
+            self.store.http.delete(self.url("voice_sources")).query(&[("voice_id", format!("eq.{voice_id}")), ("id", format!("eq.{source_id}"))]),
+        )?;
+        Ok(())
+    }
+
     /// Deletes a voice and, through `ON DELETE CASCADE`, its sources. Articles
     /// that used it keep their text and lose the link (`voice_id` becomes
     /// null). Returns whether a row was deleted.

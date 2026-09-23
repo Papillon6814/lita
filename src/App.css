@@ -133,6 +133,31 @@ h3.step::before { display: none; content: ""; display: inline-grid; place-items:
 .start-row { margin-top: var(--gap); }
 h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-size: 0.85rem; }
 .srcbox { background: var(--soft); border-radius: var(--r-box); padding: 4px var(--pad-x); margin-top: var(--gap); }
+
+/* The two boxes material comes from (2026-09-23): writing entered by hand
+   first, places to connect second, "または" between them. Same paper, same
+   radius; only the heading tells them apart. */
+.box { background: var(--soft); border-radius: var(--r-box); padding: 12px var(--pad-x) 16px; margin-top: var(--gap); }
+.box-head { font-size: 0.95rem; font-weight: 700; margin: 0 0 8px; }
+.or { color: var(--mute); font-size: 0.85rem; text-align: center; margin: 10px 0 0; }
+.connect-box { padding-bottom: 4px; }
+.connect-box .srcbox { background: none; padding: 0; margin-top: 0; }
+.paste-area { width: 100%; font: inherit; line-height: 1.7; resize: vertical; }
+/* Files are over the box: the same mint, nothing new. */
+.box.over { background: var(--mint-soft); box-shadow: inset 0 0 0 2px var(--mint); }
+.count-line { font-size: 0.92rem; margin: 10px 0 0; display: flex; gap: 12px; align-items: baseline; }
+.box-hint { color: var(--mute); font-size: 0.85rem; margin: 10px 0 0; }
+.box-foot { display: flex; gap: 14px; align-items: center; margin-top: 12px; font-size: 0.88rem; flex-wrap: wrap; }
+.box-foot .grow { flex: 1; }
+.link.quiet-link { color: var(--mute); font-weight: 400; }
+.link.quiet-link:hover { color: var(--mint-ink); }
+/* One hand-entered piece, one line: the same key as the voice page's rows. */
+.plist { list-style: none; margin: 10px 0 0; padding: 0; }
+.prow { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.prow:last-child { border-bottom: 0; }
+.p-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-actions { display: flex; gap: 14px; font-size: 0.88rem; white-space: nowrap; }
+.p-edit { width: 100%; font: inherit; line-height: 1.7; resize: vertical; }
 .srcbox.hero { padding: 8px var(--pad-x); }
 .srcrow { display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); margin: 0; }
 .srcrow:last-child { border-bottom: 0; }

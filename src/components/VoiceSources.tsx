@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 import { SourceBox, connectionLabel, type Gathered } from "./SourceBox";
 import { connectionsOf } from "./VoiceIntake";
+import { PasteBox, type NewPiece } from "./PasteBox";
 
 type Props = { voice: Voice; onChange: (v: Voice) => void; onRebuild: () => void };
 
@@ -14,14 +15,15 @@ type Props = { voice: Voice; onChange: (v: Voice) => void; onRebuild: () => void
 // articles can be pulled from a connection, a connection dropped, another
 // added; relearning from the whole pile is a separate, explicit step.
 export function VoiceSources({ voice, onChange, onRebuild }: Props) {
-  const [paste, setPaste] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<UiError | null>(null);
   const xInput = useRef<HTMLInputElement>(null);
   const [xFor, setXFor] = useState<string | null>(null);
 
-  const connections = connectionsOf(voice.voice_sources);
+  const hand = voice.voice_sources.filter((s) => s.kind === "paste" || s.kind === "file");
+  const linked = voice.voice_sources.filter((s) => s.kind !== "paste" && s.kind !== "file");
+  const connections = connectionsOf(linked);
   const known = useMemo(() => new Set(voice.voice_sources.map((s) => s.origin).filter((o): o is string => !!o)), [voice.voice_sources]);
   const newer = voice.voice_sources.some((s) => s.created_at > voice.updated_at);
   const learned = new Date(voice.updated_at).toLocaleDateString();
@@ -34,7 +36,6 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
   };
 
   const add = (items: Gathered[]) => {
-    if (items.length === 1 && items[0].kind === "paste" && !items[0].body) { setPaste(""); return; }
     void apply("add", async () => {
       const v = await host.addVoiceSources(voice.id, items.map(({ kind, origin, account, body }) => ({ kind, origin, account, body })));
       setNote(items.length === 0 ? t("import.nothingNew") : t("voice.sources.added", { n: String(items.length) }));
@@ -70,6 +71,11 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
     });
   };
 
+  const addByHand = (items: NewPiece[]) => add(items.map((i) => ({ kind: i.kind, origin: i.origin, account: null, title: null, body: i.body })));
+
+  // One piece out, by its own id: what a hand-entered row means by "外す".
+  const removeOne = (id: string) => void apply(`rm:${id}`, () => host.removeVoiceSource(voice.id, id));
+
   const remove = (kind: SourceKind, account: string | null) => {
     if (!window.confirm(t("voice.sources.removeConfirm", { name: connectionLabel(kind, account) }))) return;
     void apply(`rm:${kind}:${account}`, () => host.removeVoiceSources(voice.id, kind, account));
@@ -86,19 +92,21 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
         <h3>{t("voice.sources.title")}</h3>
         <span className="muted small">{t("voice.sources.meta", { n: String(voice.voice_sources.length), date: learned })}</span>
         {newer && <span className="hint">{t("voice.sources.newer")}</span>}
-        <button className={newer ? "btn pri sm" : "btn sm"} disabled={busy !== null || connections.length === 0} onClick={rebuild}>{t("voice.sources.rebuild")}</button>
+        <button className={newer ? "btn pri sm" : "btn sm"} disabled={busy !== null || voice.voice_sources.length === 0} onClick={rebuild}>{t("voice.sources.rebuild")}</button>
       </div>
-      <SourceBox known={known} connected={connections} onGathered={add} onRemove={remove} onRefresh={refresh} refreshing={busy} />
+      <PasteBox
+        pieces={hand.map((s) => ({ id: s.id, kind: s.kind === "file" ? "file" : "paste", origin: s.origin, body: s.body }))}
+        total={voice.voice_sources.length}
+        busy={busy !== null}
+        onAdd={addByHand}
+        onRemove={removeOne}
+      />
+      <p className="or">{t("intake.or")}</p>
+      <section className="box connect-box" aria-label={t("intake.box.connect")}>
+        <h3 className="box-head">{t("intake.box.connect")}</h3>
+        <SourceBox known={known} connected={connections} onGathered={add} onRemove={remove} onRefresh={refresh} refreshing={busy} />
+      </section>
       <input ref={xInput} type="file" accept=".js,.json,text/javascript,application/json" hidden onChange={(e) => void onXFile(e.target.files)} />
-      {paste !== null && (
-        <form className="paste-add" onSubmit={(e) => { e.preventDefault(); const body = paste.trim(); setPaste(null); if (body) add([{ kind: "paste", origin: null, account: null, title: null, body }]); }}>
-          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} placeholder={t("voice.intake.piecePlaceholder")} rows={5} autoFocus />
-          <div className="row">
-            <button type="submit" className="btn sm" disabled={!paste.trim()}>{t("action.add")}</button>
-            <button type="button" className="quiet sm" onClick={() => setPaste(null)}>{t("action.cancel")}</button>
-          </div>
-        </form>
-      )}
       {note && <p className="hint" role="status">{note}</p>}
       {error && <ErrorNote error={error} />}
     </section>

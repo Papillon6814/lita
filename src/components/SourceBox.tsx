@@ -45,25 +45,20 @@ type Props = {
   /** Pull new articles from a connection (voice page). Absent on the intake, where everything is new anyway. */
   onRefresh?: (kind: SourceKind, account: string | null) => void;
   refreshing?: string | null;
-  /** Bump to unfold the first row: the intake's primary button, pressed with no material yet. */
-  openFirst?: number;
 };
 
-// The one place writing enters Lita, as a row per place it can come from:
-// note, Medium, an X archive, and by hand. A connected place is a ticked
-// row; the others are folded to one line (name + hint) that opens its
-// input on click, so the box reads as "any one of these is enough" rather
-// than a four-field form (2026-09-23). Shared by the intake and by the
-// voice page's learning sources.
-export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefresh, refreshing, openFirst }: Props) {
+// Writing pulled from where it was published: note, Medium, an X archive.
+// A connected place is a ticked row; the others are folded to one line
+// (name + hint) that opens its input on click, so the box reads as "any one
+// of these is enough" rather than a form. Writing entered by hand lives in
+// its own box now (PasteBox, 2026-09-23), above this one.
+export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefresh, refreshing }: Props) {
   const [inputs, setInputs] = useState<Record<Service, string>>({ note: "", medium: "", x: "" });
   const [rows, setRows] = useState<Partial<Record<Service, RowState>>>({});
   // The one folded row opened by hand; a row that is fetching or has something to say stays open on its own.
   const [open, setOpen] = useState<Service | null>(mockScene() === "intake-open" ? "note" : null);
   const [xReplies, setXReplies] = useState(false);
-  useEffect(() => { if (openFirst) setOpen("note"); }, [openFirst]);
   const xInput = useRef<HTMLInputElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   // The real count of an import, as the native side reads piece by piece.
   // Only a row that is still working takes it, so a late event cannot revive a finished row.
@@ -130,13 +125,6 @@ export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefr
     const contents = await f.text();
     if (xInput.current) xInput.current.value = "";
     await run("x", "x", "archive", () => host.importXArchive(contents, null, xReplies));
-  };
-
-  const onFiles = async (files: FileList | null) => {
-    if (!files) return;
-    const read = await Promise.all(Array.from(files).map(async (f) => ({ kind: "file" as const, origin: f.name, account: null, title: f.name, body: await f.text() })));
-    onGathered(read, { kind: "file", account: null });
-    if (fileInput.current) fileInput.current.value = "";
   };
 
   const of = (kind: SourceKind) => connected.filter((c) => c.kind === kind);
@@ -239,16 +227,6 @@ export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefr
         </div>
       ) : lite("x", t("source.x"), t("import.xHint")))}
       <input ref={xInput} type="file" accept=".js,.json,text/javascript,application/json" hidden onChange={(e) => void onXFile(e.target.files)} />
-      {of("paste").map(tick)}
-      {of("file").map(tick)}
-      <div className="srcrow hand">
-        <span className="src-label">{t("import.manual")}</span>
-        <span className="src-body manual">
-          <button className="link" onClick={() => onGathered([{ kind: "paste", origin: null, account: null, title: null, body: "" }], { kind: "paste", account: null })}>{t("import.manualWrite")}</button>
-          <button className="link" onClick={() => fileInput.current?.click()}>{t("import.manualFile")}</button>
-          <input ref={fileInput} type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
-        </span>
-      </div>
     </div>
   );
 }
