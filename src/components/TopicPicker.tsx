@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { host, type Effort, type Platform, type Policy, type UiError, type VoiceSummary } from "../platform/host";
+import { host, type Platform, type Policy, type UiError, type VoiceSummary } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
@@ -9,7 +9,6 @@ import { ErrorNote } from "./ErrorNote";
 // open (nothing to unfold), the direction is one line that may stay empty,
 // and the ten titles are ten pressable lines. Picking some and pressing the
 // one primary button lines up that many drafts and returns to the list.
-const EFFORT_KEY = "lita.effort";
 const MAX_PICKS = 5;
 
 const emptyPolicy: Policy = { audience: "", takeaway: "", topics: [], avoid: "" };
@@ -102,10 +101,9 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     setWorking(true);
     try {
       await host.setPolicy(policyRef.current);
-      const effort = ((): Effort => { try { return (localStorage.getItem(EFFORT_KEY) as Effort) || "quality"; } catch { return "quality"; } })();
       // Lined up in the order they were offered, not the order they were ticked.
       const titles = (topics ?? []).filter((x) => picked.includes(x));
-      await host.enqueueArticles(titles, voiceId, platformId, effort, direction.trim());
+      await host.enqueueArticles(titles, voiceId, platformId, "best", direction.trim());
       onQueued(titles.length);
     } catch (e) { setError(asUiError(e)); setWorking(false); }
   };

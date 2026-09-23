@@ -92,6 +92,7 @@ pub struct NewSource {
 pub enum StoredEffort {
     Fast,
     Quality,
+    Best,
 }
 
 impl From<Effort> for StoredEffort {
@@ -99,6 +100,7 @@ impl From<Effort> for StoredEffort {
         match e {
             Effort::Fast => StoredEffort::Fast,
             Effort::Quality => StoredEffort::Quality,
+            Effort::Best => StoredEffort::Best,
         }
     }
 }
@@ -108,6 +110,7 @@ impl From<StoredEffort> for Effort {
         match e {
             StoredEffort::Fast => Effort::Fast,
             StoredEffort::Quality => Effort::Quality,
+            StoredEffort::Best => Effort::Best,
         }
     }
 }

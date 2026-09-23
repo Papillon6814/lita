@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { host, type Article, type ArticleStatus, type Effort, type Platform, type UiError, type VoiceSummary } from "../platform/host";
+import { host, type Article, type ArticleStatus, type Platform, type UiError, type VoiceSummary } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
@@ -13,9 +13,15 @@ import { Delayed } from "./Delayed";
 // the article is closed with changes since the last snapshot.
 const SNAPSHOT_MS = 10 * 60 * 1000;
 
-const EFFORT_KEY = "lita.effort";
 type Text = { title: string; body: string; brief: string };
 type Gen = { kind: "idle" } | { kind: "generating" } | { kind: "done"; notes: string };
+// A suggested brief is thrown away as soon as anything else happens; the way
+// back lives only in this state.
+type Sug = { kind: "idle" } | { kind: "working" } | { kind: "done"; previous: string };
+
+// Lines the queue puts in a brief that a suggestion must not drop: how long
+// the article should be, and that nothing is to be looked up.
+const KEEP_LINE = /^長さ|調べ(ず|な)|^length|look(ing)? up|without research/i;
 
 // The editor: the text on the left, Lita's help on the right. Everything
 // the person types is saved as they go (D-46); Lita writes only when asked,
@@ -25,8 +31,8 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   const [text, setText] = useState<Text>({ title: "", body: "", brief: "" });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [voices, setVoices] = useState<VoiceSummary[]>([]);
-  const [effort, setEffort] = useState<Effort>(() => { try { return (localStorage.getItem(EFFORT_KEY) as Effort) || "quality"; } catch { return "quality"; } });
   const [gen, setGen] = useState<Gen>({ kind: "idle" });
+  const [sug, setSug] = useState<Sug>({ kind: "idle" });
   const [error, setError] = useState<UiError | null>(null);
   const [copied, setCopied] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -39,7 +45,6 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   const same = useCallback((a: Text, b: Text) => a.title === b.title && a.body === b.body && a.brief === b.brief, []);
   const auto = useAutosave<Text>(`lita.unsaved.${id}`, save, same);
 
-  useEffect(() => { try { localStorage.setItem(EFFORT_KEY, effort); } catch {} }, [effort]);
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); void host.listVoices().then(setVoices).catch(() => {}); }, []);
 
   // Load, preferring a local copy that failed to save last time.
@@ -49,6 +54,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
       if (!live) return;
       if (!a) { setError({ code: "invalid_input", detail: "no such article" }); return; }
       setArticle(a);
+      setSug({ kind: "idle" });
       const server: Text = { title: a.title, body: a.body, brief: a.brief };
       const local = auto.recover();
       if (local && new Date(a.updated_at).getTime() < local.at && !same(local.value, server)) {
@@ -61,7 +67,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
       }
       // An article the queue is writing shows the same waiting face as one
       // written from here; the queue's event ends it.
-      if (mockScene() === "editor-generating" || a.queue === "writing") setGen({ kind: "generating" });
+      if (mockScene()?.startsWith("editor-generating") || a.queue === "writing") setGen({ kind: "generating" });
     }).catch((e) => { if (live) setError(asUiError(e)); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,9 +128,11 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   const edit = (patch: Partial<Text>) => {
     setText((prev) => { const next = { ...prev, ...patch }; auto.update(next); return next; });
     setCopied(false);
+    setSug({ kind: "idle" });
   };
   const setField = async (patch: { voice_id?: string | null; platform_id?: string; status?: ArticleStatus }) => {
     if (!article) return;
+    setSug({ kind: "idle" });
     setArticle({ ...article, ...patch });
     try { await host.updateArticle(id, patch); } catch (e) { setError(asUiError(e)); }
   };
@@ -157,7 +165,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
     await auto.flush();
     setGen({ kind: "generating" });
     try {
-      const w = await host.generateIntoArticle(id, effort, previous);
+      const w = await host.generateIntoArticle(id, "best", previous);
       const next: Text = { title: w.article.title, body: w.article.body, brief: w.article.brief };
       setArticle(w.article);
       auto.settle(next);
@@ -171,7 +179,37 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
       setGen({ kind: "idle" });
       if (err.code !== "cancelled") setError(err);
     }
-  }, [article, id, effort, auto]);
+  }, [article, id, auto]);
+
+  // The brief Lita drafts from the title (never saved on its own; it lands in
+  // the field and is saved like anything typed there). The length line and the
+  // "do not look up" line a queued article carries are kept underneath.
+  const suggest = useCallback(async () => {
+    if (!textRef.current.title.trim()) return;
+    setError(null);
+    setSug({ kind: "working" });
+    try {
+      const drafted = await host.suggestBrief(id);
+      const previous = textRef.current.brief;
+      const keep = previous.split("\n").filter((l) => KEEP_LINE.test(l.trim()));
+      edit({ brief: [drafted.trim(), ...keep].join("\n") });
+      setSug({ kind: "done", previous });
+    } catch (e) {
+      const err = asUiError(e);
+      setSug({ kind: "idle" });
+      if (err.code !== "cancelled") setError(err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // The two mock scenes open mid-suggestion and just after one.
+  const suggested = useRef(false);
+  useEffect(() => {
+    if (suggested.current || !article) return;
+    if (mockScene() !== "editor-brief-suggesting" && mockScene() !== "editor-brief-suggested") return;
+    suggested.current = true;
+    void suggest();
+  }, [article, suggest]);
 
   const copy = async () => {
     try {
@@ -239,10 +277,27 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
         ) : (
         <aside className="assist">
           <h3>{t("assist.title")}</h3>
-          <label className="field">
-            <span>{t("write.brief")}</span>
-            <textarea value={text.brief} onChange={(e) => edit({ brief: e.target.value })} placeholder={t("write.briefPlaceholder")} rows={4} disabled={gen.kind === "generating"} />
-          </label>
+          <div className="field">
+            <div className="field-head">
+              <span id="brief-field-label">{t("write.brief")}</span>
+              {/* Secondary to the one primary button ("write"): a quiet link. */}
+              <button className="link" disabled={!text.title.trim() || sug.kind === "working" || gen.kind === "generating"} onClick={() => void suggest()}>
+                {sug.kind === "done" ? t("write.briefSuggestAgain") : t("write.briefSuggest")}
+              </button>
+            </div>
+            <textarea aria-labelledby="brief-field-label" value={text.brief} onChange={(e) => edit({ brief: e.target.value })} placeholder={t("write.briefPlaceholder")} rows={4} disabled={gen.kind === "generating" || sug.kind === "working"} />
+            {sug.kind === "working" ? (
+              <div className="generating" role="status">
+                <span className="spinner" aria-hidden="true" />
+                <div><div>{t("write.briefSuggesting")}</div></div>
+                <button className="btn sm" onClick={() => void host.cancelGenerate()}>{t("write.cancel")}</button>
+              </div>
+            ) : sug.kind === "done" && sug.previous.trim() ? (
+              <button className="link" onClick={() => edit({ brief: sug.previous })}>{t("write.briefUndo")}</button>
+            ) : !text.title.trim() ? (
+              <span className="hint">{t("write.briefNeedTitle")}</span>
+            ) : null}
+          </div>
           <div className="field">
             <div className="field-head">
               <span id="voice-field-label">{t("assist.voice")}</span>
@@ -260,20 +315,10 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
               {platforms.map((p) => <option key={p.id} value={p.id}>{p.max_chars != null ? t("write.platformStatic", { name: p.name, max: String(p.max_chars) }) : p.name}</option>)}
             </select>
           </label>
-          <div className="field">
-            <span>{t("write.effort")}</span>
-            <div className="seg" role="tablist">
-              {(["fast", "quality"] as Effort[]).map((e) => (
-                <button key={e} role="tab" aria-selected={effort === e} className={effort === e ? "on" : ""} onClick={() => setEffort(e)}>{t(e === "fast" ? "effort.fast" : "effort.quality")}</button>
-              ))}
-            </div>
-            <span className="hint inline">{t(longForm ? (effort === "fast" ? "effort.fastHintLong" : "effort.qualityHintLong") : (effort === "fast" ? "effort.fastHint" : "effort.qualityHint"))}</span>
-          </div>
-
           {gen.kind === "generating" ? (
             <div className="generating" role="status">
               <span className="spinner" aria-hidden="true" />
-              <div><div>{t("write.generating")}</div></div>
+              <div><div>{t("write.generating")}</div>{longForm && <div className="hint">{t("write.generatingLong")}</div>}</div>
               {article.queue === "writing"
                 ? <button className="btn sm" onClick={() => void host.dequeueArticle(id)}>{t("queue.stop")}</button>
                 : <button className="btn sm" onClick={() => void host.cancelGenerate()}>{t("write.cancel")}</button>}
