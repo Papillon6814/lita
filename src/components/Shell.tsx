@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { host, type ArticleStatus, type CodexStatus, type SessionStatus } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { t } from "../i18n";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, FILTERS } from "./Sidebar";
 import { ArticleList } from "./ArticleList";
 import { Editor } from "./Editor";
 import { VoiceSection } from "./VoiceSection";
@@ -25,7 +25,12 @@ function initialRoute(): Route {
   if (scene?.startsWith("articles")) return { kind: "articles", filter: "all" };
   try {
     const raw = sessionStorage.getItem(ROUTE_KEY);
-    if (raw) return JSON.parse(raw) as Route;
+    if (raw) {
+      const route = JSON.parse(raw) as Route;
+      // A filter that no longer has a sidebar entry falls back to "all".
+      if (route.kind === "articles" && !FILTERS.includes(route.filter)) return { kind: "articles", filter: "all" };
+      return route;
+    }
   } catch {}
   return { kind: "articles", filter: "all" };
 }
