@@ -444,6 +444,15 @@ impl UserStore<'_> {
         self.get_many("articles", &[("queue", "not.is.null"), ("order", "created_at.asc")])
     }
 
+    /// Drafts with nothing in them yet (no title, body or brief, not queued),
+    /// newest first. "新しく書く" reuses one instead of adding another (#93).
+    pub fn empty_drafts(&self) -> Result<Vec<Article>> {
+        self.get_many(
+            "articles",
+            &[("status", "eq.draft"), ("title", "eq."), ("body", "eq."), ("brief", "eq."), ("queue", "is.null"), ("order", "updated_at.desc")],
+        )
+    }
+
     pub fn article(&self, id: &str) -> Result<Option<Article>> {
         let rows: Vec<Article> = self.get_many("articles", &[("id", &format!("eq.{id}")), ("limit", "1")])?;
         Ok(rows.into_iter().next())
