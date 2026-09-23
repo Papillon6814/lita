@@ -58,7 +58,9 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
         auto.settle(server);
         setText(server);
       }
-      if (mockScene() === "editor-generating") setGen({ kind: "generating" });
+      // An article the queue is writing shows the same waiting face as one
+      // written from here; the queue's event ends it.
+      if (mockScene() === "editor-generating" || a.queue === "writing") setGen({ kind: "generating" });
     }).catch((e) => { if (live) setError(asUiError(e)); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,6 +77,33 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   }, [id]);
   const textRef = useRef<Text>(text);
   textRef.current = text;
+  const queuedRef = useRef(false);
+  queuedRef.current = article?.queue === "writing";
+
+  // While the queue is working, this article can change under the editor:
+  // re-read it when the queue says something moved.
+  useEffect(() => {
+    let live = true;
+    let off: (() => void) | undefined;
+    void host.onQueueEvent(() => {
+      if (!live) return;
+      void host.getArticle(id).then((a) => {
+        if (!live || !a) return;
+        const wasQueued = queuedRef.current;
+        queuedRef.current = a.queue === "writing";
+        setArticle(a);
+        if (a.queue === "writing") { setGen({ kind: "generating" }); return; }
+        // Only a generation the queue started is ended here.
+        if (wasQueued) {
+          setGen({ kind: "idle" });
+          const next: Text = { title: a.title, body: a.body, brief: a.brief };
+          if (!same(next, textRef.current)) { auto.settle(next); setText(next); }
+        }
+      }).catch(() => {});
+    }).then((u) => { if (live) off = u; else u(); }).catch(() => {});
+    return () => { live = false; off?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Periodic snapshot while editing.
   useEffect(() => {
@@ -242,7 +271,9 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
             <div className="generating" role="status">
               <span className="spinner" aria-hidden="true" />
               <div><div>{t("write.generating")}</div></div>
-              <button className="btn sm" onClick={() => void host.cancelGenerate()}>{t("write.cancel")}</button>
+              {article.queue === "writing"
+                ? <button className="btn sm" onClick={() => void host.dequeueArticle(id)}>{t("queue.stop")}</button>
+                : <button className="btn sm" onClick={() => void host.cancelGenerate()}>{t("write.cancel")}</button>}
             </div>
           ) : (
             <div className="assist-actions">

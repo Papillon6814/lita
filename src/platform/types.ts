@@ -124,14 +124,23 @@ export type Draft = {
 export type Generated = { draft: Draft; voice_notes: string };
 
 export type ArticleStatus = "draft" | "approved" | "archived";
+/** Where a queued article stands (article-queue, 2026-09-23). `null` once written, or never queued. */
+export type QueueState = "waiting" | "writing" | "failed";
 export type Article = {
   id: string; voice_id: string | null; platform_id: string; title: string; body: string; brief: string;
-  status: ArticleStatus; created_at: string; updated_at: string;
+  status: ArticleStatus; queue: QueueState | null; created_at: string; updated_at: string;
 };
 export type ArticleSummary = {
   id: string; voice_id: string | null; platform_id: string; title: string; excerpt: string;
-  status: ArticleStatus; created_at: string; updated_at: string;
+  status: ArticleStatus; queue: QueueState | null; created_at: string; updated_at: string;
 };
+/** The editorial policy: one per app, four short free-text fields, all optional. */
+export type Policy = { audience: string; takeaway: string; topics: string[]; avoid: string };
+export type QueueEvent =
+  /** A queued article changed state; re-list. */
+  | { kind: "changed" }
+  /** The whole queue stopped on a failure that would hit every article (Codex, sign-in, network). */
+  | { kind: "stopped"; error: UiError };
 /** Fields to change; anything left out stays as it is. `voice_id: null` clears it. */
 export type ArticlePatch = Partial<{ voice_id: string | null; platform_id: string; title: string; body: string; brief: string; status: ArticleStatus }>;
 export type VersionKind = "generated" | "shortened" | "edited" | "restored" | "manual";
@@ -183,6 +192,22 @@ export type Host = {
   snapshotArticle: (articleId: string, manual: boolean) => Promise<ArticleVersion | null>;
   restoreVersion: (versionId: string) => Promise<Article>;
   generateIntoArticle: (articleId: string, effort: Effort, previous?: string) => Promise<ArticleWritten>;
+  // ----- article queue (requirements 2026-09-23-article-queue) -----
+  getPolicy: () => Promise<Policy>;
+  setPolicy: (policy: Policy) => Promise<void>;
+  /** Codex drafts the four fields from the voices' sources and past articles. Does not save. */
+  draftPolicy: () => Promise<Policy>;
+  /** Ten titles, none already used. `direction` may be empty. */
+  suggestTopics: (direction: string) => Promise<string[]>;
+  /** One draft per title, brief filled, queued in order. Starts the queue. */
+  enqueueArticles: (titles: string[], voiceId: string, platformId: string, effort: Effort, direction: string) => Promise<ArticleSummary[]>;
+  /** Resumes a queue left over from last time. Safe to call when nothing is waiting. */
+  startQueue: () => Promise<void>;
+  /** Waiting: the article is deleted. Writing: stopped, kept as an empty draft. */
+  dequeueArticle: (id: string) => Promise<void>;
+  /** Everything waiting is deleted and the current one stopped. */
+  clearQueue: () => Promise<void>;
+  onQueueEvent: (handler: (e: QueueEvent) => void) => Promise<Unlisten>;
   appVersion: () => Promise<string>;
   fetchUpdate: () => Promise<UpdateInfo | null>;
   installUpdate: (onEvent: (e: DownloadEvent) => void) => Promise<void>;

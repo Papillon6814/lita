@@ -9,6 +9,7 @@
 use anyhow::{Context, Result, bail};
 use lita_codex::Effort;
 use lita_codex::voice::VoiceProfile;
+pub use lita_codex::topics::Policy;
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -121,6 +122,16 @@ pub enum ArticleStatus {
     Archived,
 }
 
+/// Where a queued article stands (article queue, 2026-09-23). Cleared once
+/// the text is written, so an ordinary article has none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueState {
+    Waiting,
+    Writing,
+    Failed,
+}
+
 /// One piece of writing: its own brief, voice, destination, current text,
 /// and (in `article_versions`) a history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +143,8 @@ pub struct Article {
     pub body: String,
     pub brief: String,
     pub status: ArticleStatus,
+    #[serde(default)]
+    pub queue: Option<QueueState>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -145,6 +158,8 @@ pub struct ArticleSummary {
     pub title: String,
     pub excerpt: String,
     pub status: ArticleStatus,
+    #[serde(default)]
+    pub queue: Option<QueueState>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -156,6 +171,8 @@ pub struct NewArticle {
     pub title: String,
     pub body: String,
     pub brief: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue: Option<QueueState>,
 }
 
 /// Fields of an article that can change. `None` leaves a field as it is.
@@ -173,6 +190,9 @@ pub struct ArticlePatch {
     pub brief: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<ArticleStatus>,
+    /// `Some(None)` clears the queue mark.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue: Option<Option<QueueState>>,
 }
 
 /// What produced a version (see the migration for the meaning of each).
@@ -212,6 +232,8 @@ pub struct NewVersion {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct UserSettings {
     pub default_voice_id: Option<Id>,
+    #[serde(default)]
+    pub policy: Policy,
 }
 
 /// Connection details for one Supabase project. Cheap to clone.
@@ -386,11 +408,13 @@ impl UserStore<'_> {
             title: String,
             body: String,
             status: ArticleStatus,
+            #[serde(default)]
+            queue: Option<QueueState>,
             created_at: String,
             updated_at: String,
         }
         let mut query: Vec<(&str, String)> = vec![
-            ("select", "id,voice_id,platform_id,title,body,status,created_at,updated_at".into()),
+            ("select", "id,voice_id,platform_id,title,body,status,queue,created_at,updated_at".into()),
             ("order", "updated_at.desc".into()),
         ];
         let status_value = status.map(|s| serde_json::to_value(s).unwrap_or_default().as_str().unwrap_or("").to_string());
@@ -408,10 +432,16 @@ impl UserStore<'_> {
                 title: r.title,
                 excerpt: excerpt_of(&r.body),
                 status: r.status,
+                queue: r.queue,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             })
             .collect())
+    }
+
+    /// Articles still in the queue, oldest first (the order they were picked).
+    pub fn queued(&self) -> Result<Vec<Article>> {
+        self.get_many("articles", &[("queue", "not.is.null"), ("order", "created_at.asc")])
     }
 
     pub fn article(&self, id: &str) -> Result<Option<Article>> {
@@ -462,8 +492,20 @@ impl UserStore<'_> {
     // ----- settings --------------------------------------------------------
 
     pub fn settings(&self) -> Result<UserSettings> {
-        let rows: Vec<UserSettings> = self.get_many("user_settings", &[("select", "default_voice_id"), ("limit", "1")])?;
+        let rows: Vec<UserSettings> = self.get_many("user_settings", &[("select", "default_voice_id,policy"), ("limit", "1")])?;
         Ok(rows.into_iter().next().unwrap_or_default())
+    }
+
+    /// Upsert of the editorial policy (one per person).
+    pub fn set_policy(&self, policy: &Policy) -> Result<()> {
+        self.request(
+            self.store
+                .http
+                .post(self.url("user_settings"))
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .json(&json!({ "policy": policy })),
+        )?;
+        Ok(())
     }
 
     /// Upsert: the row is created the first time a setting is written.

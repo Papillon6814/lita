@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
         avg_sentence_length_chars: 42,
         preferred_words: vec!["エクイティ".into(), "ファイナンス".into(), "構造".into()],
         avoided_words: vec!["絶対".into()], opens_with: "問いから入る".into(), closes_with: "含みを残して締める".into(),
-        uses_emoji: false, representative_excerpts: vec![], one_line: String::new(),
+        uses_emoji: false, representative_excerpts: vec![], one_line: String::new(), ..Default::default()
     };
     let platform = PlatformRules { name: "X".into(), max_chars: Some(280), rules: "One post. No hashtags.".into() };
     let brief = "資本政策の相談を受けたときに最初に聞くことについて。創業者に向けて、エクイティは時間を売る契約だと伝えたい。";

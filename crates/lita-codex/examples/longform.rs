@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
         avg_sentence_length_chars: 42,
         preferred_words: vec!["エクイティ".into(), "ファイナンス".into(), "構造".into()],
         avoided_words: vec!["絶対".into()], opens_with: "問いから入る".into(), closes_with: "含みを残して締める".into(),
-        uses_emoji: false, representative_excerpts: vec![], one_line: String::new(),
+        uses_emoji: false, representative_excerpts: vec![], one_line: String::new(), ..Default::default()
     };
     let note = PlatformRules { name: "note".into(), max_chars: None, rules: "A long-form article for note.com. Plain text: a title on its own (returned separately), then paragraphs separated by blank lines. Use headings sparingly as a line starting with \"## \". No markdown emphasis, no hashtags, no links unless the brief provides one.".into() };
     let brief = "投資家との初回面談で何を聞くべきか。創業者向けに、彼らが何を恐れているかを最初に聞け、という一点を掘り下げる。1,500 字ほど。";

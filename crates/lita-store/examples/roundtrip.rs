@@ -38,7 +38,8 @@ fn main() -> Result<()> {
         closes_with: String::new(),
         uses_emoji: false,
         representative_excerpts: vec![Excerpt { excerpt: "例".into(), why: "短い".into() }],
-            one_line: String::new(),
+        one_line: String::new(),
+        ..Default::default()
     };
     let sources = vec![
         NewSource { kind: SourceKind::Paste, origin: None, account: None, body: "一つ目".into() },
@@ -70,6 +71,7 @@ fn main() -> Result<()> {
         title: String::new(),
         body: String::new(),
         brief: "新機能の告知".into(),
+        ..Default::default()
     })?;
     ensure!(article.status == ArticleStatus::Draft && article.body.is_empty());
     let v1 = me.create_version(&NewVersion {

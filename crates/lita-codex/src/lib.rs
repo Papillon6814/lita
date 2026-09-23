@@ -8,6 +8,7 @@
 
 pub mod post;
 pub mod sample;
+pub mod topics;
 pub mod voice;
 
 use std::fmt;
