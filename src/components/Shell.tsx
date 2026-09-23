@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { host, type ArticleStatus, type CodexStatus, type SessionStatus } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { Sidebar, FILTERS } from "./Sidebar";
 import { ArticleList } from "./ArticleList";
+import { TopicPicker } from "./TopicPicker";
 import { Editor } from "./Editor";
 import { VoiceSection } from "./VoiceSection";
 
@@ -13,6 +14,9 @@ import { VoiceSection } from "./VoiceSection";
 export type Route =
   | { kind: "articles"; filter: ArticleStatus | "all" }
   | { kind: "article"; id: string }
+  // Deciding what to write about: one screen, reached from the list and
+  // returning to it (no sidebar entry, D-52).
+  | { kind: "topics" }
   // A voice can be opened from an article (the editor's 調整する link); then
   // there is one way back, to that same article.
   | { kind: "voices"; voiceId?: string; backTo?: { kind: "article"; id: string } };
@@ -21,6 +25,7 @@ const ROUTE_KEY = "lita.route";
 
 function initialRoute(): Route {
   const scene = mockScene();
+  if (scene?.startsWith("topics")) return { kind: "topics" };
   if (scene?.startsWith("editor")) return { kind: "article", id: "a1" };
   if (scene?.startsWith("voice") || scene?.startsWith("intake") || scene === "building") return { kind: "voices" };
   if (scene?.startsWith("articles")) return { kind: "articles", filter: "all" };
@@ -49,6 +54,15 @@ type Props = {
 export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
   const [route, setRoute] = useState<Route>(initialRoute);
   useEffect(() => { try { sessionStorage.setItem(ROUTE_KEY, JSON.stringify(route)); } catch {} }, [route]);
+
+  // Anything left waiting from last time goes on quietly, once, as soon as
+  // there is a session to write with (no confirmation, no resume button).
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || session?.status !== "signed_in") return;
+    started.current = true;
+    void host.startQueue().catch(() => {});
+  }, [session]);
 
 
   // A new article starts with the voice used last (D-55: there is no
@@ -82,7 +96,21 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
       />
       <main className="main">
         {route.kind === "articles" && (
-          <ArticleList filter={route.filter} onOpen={(id) => setRoute({ kind: "article", id })} onNew={() => void newArticle()} onGoVoices={() => setRoute({ kind: "voices" })} />
+          <ArticleList
+            filter={route.filter}
+            onOpen={(id) => setRoute({ kind: "article", id })}
+            onNew={() => void newArticle()}
+            onGoVoices={() => setRoute({ kind: "voices" })}
+            onGoTopics={() => setRoute({ kind: "topics" })}
+            onShowCodexSteps={onShowCodexSteps}
+          />
+        )}
+        {route.kind === "topics" && (
+          <TopicPicker
+            onBack={() => setRoute({ kind: "articles", filter: "all" })}
+            onQueued={() => setRoute({ kind: "articles", filter: "all" })}
+            onGoVoices={() => setRoute({ kind: "voices" })}
+          />
         )}
         {route.kind === "article" && (
           <Editor

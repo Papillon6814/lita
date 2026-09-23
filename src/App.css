@@ -301,6 +301,52 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .badge { background: var(--mint-soft); color: var(--mint-ink); border-radius: 999px; padding: 1px 9px; font-size: 0.78rem; font-weight: 700; }
 .badge.status-approved { background: var(--mint-ink); color: #fff; }
 .badge.status-archived { background: var(--soft); color: var(--mute); }
+.head-right { display: flex; align-items: center; gap: 10px; }
+.page-head .search { width: 220px; }
+
+/* A queued row carries its own way out, so the row is a flex line and the
+   button inside it keeps the whole title pressable. The three words of
+   state reuse the two badge tones above; nothing new. */
+.arow { display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--line); }
+.arow .article-row { flex: 1; min-width: 0; border-bottom: 0; }
+.arow-act { display: flex; gap: 14px; font-size: 0.88rem; white-space: nowrap; padding: 15px 8px 0 0; }
+.badge.now { display: inline-flex; align-items: center; gap: 6px; }
+.badge.now .spinner { width: 9px; height: 9px; border-width: 2px; border-color: #bfe6de; border-top-color: var(--mint-ink); }
+.notice { display: flex; align-items: baseline; gap: 10px; background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: var(--r-ctl); padding: 9px 13px; font-size: 0.9rem; margin: 0 0 10px; }
+.notice .link { color: var(--warn-ink); font-weight: 700; }
+.articles .saved { margin: 0 0 10px; }
+.articles .saved .link { color: var(--mute); font-weight: 400; margin-left: 6px; font-size: 0.85rem; }
+
+/* Choosing what to write about */
+.topics-page h2 { margin: 0 0 4px; }
+.topics-page .sub { font-size: 0.95rem; margin: 0 0 4px; }
+.topics-page .sect { margin-top: var(--gap); }
+.sect-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
+.sect-head h4 { margin: 0; font-size: 0.88rem; font-weight: 700; }
+.sect-head .muted { font-size: 0.82rem; }
+.sect-head .link { font-size: 0.85rem; margin-left: auto; }
+.policy { background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); padding: 2px var(--pad-x); }
+.pf { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.pf:last-child { border-bottom: 0; }
+.pf > span { color: var(--mute); font-size: 0.88rem; }
+.pf .v { border: 0; background: none; padding: 4px 0; font: inherit; color: var(--fg); width: 100%; }
+.pf .v:focus { outline: none; box-shadow: none; border-bottom: 1px solid var(--mint); border-radius: 0; }
+.aim { display: flex; gap: 12px; align-items: center; }
+.aim input { flex: 1; }
+.topics { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); }
+.trow { display: flex; gap: 10px; align-items: center; padding: 5px 14px; border-bottom: 1px solid var(--line); font-size: 0.95rem; cursor: pointer; }
+.topics li:last-child .trow { border-bottom: 0; }
+.trow.on { background: var(--mint-soft); }
+.topics li:first-child .trow { border-radius: var(--r-box) var(--r-box) 0 0; }
+.topics li:last-child .trow { border-radius: 0 0 var(--r-box) var(--r-box); }
+.trow input { width: auto; accent-color: var(--mint-ink); margin: 0; flex: none; }
+.trow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack { display: flex; gap: 14px; align-items: center; margin-top: var(--gap); flex-wrap: wrap; }
+.stack .grow { flex: 1; }
+.stack .small { font-size: 0.85rem; }
+.sel { display: inline-flex; align-items: center; gap: 6px; font-size: 0.88rem; color: var(--mute); }
+.sel select { font: inherit; font-size: 0.88rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; color: var(--fg); }
+.working { display: flex; align-items: center; gap: 9px; color: var(--mute); font-size: 0.9rem; margin: 10px 0 0; }
 
 /* Editor */
 .editor-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }

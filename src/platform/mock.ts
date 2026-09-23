@@ -13,7 +13,11 @@
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
-// write-result, write-over, write-error. Add `&lang=en` to force English.
+// write-result, write-over, write-error,
+// topics (picking titles, policy empty), topics-picked (ten titles, three
+// picked, policy filled), articles-queued (one writing, two waiting),
+// articles-queue-failed (one written, one not written, one waiting, and the
+// whole thing stopped). Add `&lang=en` to force English.
 
 import type * as T from "./types";
 
@@ -159,10 +163,87 @@ const articleBodies = [
 ];
 const articles: T.Article[] = scene === "articles-empty" || scene === "articles-first-run" ? [] : articleBodies.map((a, i) => ({
   id: `a${i + 1}`, voice_id: "v1", platform_id: a.platform, title: a.title, body: a.body, brief: a.brief,
-  status: a.status as T.ArticleStatus, created_at: a.at, updated_at: a.at,
+  status: a.status as T.ArticleStatus, queue: null, created_at: a.at, updated_at: a.at,
 }));
 // The editor scenes open a2 (a draft with a brief).
 if (scene.startsWith("editor")) { const a = articles.find((x) => x.id === (scene === "editor-note" ? "a3" : "a2")); if (a) { articles.splice(articles.indexOf(a), 1); articles.unshift({ ...a, id: "a1" }); articles[1] = { ...articles[1], id: "a2" }; } }
+
+// ----- the queue (article-queue, 2026-09-23) --------------------------------
+
+// The two article-list scenes hold still so a screenshot catches them; the
+// queue only really moves when titles are lined up in this session.
+const frozen = scene === "articles-queued" || scene === "articles-queue-failed";
+const queuedTitles = ["借入とエクイティ、どちらが高い金か", "資金繰りは月ではなく週で見る", "撤退の基準は、始める前に決める"];
+if (frozen) {
+  const failed = scene === "articles-queue-failed";
+  const states: (T.QueueState | null)[] = failed ? [null, "failed", "waiting"] : ["writing", "waiting", "waiting"];
+  articles.unshift(...queuedTitles.map((title, i) => ({
+    id: `q${i + 1}`, voice_id: "v1", platform_id: "note", title,
+    body: failed && i === 0 ? "返さなくていい金が、いちばん高い金になることがあります。" : "",
+    brief: "返さない金の方が高くつく、という話を一本。", status: "draft" as T.ArticleStatus,
+    queue: states[i], created_at: ago(i), updated_at: ago(i),
+  })));
+}
+
+const emptyPolicy: T.Policy = { audience: "", takeaway: "", topics: [], avoid: "" };
+const fullPolicy: T.Policy = {
+  audience: "これから会社を買う経営者",
+  takeaway: "値段より先に見るものがある",
+  topics: ["資金繰り", "買収", "採用"],
+  avoid: "個別の会社名",
+};
+let policy: T.Policy = scene === "topics-picked" ? fullPolicy : emptyPolicy;
+
+const topicRounds = [
+  [
+    "借入とエクイティ、どちらが高い金か",
+    "値付けの前に、売り手が手放したくないもの",
+    "資金繰りは月ではなく週で見る",
+    "小さな会社の採用は、席ではなく仕事で決める",
+    "当たらない前提で事業計画を作る",
+    "のれんの話を、経営の言葉に直す",
+    "社長が数字を読めるようになる順番",
+    "撤退の基準は、始める前に決める",
+    "銀行との面談で、先に出す一枚",
+    "買収の後、最初の 90 日でしないこと",
+  ],
+  [
+    "引き継ぎの三か月で、先に壊すもの",
+    "月次が出るのが遅い会社に共通すること",
+    "面接で聞かない方がいい質問",
+    "値引きを断る言い方を先に決めておく",
+    "社長が現場を離れる順番",
+    "在庫は、決算より先に人を縛る",
+    "digital でない会社の digital 化",
+    "報酬の決め方を、先に紙に書く",
+    "仕入先を一社に寄せたときに起きたこと",
+    "辞めた人の穴を、採用で埋めない",
+  ],
+];
+let topicRound = 0;
+
+const queueHandlers = new Set<(e: T.QueueEvent) => void>();
+const emitQueue = (e: T.QueueEvent) => queueHandlers.forEach((h) => h(e));
+let queueTimer: number | undefined;
+
+// One at a time, in the order they were lined up (which is the order they
+// sit in the list).
+function stepQueue() {
+  if (frozen || queueTimer !== undefined) return;
+  const target = articles.find((a) => a.queue === "writing") ?? articles.find((a) => a.queue === "waiting");
+  if (!target) return;
+  target.queue = "writing";
+  emitQueue({ kind: "changed" });
+  queueTimer = window.setTimeout(() => {
+    queueTimer = undefined;
+    target.body = longBody;
+    target.queue = null;
+    target.updated_at = new Date().toISOString();
+    emitQueue({ kind: "changed" });
+    stepQueue();
+  }, 3000);
+}
+
 const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
   { id: "v3", article_id: "a1", kind: "edited", title: "", body: draftBody, prompt_sent: null, elapsed_ms: null, created_at: ago(3) },
   { id: "v2", article_id: "a1", kind: "shortened", title: "", body: draftBody, prompt_sent: "…", elapsed_ms: 6000, created_at: ago(25) },
@@ -179,7 +260,7 @@ export const mockHost: T.Host = {
   listArticles: async (status) => articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })),
   getArticle: async (id) => articles.find((a) => a.id === id) ?? null,
   createArticle: async (platformId, voiceId) => {
-    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     articles.unshift(a); return a;
   },
   updateArticle: async (id, patch) => {
@@ -206,6 +287,63 @@ export const mockHost: T.Host = {
     const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: previous ? "shortened" : "generated", title: a.title, body: a.body, prompt_sent: "…", elapsed_ms: 6600, created_at: new Date().toISOString() };
     versions.unshift(v);
     return { article: { ...a }, version: v, voice_notes: "常体で、問いで締める癖と「エクイティ」「ファイナンス」を使った。" };
+  },
+  getPolicy: async () => policy,
+  setPolicy: async (p) => { policy = p; },
+  draftPolicy: async () => { await wait(1200); return fullPolicy; },
+  suggestTopics: async (_direction) => {
+    await wait(scene === "topics-picked" ? 200 : 1200);
+    const list = topicRounds[topicRound % topicRounds.length];
+    topicRound += 1;
+    const taken = new Set(articles.map((a) => a.title.trim()));
+    return list.filter((t) => !taken.has(t));
+  },
+  enqueueArticles: async (titles, voiceId, platformId, _effort, direction) => {
+    const brief = [
+      policy.audience && `誰に向けて: ${policy.audience}`,
+      policy.takeaway && `持ち帰ってほしいこと: ${policy.takeaway}`,
+      policy.topics.length > 0 && `よく書く題材: ${policy.topics.join("、")}`,
+      policy.avoid && `触れないこと: ${policy.avoid}`,
+      direction.trim(),
+      "長さは 1,500〜3,000 字。",
+      "外部の事実は調べず、自分の経験と意見の範囲で書く。数字や出来事は断定しない。",
+    ].filter(Boolean).join("\n");
+    const made: T.Article[] = titles.map((title, i) => ({
+      id: `q${nextId++}`, voice_id: voiceId, platform_id: platformId, title, body: "", brief,
+      status: "draft" as T.ArticleStatus, queue: "waiting" as T.QueueState,
+      created_at: new Date(Date.now() - i).toISOString(), updated_at: new Date(Date.now() - i).toISOString(),
+    }));
+    [...made].reverse().forEach((a) => articles.unshift(a));
+    stepQueue();
+    return made.map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) }));
+  },
+  startQueue: async () => { stepQueue(); },
+  dequeueArticle: async (id) => {
+    const i = articles.findIndex((a) => a.id === id);
+    if (i < 0) return;
+    if (articles[i].queue === "writing") {
+      if (queueTimer !== undefined) { window.clearTimeout(queueTimer); queueTimer = undefined; }
+      articles[i].queue = null;
+    } else {
+      articles.splice(i, 1);
+    }
+    emitQueue({ kind: "changed" });
+    stepQueue();
+  },
+  clearQueue: async () => {
+    if (queueTimer !== undefined) { window.clearTimeout(queueTimer); queueTimer = undefined; }
+    for (let i = articles.length - 1; i >= 0; i--) {
+      if (articles[i].queue === "waiting") articles.splice(i, 1);
+      else if (articles[i].queue === "writing") articles[i].queue = null;
+    }
+    emitQueue({ kind: "changed" });
+  },
+  onQueueEvent: async (handler) => {
+    queueHandlers.add(handler);
+    const timer = scene === "articles-queue-failed"
+      ? window.setTimeout(() => handler({ kind: "stopped", error: { code: "network", detail: "fetch failed: ENOTFOUND" } }), 150)
+      : undefined;
+    return () => { queueHandlers.delete(handler); if (timer !== undefined) window.clearTimeout(timer); };
   },
   appVersion: async () => "0.2.0",
   fetchUpdate: async () => {

@@ -41,6 +41,17 @@ export const tauriHost: T.Host = {
   snapshotArticle: (articleId, manual) => invoke<T.ArticleVersion | null>("snapshot_article", { articleId, manual }),
   restoreVersion: (versionId) => invoke<T.Article>("restore_version", { versionId }),
   generateIntoArticle: (articleId, effort, previous) => invoke<T.ArticleWritten>("generate_into_article", { articleId, effort, previous: previous ?? null }),
+  getPolicy: () => invoke<T.Policy>("get_policy"),
+  setPolicy: (policy) => invoke<void>("set_policy", { policy }),
+  draftPolicy: () => invoke<T.Policy>("draft_policy"),
+  suggestTopics: (direction) => invoke<string[]>("suggest_topics", { direction }),
+  enqueueArticles: (titles, voiceId, platformId, effort, direction) =>
+    invoke<T.ArticleSummary[]>("enqueue_articles", { titles, voiceId, platformId, effort, direction }),
+  startQueue: () => invoke<void>("start_queue"),
+  dequeueArticle: (id) => invoke<void>("dequeue_article", { id }),
+  clearQueue: () => invoke<void>("clear_queue"),
+  onQueueEvent: (handler: (e: T.QueueEvent) => void): Promise<UnlistenFn> =>
+    listen<T.QueueEvent>("queue-event", (e) => handler(e.payload)),
   appVersion: () => invoke<string>("app_version"),
   fetchUpdate: () => invoke<T.UpdateInfo | null>("fetch_update"),
   installUpdate: (onEvent) => {

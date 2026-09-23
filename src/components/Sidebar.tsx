@@ -42,7 +42,7 @@ export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, 
     : codex?.status === "config_broken" ? t("codex.pill.configBroken")
     : codex?.status === "error" ? t("codex.pill.error")
     : null;
-  const inArticles = route.kind === "articles" || route.kind === "article";
+  const inArticles = route.kind === "articles" || route.kind === "article" || route.kind === "topics";
   const filter = route.kind === "articles" ? route.filter : null;
 
   return (

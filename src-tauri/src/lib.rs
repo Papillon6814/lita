@@ -12,10 +12,11 @@ use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
+use lita_codex::topics::{self, Existing, Lang, Policy, Topics};
 use lita_codex::voice::{VoiceProfile, pipeline};
 use lita_codex::{CodexCli, Preflight, Request};
 use lita_sources::Piece;
-use lita_store::{Article, ArticlePatch, ArticleStatus, ArticleSummary, ArticleVersion, NewArticle, NewSource, NewVersion, Platform, SourceKind, Store, StoredEffort, VersionKind, Voice, VoiceSummary};
+use lita_store::{Article, ArticlePatch, ArticleStatus, ArticleSummary, ArticleVersion, NewArticle, NewSource, NewVersion, Platform, QueueState, SourceKind, Store, StoredEffort, VersionKind, Voice, VoiceSummary};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
@@ -79,6 +80,11 @@ pub struct AppState {
     build_cancel: Arc<AtomicBool>,
     /// Set by `cancel_generate`; cleared when a generation starts.
     generate_cancel: Arc<AtomicBool>,
+    /// True while the article queue's worker is running (one at a time).
+    queue_running: AtomicBool,
+    /// The effort the queue writes with: what the editor was set to when
+    /// the articles were queued (requirement 13).
+    queue_effort: Mutex<StoredEffort>,
 }
 
 impl AppState {
@@ -92,6 +98,8 @@ impl AppState {
             sign_in_cancel: Arc::new(AtomicBool::new(false)),
             build_cancel: Arc::new(AtomicBool::new(false)),
             generate_cancel: Arc::new(AtomicBool::new(false)),
+            queue_running: AtomicBool::new(false),
+            queue_effort: Mutex::new(StoredEffort::Quality),
         })
     }
 
@@ -659,6 +667,276 @@ async fn set_draft_status(app: AppHandle, id: String, status: String) -> Result<
     update_article(app, id, ArticlePatch { status: Some(status), ..Default::default() }).await
 }
 
+// ----- article queue (requirements 2026-09-23-article-queue) ---------------
+
+/// What the UI hears about the queue. `Changed` says "list again";
+/// `Stopped` carries the one failure that would hit every article.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum QueueEvent {
+    Changed,
+    Stopped { error: UiError },
+}
+
+fn emit_queue(app: &AppHandle, e: QueueEvent) {
+    let _ = app.emit("queue-event", e);
+}
+
+/// Failures that are about the person's setup, not about one article: the
+/// queue stops on them instead of marking every article failed in turn.
+fn stops_the_queue(code: &str) -> bool {
+    matches!(
+        code,
+        "codex_not_logged_in" | "codex_not_installed" | "codex_config_broken" | "codex_quota" | "not_signed_in" | "session_expired" | "network"
+    )
+}
+
+/// The material title suggestions and the policy draft are read from: the
+/// head of every voice's sources, and what has already been written.
+fn topic_material(store: &lita_store::UserStore<'_>) -> Result<(Vec<String>, Vec<Existing>, Lang), UiError> {
+    let mut samples = Vec::new();
+    let mut lang = Lang::Ja;
+    for v in store.voices().map_err(fail)? {
+        if let Some(voice) = store.voice(&v.id).map_err(fail)? {
+            lang = Lang::of(&voice.profile.language);
+            samples.extend(voice.sources.into_iter().map(|s| s.body));
+        }
+    }
+    let existing = store
+        .articles(None)
+        .map_err(fail)?
+        .into_iter()
+        .take(50)
+        .map(|a| Existing { title: a.title, first_line: a.excerpt })
+        .collect();
+    Ok((samples, existing, lang))
+}
+
+#[tauri::command]
+async fn get_policy(app: AppHandle) -> Result<Policy, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).settings().map(|s| s.policy).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+#[tauri::command]
+async fn set_policy(app: AppHandle, policy: Policy) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().store.as_user(token).set_policy(&policy).map_err(fail))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Codex drafts the four fields from the person's writing. Not saved: the
+/// person edits it on screen and saves with `set_policy`.
+#[tauri::command]
+async fn draft_policy(app: AppHandle) -> Result<Policy, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let (samples, existing, lang) = topic_material(&store)?;
+        if samples.is_empty() && existing.is_empty() {
+            return Err(UiError::invalid("nothing to read yet"));
+        }
+        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        let req = Request { prompt: topics::policy_prompt(&refs, &existing, lang), schema: topics::policy_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
+        let run = CodexCli::on_path().run_typed::<Policy>(&req, |_| {}).map_err(fail)?;
+        let mut policy = run.value;
+        policy.topics.truncate(3);
+        Ok(policy)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Ten titles the person could write next, none already written.
+#[tauri::command]
+async fn suggest_topics(app: AppHandle, direction: String) -> Result<Vec<String>, UiError> {
+    const N: usize = 10;
+    let token = app.state::<AppState>().access_token()?;
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let policy = store.settings().map_err(fail)?.policy;
+        let (samples, existing, lang) = topic_material(&store)?;
+        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        // Ask for a few more than shown, so dropping repeats still leaves ten.
+        let req = Request { prompt: topics::topics_prompt(&policy, &refs, &existing, &direction, N + 4, lang), schema: topics::topics_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
+        let run = CodexCli::on_path().run_typed::<Topics>(&req, |_| {}).map_err(fail)?;
+        Ok(topics::dedupe(run.value.topics, &existing, N))
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// One draft per title, brief filled from the policy, queued in the order
+/// given. Starts the worker. Returns the new rows as the list shows them.
+#[tauri::command]
+async fn enqueue_articles(app: AppHandle, titles: Vec<String>, voice_id: String, platform_id: String, effort: StoredEffort, direction: String) -> Result<Vec<ArticleSummary>, UiError> {
+    let titles: Vec<String> = titles.into_iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    if titles.is_empty() || titles.len() > 5 {
+        return Err(UiError::invalid("pick one to five titles"));
+    }
+    let token = app.state::<AppState>().access_token()?;
+    let created = {
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || -> Result<Vec<ArticleSummary>, UiError> {
+            let state = app.state::<AppState>();
+            *state.queue_effort.lock().unwrap() = effort;
+            let store = state.store.as_user(token);
+            let policy = store.settings().map_err(fail)?.policy;
+            let lang = store.voice(&voice_id).map_err(fail)?.map(|v| Lang::of(&v.profile.language)).unwrap_or(Lang::Ja);
+            let mut out = Vec::new();
+            for title in titles {
+                let a = store
+                    .create_article(&NewArticle {
+                        voice_id: Some(voice_id.clone()),
+                        platform_id: platform_id.clone(),
+                        title: title.clone(),
+                        brief: topics::brief_for(&title, &policy, &direction, lang),
+                        queue: Some(QueueState::Waiting),
+                        ..Default::default()
+                    })
+                    .map_err(fail)?;
+                out.push(ArticleSummary { id: a.id, voice_id: a.voice_id, platform_id: a.platform_id, title: a.title, excerpt: String::new(), status: a.status, queue: a.queue, created_at: a.created_at, updated_at: a.updated_at });
+            }
+            Ok(out)
+        })
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))??
+    };
+    emit_queue(&app, QueueEvent::Changed);
+    start_queue(app);
+    Ok(created)
+}
+
+/// Runs the queue until nothing is waiting: one article at a time, oldest
+/// first. Safe to call any time; a second call while running does nothing.
+/// An article left "writing" by a closed app goes back to waiting first.
+#[tauri::command]
+fn start_queue(app: AppHandle) {
+    let state = app.state::<AppState>();
+    if state.queue_running.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let outcome = run_queue(&app);
+        app.state::<AppState>().queue_running.store(false, Ordering::SeqCst);
+        if let Err(error) = outcome {
+            emit_queue(&app, QueueEvent::Stopped { error });
+        }
+    });
+}
+
+fn run_queue(app: &AppHandle) -> Result<(), UiError> {
+    let state = app.state::<AppState>();
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    let mut first = true;
+    loop {
+        let token = state.access_token()?;
+        let store = state.store.as_user(token.clone());
+        let queued = store.queued().map_err(fail)?;
+        if first {
+            first = false;
+            for a in queued.iter().filter(|a| a.queue == Some(QueueState::Writing)) {
+                store.update_article(&a.id, &ArticlePatch { queue: Some(Some(QueueState::Waiting)), ..Default::default() }).map_err(fail)?;
+            }
+        }
+        let Some(next) = queued.into_iter().find(|a| a.queue != Some(QueueState::Failed)) else {
+            return Ok(());
+        };
+        // Codex problems hit every article alike: say so once and stop.
+        match CodexCli::on_path().preflight().map_err(fail)? {
+            Preflight::Ready { .. } => {}
+            Preflight::NotInstalled => return Err(UiError { code: "codex_not_installed", detail: String::new() }),
+            Preflight::NotLoggedIn { .. } => return Err(UiError { code: "codex_not_logged_in", detail: String::new() }),
+            Preflight::ConfigBroken { detail, .. } => return Err(UiError { code: "codex_config_broken", detail }),
+        }
+        // Removed (やめる) between the listing and here: move on.
+        if store.update_article(&next.id, &ArticlePatch { queue: Some(Some(QueueState::Writing)), ..Default::default() }).is_err() {
+            continue;
+        }
+        emit_queue(app, QueueEvent::Changed);
+
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        let cancel = Arc::clone(&state.generate_cancel);
+        let effort = *state.queue_effort.lock().unwrap();
+        let result = write_article(app, token, cancel, working_dir.clone(), &next.id, effort, None);
+        let mark = match &result {
+            Ok(_) => None,
+            // Stopped by the person: an empty draft stays, unmarked.
+            Err(e) if e.code == "cancelled" => None,
+            Err(e) if stops_the_queue(e.code) => Some(QueueState::Waiting),
+            Err(_) => Some(QueueState::Failed),
+        };
+        // The article may have been removed while it was being written.
+        let _ = store.update_article(&next.id, &ArticlePatch { queue: Some(mark), ..Default::default() });
+        emit_queue(app, QueueEvent::Changed);
+        if let Err(e) = result {
+            if stops_the_queue(e.code) {
+                return Err(e);
+            }
+        }
+    }
+}
+
+/// Waiting: the article is deleted (its body is empty; nothing is lost).
+/// Writing: stopped; the empty draft stays. Failed: deleted.
+#[tauri::command]
+async fn dequeue_article(app: AppHandle, id: String) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), UiError> {
+        let state = app2.state::<AppState>();
+        let store = state.store.as_user(token);
+        let article = store.article(&id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such article"))?;
+        match article.queue {
+            Some(QueueState::Writing) => state.generate_cancel.store(true, Ordering::Relaxed),
+            Some(_) => {
+                store.delete_article(&id).map_err(fail)?;
+            }
+            None => {}
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))??;
+    emit_queue(&app, QueueEvent::Changed);
+    Ok(())
+}
+
+/// Everything waiting is deleted and the one being written is stopped.
+#[tauri::command]
+async fn clear_queue(app: AppHandle) -> Result<(), UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), UiError> {
+        let state = app2.state::<AppState>();
+        let store = state.store.as_user(token);
+        for a in store.queued().map_err(fail)? {
+            match a.queue {
+                Some(QueueState::Writing) => state.generate_cancel.store(true, Ordering::Relaxed),
+                Some(QueueState::Waiting) => {
+                    store.delete_article(&a.id).map_err(fail)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))??;
+    emit_queue(&app, QueueEvent::Changed);
+    Ok(())
+}
+
 // ----- articles -------------------------------------------------------------
 
 #[tauri::command]
@@ -1008,6 +1286,14 @@ pub fn run() {
             preview_prompt,
             generate_draft,
             cancel_generate,
+            get_policy,
+            set_policy,
+            draft_policy,
+            suggest_topics,
+            enqueue_articles,
+            start_queue,
+            dequeue_article,
+            clear_queue,
             set_draft_status,
             generate_into_article,
             list_articles,
