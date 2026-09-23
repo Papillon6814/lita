@@ -773,6 +773,15 @@ async fn restore_version(app: AppHandle, version_id: String) -> Result<Article, 
 
 // ----- sources (D-43) ---------------------------------------------------------
 
+/// Progress of a service import, for the row's loading state (#83).
+/// `total` is unknown until the listing has arrived (Medium never knows).
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportProgress {
+    pub kind: &'static str,
+    pub done: usize,
+    pub total: Option<usize>,
+}
+
 /// What an import found, beyond the pieces themselves.
 #[derive(Debug, Serialize)]
 pub struct Imported {
@@ -790,9 +799,13 @@ pub struct Imported {
 const IMPORT_MAX: usize = 20;
 
 #[tauri::command]
-async fn import_note(account: String) -> Result<Imported, UiError> {
+async fn import_note(app: AppHandle, account: String) -> Result<Imported, UiError> {
     tauri::async_runtime::spawn_blocking(move || {
-        let (listing, pieces) = lita_sources::note::import(&account, IMPORT_MAX).map_err(fail)?;
+        let emitter = app.clone();
+        let (listing, pieces) = lita_sources::note::import_with(&account, IMPORT_MAX, |done, total| {
+            let _ = emitter.emit("import-progress", ImportProgress { kind: "note", done, total: Some(total) });
+        })
+        .map_err(fail)?;
         Ok(Imported { pieces, total: Some(listing.total_count), skipped_paid: listing.skipped_paid, recent_only: false })
     })
     .await
@@ -800,9 +813,11 @@ async fn import_note(account: String) -> Result<Imported, UiError> {
 }
 
 #[tauri::command]
-async fn import_medium(handle: String) -> Result<Imported, UiError> {
+async fn import_medium(app: AppHandle, handle: String) -> Result<Imported, UiError> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _ = app.emit("import-progress", ImportProgress { kind: "medium", done: 0, total: None });
         let pieces = lita_sources::medium::import(&handle).map_err(fail)?;
+        let _ = app.emit("import-progress", ImportProgress { kind: "medium", done: pieces.len(), total: Some(pieces.len()) });
         Ok(Imported { pieces, total: None, skipped_paid: 0, recent_only: true })
     })
     .await
