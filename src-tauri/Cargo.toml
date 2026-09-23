@@ -1,6 +1,6 @@
 [package]
 name = "lita"
-version = "0.2.6"
+version = "0.2.7"
 description = "Lita writes your posts, in your voice, using the Codex login you already have."
 edition.workspace = true
 license.workspace = true
