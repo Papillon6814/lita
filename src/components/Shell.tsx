@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { host, type ArticleStatus, type CodexStatus, type SessionStatus } from "../platform/host";
 import { mockScene } from "../platform/mock";
-import { t } from "../i18n";
 import { Sidebar, FILTERS } from "./Sidebar";
 import { ArticleList } from "./ArticleList";
 import { Editor } from "./Editor";
@@ -50,8 +49,18 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
   useEffect(() => { try { sessionStorage.setItem(ROUTE_KEY, JSON.stringify(route)); } catch {} }, [route]);
 
 
+  // A new article starts with the voice used last (D-55: there is no
+  // "default" voice); with a single voice, that one.
   const newArticle = useCallback(async (voiceId?: string) => {
-    const a = await host.createArticle(undefined, voiceId);
+    let id = voiceId;
+    if (!id) {
+      try {
+        const recent = await host.listArticles();
+        id = recent.find((a) => a.voice_id)?.voice_id ?? undefined;
+        if (!id) { const voices = await host.listVoices(); if (voices.length === 1) id = voices[0].id; }
+      } catch {}
+    }
+    const a = await host.createArticle(undefined, id);
     setRoute({ kind: "article", id: a.id });
   }, []);
 
@@ -77,7 +86,6 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
           <Editor key={route.id} id={route.id} onBack={() => setRoute({ kind: "articles", filter: "all" })} onDeleted={() => setRoute({ kind: "articles", filter: "all" })} onGoVoices={() => setRoute({ kind: "voices" })} />
         )}
         {route.kind === "voices" && <VoiceSection onWrite={(voiceId) => void newArticle(voiceId)} />}
-        <footer className="privacy">{t("privacy.note")}</footer>
       </main>
     </div>
   );

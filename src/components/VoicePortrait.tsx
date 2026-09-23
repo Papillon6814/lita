@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { host, type Voice, type VoiceProfile } from "../platform/host";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
@@ -10,16 +10,30 @@ import { mockScene } from "../platform/mock";
 const LANGUAGES: Record<string, string> = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", fr: "Français", de: "Deutsch", es: "Español" };
 const languageName = (tag: string) => LANGUAGES[tag.toLowerCase().split("-")[0]] ?? tag;
 
-type Props = { voice: Voice; onChange: (v: Voice) => void; onStartOver: () => void; onWrite?: () => void };
+type Props = { voice: Voice; onChange: (v: Voice) => void; onDelete: () => void; onWrite?: () => void };
 
-// The daily screen: Lita's one-line reading, the main action, details folded.
-export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) {
+// A page to read (UX review 2026-09-23): the name, Lita's one sentence, one
+// main action. Rename and delete hide behind "…"; the details fold below
+// in three short groups, and the sentence itself is edited in place.
+export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
   const [open, setOpen] = useState(mockScene() === "voice-open");
+  const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(voice.name);
+  const [editingLine, setEditingLine] = useState(false);
+  const [line, setLine] = useState(voice.profile.one_line);
   const [error, setError] = useState<UiError | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const p = voice.profile;
   const created = new Date(voice.created_at).toLocaleDateString();
+  const lead = p.one_line.trim() || leadSentence(p);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menu]);
 
   const rename = async () => {
     const next = name.trim();
@@ -43,6 +57,12 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
     }
   };
 
+  const saveLine = async () => {
+    const next = line.trim();
+    setEditingLine(false);
+    if (next && next !== p.one_line.trim()) await save({ ...p, one_line: next });
+  };
+
   return (
     <div className="voice">
       <section className="portrait">
@@ -58,18 +78,35 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
             ) : (
               <>
                 <h2>{voice.name}</h2>
-                <button className="quiet sm" onClick={() => setRenaming(true)}>{t("voice.rename")}</button>
+                <div className="kebab-wrap" ref={menuRef}>
+                  <button className="kebab" aria-haspopup="menu" aria-expanded={menu} aria-label={t("voice.menu")} onClick={() => setMenu((m) => !m)}>…</button>
+                  {menu && (
+                    <div className="menu" role="menu">
+                      <button role="menuitem" className="menu-item" onClick={() => { setMenu(false); setName(voice.name); setRenaming(true); }}>{t("voice.rename")}</button>
+                      <button role="menuitem" className="menu-item danger" onClick={() => { setMenu(false); onDelete(); }}>{t("voice.delete")}</button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
-          <p className="lead">{p.one_line.trim() || leadSentence(p)}</p>
+          {editingLine ? (
+            <form className="line-edit" onSubmit={(e) => { e.preventDefault(); void saveLine(); }}>
+              <textarea aria-label={t("voice.fixSummary")} value={line} onChange={(e) => setLine(e.target.value)} rows={2} autoFocus />
+              <div className="row">
+                <button type="submit" className="btn sm">{t("action.save")}</button>
+                <button type="button" className="quiet sm" onClick={() => { setLine(p.one_line); setEditingLine(false); }}>{t("action.cancel")}</button>
+              </div>
+            </form>
+          ) : (
+            <p className="lead">{lead}</p>
+          )}
           <p className="attr">
             {t("voice.attribution", { n: String(voice.voice_sources.length), date: created })}{" "}
-            <button className="link" onClick={() => setOpen(true)}>{t("voice.fixSummary")}</button>
+            {!editingLine && <button className="link" onClick={() => { setLine(lead); setEditingLine(true); }}>{t("voice.fixSummary")}</button>}
           </p>
           <div className="cta">
             <button className="btn pri" onClick={onWrite} disabled={!onWrite}>{t("voice.write")}</button>
-            <button className="quiet" onClick={onStartOver}>{t("voice.delete")}</button>
           </div>
         </div>
       </section>
@@ -78,34 +115,43 @@ export function VoicePortrait({ voice, onChange, onStartOver, onWrite }: Props) 
 
       <details className="more" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
         <summary>{open ? t("voice.details.hide") : t("voice.details.show")}</summary>
-        <dl className="sheet">
-          <TextRow label={t("voice.card.oneLine")} value={p.one_line} onSave={(v) => save({ ...p, one_line: v })} />
-          <Row label={t("voice.card.language")}>{languageName(p.language)}</Row>
-          <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} />
-          <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} />
-          <ListRow label={t("voice.card.tone")} items={p.tone} onSave={(v) => save({ ...p, tone: v })} />
-          <ListRow label={t("voice.card.endings")} items={p.sentence_endings} onSave={(v) => save({ ...p, sentence_endings: v })} />
-          <Row label={t("voice.card.length")}>{t("voice.card.lengthValue", { n: String(p.avg_sentence_length_chars) })}</Row>
-          <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} />
-          <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} />
-          <TextRow label={t("voice.card.opens")} value={p.opens_with} onSave={(v) => save({ ...p, opens_with: v })} />
-          <TextRow label={t("voice.card.closes")} value={p.closes_with} onSave={(v) => save({ ...p, closes_with: v })} />
-          <Row label={t("voice.card.emoji")}>
-            <button className="link" onClick={() => void save({ ...p, uses_emoji: !p.uses_emoji })}>{p.uses_emoji ? t("voice.card.yes") : t("voice.card.no")}</button>
-          </Row>
-          {p.representative_excerpts.length > 0 && (
-            <Row label={t("voice.card.excerpts")}>
-              <details className="excerpts-wrap">
-                <summary className="link-like">{t("voice.card.excerptsShow", { n: String(p.representative_excerpts.length) })}</summary>
-                <ul className="excerpts">
-                  {p.representative_excerpts.map((e, i) => (
-                    <li key={i}><blockquote>{e.excerpt}</blockquote><span className="muted small">{e.why}</span></li>
-                  ))}
-                </ul>
-              </details>
-            </Row>
-          )}
-        </dl>
+        <div className="sheet-groups">
+          <h4 className="sheet-head">{t("voice.group.tone")}</h4>
+          <dl className="sheet">
+            <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} />
+            <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} />
+            <ListRow label={t("voice.card.tone")} items={p.tone} onSave={(v) => save({ ...p, tone: v })} />
+            <ListRow label={t("voice.card.endings")} items={p.sentence_endings} onSave={(v) => save({ ...p, sentence_endings: v })} />
+          </dl>
+          <h4 className="sheet-head">{t("voice.group.words")}</h4>
+          <dl className="sheet">
+            <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} />
+            <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} />
+          </dl>
+          <h4 className="sheet-head">{t("voice.group.structure")}</h4>
+          <dl className="sheet">
+            <TextRow label={t("voice.card.opens")} value={p.opens_with} onSave={(v) => save({ ...p, opens_with: v })} />
+            <TextRow label={t("voice.card.closes")} value={p.closes_with} onSave={(v) => save({ ...p, closes_with: v })} />
+          </dl>
+          <p className="sheet-foot">
+            <span>{t("voice.card.language")}: {languageName(p.language)}</span>
+            <span className="sep">·</span>
+            <span>{t("voice.card.emoji")}: {p.uses_emoji ? t("voice.card.yes") : t("voice.card.no")} <button className="link" onClick={() => void save({ ...p, uses_emoji: !p.uses_emoji })}>{t("action.fix")}</button></span>
+            {p.representative_excerpts.length > 0 && (
+              <>
+                <span className="sep">·</span>
+                <details className="excerpts-wrap">
+                  <summary className="link-like">{t("voice.card.excerptsShow", { n: String(p.representative_excerpts.length) })}</summary>
+                  <ul className="excerpts">
+                    {p.representative_excerpts.map((e, i) => (
+                      <li key={i}><blockquote>{e.excerpt}</blockquote><span className="muted small">{e.why}</span></li>
+                    ))}
+                  </ul>
+                </details>
+              </>
+            )}
+          </p>
+        </div>
       </details>
     </div>
   );

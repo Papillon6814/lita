@@ -31,6 +31,7 @@ export function BuildingVoice({ onCancel }: { onCancel: () => void }) {
         ))}
       </ol>
       <p className="muted small">{t("voice.building.hint")}</p>
+      <footer className="privacy">{t("privacy.note")}</footer>
     </div>
   );
 }

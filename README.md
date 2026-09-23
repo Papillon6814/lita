@@ -12,9 +12,8 @@ CLI](https://developers.openai.com/codex/cli) you already signed into, so your
 ChatGPT login stays where it is and Lita never touches your credentials.
 
 > **Status: v0.2, in daily use by the author.** Articles, an editor with
-> autosave and version history, long-form for note and Medium, and several
-> Voices with a trial-write to tune them. There is no installer yet: you run
-> it from source. See [Roadmap](#roadmap).
+> autosave and version history, long-form for note and Medium, and one or
+> more Voices. See [Install](#install) and [Roadmap](#roadmap).
 
 Site and privacy policy: <https://lita.muumoo.online/>
 
@@ -58,8 +57,9 @@ Brief, in the editor ──────────────┘
    and can stop a run.
 5. **Edit and keep.** Everything you type is saved as you go. Each generation,
    rewrite and restore is a version you can go back to. Copy when it is right.
-6. **Tune the Voice.** Fix any line of the profile, then use the trial write
-   to see the same brief before and after. Keep a Voice per way of writing.
+6. **Tune the Voice.** Fix Lita's one-line reading of your writing, or any
+   line of the details, in place. Keep a Voice per way of writing; a new
+   article starts with the one you used last.
 
 ## Design principles
 
@@ -133,7 +133,7 @@ The repository is a Cargo workspace:
 | Version | Scope |
 | --- | --- |
 | **v0.1** (done) | Voice from note / Medium / X archive / paste · one Voice · brief → X post → approve → copy · fast/careful · prompt preview · shorter rewrite |
-| **v0.2** (done) | Articles as the home · editor with autosave and version history · long-form for note and Medium · several Voices, a default, trial write |
+| **v0.2** (done) | Articles as the home · editor with autosave and version history · long-form for note and Medium · several Voices |
 | v0.3 | Distribution: signed and notarised builds on GitHub Releases, in-app updates, Homebrew cask · publisher plugins (draft to platform) · other model backends |
 
 Slack as a Voice source was investigated and shelved: Marketplace listing
