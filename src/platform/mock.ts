@@ -4,7 +4,7 @@
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
-// intake, intake-loaded, building, voice, voice-open, voice-sources (mixed connections), voice-template (older
+// intake, intake-open (note row unfolded), intake-loaded, building, voice, voice-open, voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
@@ -79,7 +79,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-loaded", "building", "articles-first-run"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-loaded", "building", "articles-first-run"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 

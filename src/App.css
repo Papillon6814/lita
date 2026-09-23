@@ -125,6 +125,21 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .src-body.manual { flex-direction: row; gap: 14px; flex-wrap: wrap; padding-top: 8px; font-size: 0.92rem; }
 .src-hint { color: var(--mute); font-size: 0.82rem; line-height: 1.5; }
 .src-actions { display: flex; gap: 14px; align-items: center; padding-top: 4px; font-size: 0.88rem; white-space: nowrap; }
+/* Folded rows (2026-09-23): a place not yet connected is one line, name + hint, in the
+   same "▸" idiom as 詳細を見る; it opens its input on click. Ticked rows stay heaviest,
+   手作業 is lightest. Weight comes from --mute, row height and the closed input only. */
+.srcrow.lite { grid-template-columns: 72px 1fr; align-items: baseline; padding: 9px 0; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; font: inherit; color: var(--fg); cursor: pointer; }
+.srcrow.lite:last-child { border-bottom: 0; }
+.srcrow.lite .src-label { font-weight: 500; padding-top: 0; }
+.srcrow.lite:hover .src-label, .src-toggle:hover { color: var(--mint-ink); }
+.src-toggle { background: none; border: 0; text-align: left; cursor: pointer; font: inherit; font-weight: 700; font-size: 0.9rem; color: var(--mute); }
+.srcrow.lite .src-label::before, .src-toggle::before { content: "▸"; display: inline-block; font-size: 0.75rem; margin-right: 6px; transition: transform .15s; }
+.src-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.srcrow.hand { padding: 9px 0; align-items: center; }
+.srcrow.hand .src-label { font-weight: 500; padding-top: 0; padding-left: 15px; }
+.srcrow.hand .src-body.manual { margin: 0; padding-top: 0; font-size: 0.88rem; }
+.srcrow.hand .link { color: var(--mute); font-weight: 400; }
+.srcrow.hand .link:hover { color: var(--mint-ink); }
 @media (max-width: 720px) { .srcrow { grid-template-columns: 1fr; } }
 .seg { display: inline-flex; background: #fff; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 3px; margin-bottom: 10px; }
 .seg button { font: inherit; font-size: 0.9rem; padding: 6px 14px; border: none; background: transparent; border-radius: 6px; color: var(--mute); cursor: pointer; transition: background .15s, color .15s; }
