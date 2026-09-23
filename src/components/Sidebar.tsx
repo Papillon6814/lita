@@ -16,7 +16,9 @@ type Props = {
   onUpdate: () => void;
 };
 
-const FILTERS: (ArticleStatus | "all")[] = ["all", "draft", "approved", "archived"];
+// Only "all" and "draft" are worth a sidebar entry: approved and archived
+// articles stay visible in the list, told apart by their badge (2026-09-23).
+export const FILTERS: (ArticleStatus | "all")[] = ["all", "draft"];
 
 // Quiet when everything is fine; the Codex pill appears only when it is not.
 export function Sidebar({ route, onRoute, onNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
