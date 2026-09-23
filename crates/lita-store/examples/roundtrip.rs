@@ -41,8 +41,8 @@ fn main() -> Result<()> {
             one_line: String::new(),
     };
     let sources = vec![
-        NewSource { kind: SourceKind::Paste, origin: None, body: "一つ目".into() },
-        NewSource { kind: SourceKind::File, origin: Some("notes.txt".into()), body: "二つ目".into() },
+        NewSource { kind: SourceKind::Paste, origin: None, account: None, body: "一つ目".into() },
+        NewSource { kind: SourceKind::File, origin: Some("notes.txt".into()), account: None, body: "二つ目".into() },
     ];
     let before = me.voices()?.len();
     let voice = me.create_voice("roundtrip", &profile, &sources)?;

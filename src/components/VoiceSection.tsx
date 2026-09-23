@@ -7,6 +7,7 @@ import { VoiceIntake } from "./VoiceIntake";
 import { BuildingVoice } from "./BuildingVoice";
 import { VoicePortrait } from "./VoicePortrait";
 import { VoiceList } from "./VoiceList";
+import { VoiceSources } from "./VoiceSources";
 
 // Voices (D-44, simplified 2026-09-23 after the UX review, D-53..D-56):
 // most people keep one or two. With none, the intake is the whole screen;
@@ -17,6 +18,7 @@ type State =
   | { kind: "list"; names: string[] }
   | { kind: "new"; error?: UiError; first: boolean; names: string[] }
   | { kind: "building"; first: boolean; names: string[] }
+  | { kind: "rebuilding"; voice: Voice; count: number; names: string[] }
   | { kind: "voice"; voice: Voice; count: number; names: string[] };
 
 export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }) {
@@ -57,6 +59,19 @@ export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }
     }
   }, [start]);
 
+  // Relearn the profile from everything the voice now holds (#68).
+  const rebuild = useCallback(async (from: Extract<State, { kind: "voice" }>) => {
+    setState({ kind: "rebuilding", voice: from.voice, count: from.count, names: from.names });
+    try {
+      const voice = await host.rebuildVoice(from.voice.id);
+      setState({ ...from, voice });
+    } catch (e) {
+      const error = asUiError(e);
+      if (error.code !== "cancelled") alert(error.detail);
+      setState(from);
+    }
+  }, []);
+
   const remove = useCallback(async (voice: Voice) => {
     if (!window.confirm(t("voice.deleteConfirm"))) return;
     try { await host.deleteVoice(voice.id); await start(); }
@@ -74,6 +89,7 @@ export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }
         </div>
       );
     case "building": return <BuildingVoice onCancel={() => void host.cancelVoiceBuild()} />;
+    case "rebuilding": return <BuildingVoice relearn onCancel={() => void host.cancelVoiceBuild()} />;
     case "voice":
       return (
         <div className="voice-page">
@@ -84,6 +100,7 @@ export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }
             onDelete={() => void remove(state.voice)}
             onWrite={() => onWrite(state.voice.id)}
           />
+          <VoiceSources voice={state.voice} onChange={(voice) => setState({ ...state, voice })} onRebuild={() => void rebuild(state)} />
           <p className="voice-foot">
             <button className="link" onClick={() => setState({ kind: "new", first: false, names: state.names })}>{t("voice.another")}</button>
           </p>

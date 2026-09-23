@@ -4,7 +4,7 @@
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
-// intake, intake-loaded, building, voice, voice-open, voice-template (older
+// intake, intake-loaded, building, voice, voice-open, voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
@@ -44,7 +44,7 @@ const profile: T.VoiceProfile = {
 };
 
 const sources: T.VoiceSource[] = [1, 2, 3, 4].map((i) => ({
-  id: `s${i}`, kind: "note", origin: `https://note.com/kuno/n/n${i}`,
+  id: `s${i}`, kind: "note", origin: `https://note.com/kuno/n/n${i}`, account: "kuno",
   body: "資本政策は、何を諦めるかを先に決める作業なのだろうか。".repeat(8), created_at: "2026-09-22T09:00:00Z",
 }));
 
@@ -52,8 +52,14 @@ const voice2: T.Voice = {
   id: "v2", name: "貼った文章", profile: { ...profile, formality: "です・ます調", tone: ["落ち着いた", "丁寧"], sentence_endings: ["と思います。", "ではないでしょうか。"], one_line: "あなたの文章は、です・ます調で落ち着いて丁寧。「ではないでしょうか」と問いかけて締める。" },
   created_at: "2026-09-23T01:00:00Z", updated_at: "2026-09-23T01:00:00Z", voice_sources: sources.slice(0, 2),
 };
+const mixedSources: T.VoiceSource[] = [
+  ...sources,
+  { id: "m1", kind: "medium", origin: "https://medium.com/@kuno/a", account: "kuno", body: "…", created_at: "2026-09-23T02:00:00Z" },
+  { id: "m2", kind: "medium", origin: "https://medium.com/@kuno/b", account: "kuno", body: "…", created_at: "2026-09-23T02:00:00Z" },
+  { id: "p1", kind: "paste", origin: null, account: null, body: "貼った一段落。", created_at: "2026-09-23T02:30:00Z" },
+];
 let voice: T.Voice = {
-  id: "v1", name: noteName, profile, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: sources,
+  id: "v1", name: noteName, profile, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
@@ -156,6 +162,9 @@ export const mockHost: T.Host = {
   renameVoice: async (_id, name) => { voice = { ...voice, name }; },
   updateVoiceProfile: async (_id, profile) => (voice = { ...voice, profile }),
   createVoice: () => never(),
+  addVoiceSources: async (_id, added) => { await wait(300); voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
+  removeVoiceSources: async (_id, kind, account) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => !(s.kind === kind && s.account === account)) }; return voice; },
+  rebuildVoice: () => never(),
   cancelVoiceBuild: async () => {},
   materialBudget: async () => ({ per_piece_chars: 1500, total_chars: 20000 }),
   platforms: async () => [{ id: "medium", name: "Medium", max_chars: null, rules: "" }, { id: "note", name: "note", max_chars: null, rules: "" }, { id: "x", name: "X", max_chars: 280, rules: "" }],

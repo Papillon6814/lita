@@ -15,7 +15,7 @@ export type SessionStatus =
 
 export type SourceKind = "paste" | "file" | "note" | "medium" | "x";
 
-export type SourceInput = { kind: SourceKind; origin: string | null; body: string };
+export type SourceInput = { kind: SourceKind; origin: string | null; account: string | null; body: string };
 
 export type VoiceProfile = {
   language: string;
@@ -38,6 +38,8 @@ export type VoiceSource = {
   id: string;
   kind: SourceKind;
   origin: string | null;
+  /** note account / Medium handle / "archive" for X; null for pasted text and files (#68). */
+  account: string | null;
   body: string;
   created_at: string;
 };
@@ -116,6 +118,9 @@ export type Host = {
   renameVoice: (id: string, name: string) => Promise<void>;
   updateVoiceProfile: (id: string, profile: VoiceProfile) => Promise<Voice | null>;
   createVoice: (name: string, sources: SourceInput[]) => Promise<Voice>;
+  addVoiceSources: (voiceId: string, sources: SourceInput[]) => Promise<Voice | null>;
+  removeVoiceSources: (voiceId: string, kind: SourceKind, account: string | null) => Promise<Voice | null>;
+  rebuildVoice: (voiceId: string) => Promise<Voice>;
   cancelVoiceBuild: () => Promise<void>;
   materialBudget: () => Promise<MaterialBudget>;
   platforms: () => Promise<Platform[]>;

@@ -283,6 +283,19 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .voice-line { line-height: 1.6; }
 .voice-meta { color: var(--mute); font-size: 0.82rem; }
 .voice-page .back { padding-bottom: 12px; }
+.sources { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.sources h3 { margin: 0; font-size: 1rem; }
+.conn-rows { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.conn-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+.conn-row:last-child { border-bottom: 0; }
+.conn-name { font-weight: 700; color: var(--mint-ink); }
+.conn-actions { margin-left: auto; display: flex; gap: 14px; font-size: 0.88rem; }
+.sources-add { margin-top: 12px; }
+.paste-add { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.paste-add textarea { width: 100%; font: inherit; line-height: 1.7; }
+.relearn { margin-top: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.using-line .conn { white-space: nowrap; }
+.using-line .sep { color: #d8d2c6; margin: 0 8px; }
 .voice-foot { margin: 28px 0 0; padding-top: 18px; border-top: 1px solid var(--line); font-size: 0.9rem; }
 .kebab-wrap { position: relative; margin-left: auto; }
 .kebab { font: inherit; font-size: 1.1rem; line-height: 1; padding: 2px 10px 6px; border-radius: 999px; border: 1px solid transparent; background: none; color: var(--mute); cursor: pointer; letter-spacing: 1px; }
