@@ -265,7 +265,48 @@ async fn update_voice_profile(app: AppHandle, id: String, profile: VoiceProfile)
 pub struct SourceInput {
     pub kind: SourceKind,
     pub origin: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
     pub body: String,
+}
+
+fn to_sources(sources: Vec<SourceInput>) -> Vec<NewSource> {
+    sources
+        .into_iter()
+        .map(|s| NewSource { kind: s.kind, origin: s.origin, account: s.account, body: s.body.trim().to_string() })
+        .filter(|s| !s.body.is_empty())
+        .collect()
+}
+
+/// Reads a voice profile out of `sources` with Codex, reporting the stages
+/// on `voice-progress`. Shared by the first build and by relearning (#68).
+fn extract_profile(app: &AppHandle, sources: &[NewSource], cancel: Arc<AtomicBool>, working_dir: std::path::PathBuf) -> Result<VoiceProfile, UiError> {
+    std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+    let _ = app.emit("voice-progress", VoiceProgress::Started);
+    let bodies: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
+    let material = select_material(&bodies, Budget::default());
+    let samples: Vec<&str> = material.samples.iter().map(String::as_str).collect();
+    let req = Request {
+        prompt: VoiceProfile::extraction_prompt(&samples),
+        schema: VoiceProfile::extraction_schema(),
+        model: None,
+        effort: Effort::Quality,
+        working_dir,
+    };
+    let emitter = app.clone();
+    let run = CodexCli::on_path()
+        .run_typed_cancellable::<VoiceProfile>(
+            &req,
+            |event| {
+                if event.kind == "turn.started" {
+                    let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
+                }
+            },
+            cancel,
+        )
+        .map_err(fail)?;
+    let _ = app.emit("voice-progress", VoiceProgress::Extracted);
+    Ok(run.value)
 }
 
 /// Progress of a Voice build, for the stage display (D-26). Codex reports
@@ -298,11 +339,7 @@ fn material_budget() -> MaterialBudget {
 /// `Budget::default()` (R-1); the sources are stored in full regardless.
 #[tauri::command]
 async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -> Result<Voice, UiError> {
-    let sources: Vec<NewSource> = sources
-        .into_iter()
-        .map(|s| NewSource { kind: s.kind, origin: s.origin, body: s.body.trim().to_string() })
-        .filter(|s| !s.body.is_empty())
-        .collect();
+    let sources = to_sources(sources);
     if sources.is_empty() {
         return Err(UiError::invalid("paste at least one piece of writing"));
     }
@@ -310,50 +347,78 @@ async fn create_voice(app: AppHandle, name: String, sources: Vec<SourceInput>) -
     if name.is_empty() {
         return Err(UiError::invalid("give the voice a name"));
     }
-
     let (token, cancel) = {
         let state = app.state::<AppState>();
         state.build_cancel.store(false, Ordering::Relaxed);
         (state.access_token()?, Arc::clone(&state.build_cancel))
     };
     let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
-
     tauri::async_runtime::spawn_blocking(move || -> Result<Voice, UiError> {
-        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
-        let _ = app.emit("voice-progress", VoiceProgress::Started);
-
-        let bodies: Vec<&str> = sources.iter().map(|s| s.body.as_str()).collect();
-        let material = select_material(&bodies, Budget::default());
-        let samples: Vec<&str> = material.samples.iter().map(String::as_str).collect();
-        let req = Request {
-            prompt: VoiceProfile::extraction_prompt(&samples),
-            schema: VoiceProfile::extraction_schema(),
-            model: None,
-            effort: Effort::Quality,
-            working_dir,
-        };
-        let emitter = app.clone();
-        let run = CodexCli::on_path()
-            .run_typed_cancellable::<VoiceProfile>(
-                &req,
-                |event| {
-                    if event.kind == "turn.started" {
-                        let _ = emitter.emit("voice-progress", VoiceProgress::Thinking);
-                    }
-                },
-                cancel,
-            )
-            .map_err(fail)?;
-        let _ = app.emit("voice-progress", VoiceProgress::Extracted);
-
-        let voice = app
-            .state::<AppState>()
-            .store
-            .as_user(token)
-            .create_voice(&name, &run.value, &sources)
-            .map_err(fail)?;
+        let profile = extract_profile(&app, &sources, cancel, working_dir)?;
+        let voice = app.state::<AppState>().store.as_user(token).create_voice(&name, &profile, &sources).map_err(fail)?;
         let _ = app.emit("voice-progress", VoiceProgress::Saved);
         Ok(voice)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Adds writing to a voice (#68): a new connection or new articles from one.
+/// The profile stays; relearning is `rebuild_voice`.
+#[tauri::command]
+async fn add_voice_sources(app: AppHandle, voice_id: String, sources: Vec<SourceInput>) -> Result<Option<Voice>, UiError> {
+    let sources = to_sources(sources);
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        store.add_sources(&voice_id, &sources).map_err(fail)?;
+        store.voice(&voice_id).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Drops one connection (every piece of `kind` from `account`).
+#[tauri::command]
+async fn remove_voice_sources(app: AppHandle, voice_id: String, kind: SourceKind, account: Option<String>) -> Result<Option<Voice>, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        store.delete_sources(&voice_id, kind, account.as_deref()).map_err(fail)?;
+        store.voice(&voice_id).map_err(fail)
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Reads the profile again from everything the voice now has. Hand edits
+/// to the details are overwritten; the UI says so before calling this.
+#[tauri::command]
+async fn rebuild_voice(app: AppHandle, voice_id: String) -> Result<Voice, UiError> {
+    let (token, cancel) = {
+        let state = app.state::<AppState>();
+        state.build_cancel.store(false, Ordering::Relaxed);
+        (state.access_token()?, Arc::clone(&state.build_cancel))
+    };
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Voice, UiError> {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let voice = store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("no such voice"))?;
+        let sources: Vec<NewSource> = voice
+            .sources
+            .iter()
+            .map(|s| NewSource { kind: s.kind, origin: s.origin.clone(), account: s.account.clone(), body: s.body.clone() })
+            .collect();
+        if sources.is_empty() {
+            return Err(UiError::invalid("this voice has no writing to learn from"));
+        }
+        let profile = extract_profile(&app, &sources, cancel, working_dir)?;
+        store.update_profile(&voice_id, &profile).map_err(fail)?;
+        let _ = app.emit("voice-progress", VoiceProgress::Saved);
+        store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("voice vanished"))
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
@@ -907,6 +972,9 @@ pub fn run() {
             rename_voice,
             update_voice_profile,
             create_voice,
+            add_voice_sources,
+            remove_voice_sources,
+            rebuild_voice,
             cancel_voice_build,
             material_budget,
             platforms,

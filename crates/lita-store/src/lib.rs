@@ -66,6 +66,10 @@ pub struct VoiceSource {
     pub kind: SourceKind,
     /// File name for `File`; `None` for `Paste`.
     pub origin: Option<String>,
+    /// Where the piece was imported from: the note account or Medium handle,
+    /// `archive` for an X archive, `None` for pasted text and files (#68).
+    #[serde(default)]
+    pub account: Option<String>,
     pub body: String,
     pub created_at: String,
 }
@@ -74,6 +78,8 @@ pub struct VoiceSource {
 pub struct NewSource {
     pub kind: SourceKind,
     pub origin: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
     pub body: String,
 }
 
@@ -313,6 +319,25 @@ impl UserStore<'_> {
         self.insert_sources(id, sources)
     }
 
+    /// Adds writing to an existing voice (a new connection, or new articles
+    /// from one). The profile is left alone: relearning is a separate step.
+    pub fn add_sources(&self, voice_id: &str, sources: &[NewSource]) -> Result<()> {
+        self.insert_sources(voice_id, sources)
+    }
+
+    /// Drops one connection's pieces: every source of `kind` from `account`
+    /// (`None` matches the pasted / file pieces, which have no account).
+    pub fn delete_sources(&self, voice_id: &str, kind: SourceKind, account: Option<&str>) -> Result<()> {
+        let kind = serde_json::to_value(kind)?.as_str().context("kind")?.to_string();
+        let mut q = vec![("voice_id", format!("eq.{voice_id}")), ("kind", format!("eq.{kind}"))];
+        q.push(match account {
+            Some(a) => ("account", format!("eq.{a}")),
+            None => ("account", "is.null".into()),
+        });
+        self.request(self.store.http.delete(self.url("voice_sources")).query(&q))?;
+        Ok(())
+    }
+
     /// Deletes a voice and, through `ON DELETE CASCADE`, its sources. Articles
     /// that used it keep their text and lose the link (`voice_id` becomes
     /// null). Returns whether a row was deleted.
@@ -333,7 +358,7 @@ impl UserStore<'_> {
         }
         let rows: Vec<serde_json::Value> = sources
             .iter()
-            .map(|s| json!({ "voice_id": voice_id, "kind": s.kind, "origin": s.origin, "body": s.body }))
+            .map(|s| json!({ "voice_id": voice_id, "kind": s.kind, "origin": s.origin, "account": s.account, "body": s.body }))
             .collect();
         self.request(
             self.store.http.post(self.url("voice_sources")).header("Prefer", "return=minimal").json(&rows),
