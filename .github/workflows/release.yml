@@ -22,6 +22,9 @@ jobs:
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+      APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_API_ISSUER_SECRET: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_SECRET: ${{ secrets.APPLE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,14 +59,28 @@ jobs:
           echo "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
+      # An unset secret arrives as an empty string, and tauri-bundler treats an
+      # empty APPLE_SIGNING_IDENTITY as a real identity ("no identity found").
+      # Only export the Apple variables when they are set; otherwise sign ad hoc.
+      - name: Choose the code-signing identity
+        run: |
+          if [ -n "$APPLE_SIGNING_IDENTITY_SECRET" ]; then
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY_SECRET" >> "$GITHUB_ENV"
+            echo "Signing with the Developer ID certificate"
+          else
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "No Apple certificate configured; signing ad hoc"
+          fi
+          if [ -n "$APPLE_API_ISSUER_SECRET" ] && [ -n "$APPLE_API_KEY_SECRET" ]; then
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER_SECRET" >> "$GITHUB_ENV"
+            echo "APPLE_API_KEY=$APPLE_API_KEY_SECRET" >> "$GITHUB_ENV"
+          fi
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         with:
           tagName: v__VERSION__
           releaseName: "Lita v__VERSION__"
