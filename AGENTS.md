@@ -20,6 +20,26 @@ session and writes back at the end.
 Do not make scope decisions without it. Do not re-litigate anything already
 recorded in `docs/pm/decisions.md`.
 
+## The requirements and UX agents (2026-09-23)
+
+The author gives one-line wishes ("make this feel more optional") and does
+not want to spell out requirements one by one. Two agents own that work:
+
+- `.claude/agents/lita-requirements.md` — **owns requirements.** Turns a
+  wish into `docs/pm/requirements/<date>-<slug>.md`: goal, must / may /
+  not-in-scope, acceptance criteria, defaults it chose without asking, and
+  at most three open questions. It fills in what was not said.
+- `.claude/agents/lita-ux.md` — **owns UI/UX.** Reads the requirement,
+  designs against `docs/pm/ux/principles.md` (which it maintains), implements
+  the UI part (components, ja/en strings, CSS, mock scenes), takes mock
+  screenshots and checks the acceptance criteria. Records go to
+  `docs/pm/ux/<date>-<slug>.md`.
+
+The loop for any UI-facing change: wish → `lita-requirements` → `lita-ux`
+(design + UI implementation + self-review) → coordinator wires non-UI parts,
+commits, opens the PR → `lita-pm` records decisions. A UI change that skipped
+`lita-ux` is not ready for a PR.
+
 ## Non-negotiable constraints
 
 1. **Never read, store, copy, or refresh the user's Codex/OpenAI credentials.**
