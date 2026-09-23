@@ -51,6 +51,8 @@ v0.1 の入口は **本人の公開済みの発信（note → Medium → X ア�
 
 ## 触る前に知っておくこと
 
+- **要件と UI/UX は専任エージェントが責任を持つ（2026-09-23）。** 本人の一言 → `lita-requirements` が `docs/pm/requirements/` に要件書 → `lita-ux` が `docs/pm/ux/principles.md` に照らして設計・UI 実装・モック確認（記録は `docs/pm/ux/`）→ コーディネーターが Rust 側や配線を足して PR → `lita-pm` が決定を記録。UI の変更を `lita-ux` を通さずに PR にしない
+
 - **画面を確認するときは `npm run mock`**（`VITE_LITA_MOCK=1`）で `http://localhost:1430/?scene=<名前>` を開くか headless Chrome で撮る。シーン一覧は `src/platform/mock.ts` の先頭。Tauri を起動して GUI を自動操作するのは、他アプリに入力が飛ぶ事故があったので禁止。実操作の確認は本人に頼む。
 - コード変更は必ず worktree + feature branch で行います。main 直コミットは禁止です。worktree を切ったら `npm install` を忘れずに。
 - `@tauri-apps/*` を import してよいのは `src/platform/` だけです（D-32）。
