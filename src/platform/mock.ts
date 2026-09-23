@@ -265,6 +265,9 @@ export const mockHost: T.Host = {
   listArticles: async (status) => { await wait(readDelay); return articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })); },
   getArticle: async (id) => { await wait(readDelay); return articles.find((a) => a.id === id) ?? null; },
   createArticle: async (platformId, voiceId) => {
+    // An empty draft is handed back instead of a second one (#93).
+    const empty = articles.filter((x) => x.status === "draft" && !x.title && !x.body && !x.brief && !x.queue);
+    if (empty.length > 0) { for (const e of empty.slice(1)) articles.splice(articles.indexOf(e), 1); return empty[0]; }
     const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     articles.unshift(a); return a;
   },

@@ -957,12 +957,23 @@ async fn get_article(app: AppHandle, id: String) -> Result<Option<Article>, UiEr
 
 /// A new, empty article. The voice defaults to the person's default voice,
 /// then to the newest voice, so "新しく書く" never asks first.
+///
+/// Pressing "新しく書く" twice must not leave two empty drafts (#93): an
+/// article with nothing in it yet is handed back instead of a new row, and
+/// any other empty ones are cleared away at the same time.
 #[tauri::command]
 async fn create_article(app: AppHandle, platform_id: Option<String>, voice_id: Option<String>) -> Result<Article, UiError> {
     let token = app.state::<AppState>().access_token()?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let store = state.store.as_user(token);
+        let mut empties = store.empty_drafts().map_err(fail)?.into_iter();
+        if let Some(keep) = empties.next() {
+            for extra in empties {
+                let _ = store.delete_article(&extra.id);
+            }
+            return Ok(keep);
+        }
         let voice_id = match voice_id {
             Some(v) => Some(v),
             None => match store.settings().map_err(fail)?.default_voice_id {
