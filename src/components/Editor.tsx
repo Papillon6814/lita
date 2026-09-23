@@ -165,7 +165,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
     await auto.flush();
     setGen({ kind: "generating" });
     try {
-      const w = await host.generateIntoArticle(id, "best", previous);
+      const w = await host.generateIntoArticle(id, "quality", previous);
       const next: Text = { title: w.article.title, body: w.article.body, brief: w.article.brief };
       setArticle(w.article);
       auto.settle(next);

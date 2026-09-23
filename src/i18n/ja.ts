@@ -183,7 +183,7 @@ export const ja: Record<MessageKey, string> = {
   "write.preview": "Codex に送る内容をそのまま見る",
   "write.generate": "書く",
   "write.generating": "書いています…",
-  "write.generatingLong": "長い記事は 1〜3 分ほどかかります。",
+  "write.generatingLong": "長い記事は 1〜2 分ほどかかります。",
   "write.generatingHint": "Codex は一気に書き上げるので、途中経過はなく、完成したものが一度に届きます。",
   "write.cancel": "中止",
   "write.result": "下書き",

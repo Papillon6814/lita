@@ -181,7 +181,7 @@ export const en = {
   "write.preview": "See exactly what is sent to Codex",
   "write.generate": "Write it",
   "write.generating": "Writing…",
-  "write.generatingLong": "A long article takes one to three minutes.",
+  "write.generatingLong": "A long article takes a minute or two.",
   "write.generatingHint": "Codex is writing the whole post at once; it lands in one piece.",
   "write.cancel": "Stop",
   "write.result": "Draft",
