@@ -120,6 +120,7 @@ mod tests {
             uses_emoji: false,
             representative_excerpts: vec![Excerpt { excerpt: "SECRET-EXCERPT".into(), why: "".into() }],
             one_line: String::new(),
+            ..Default::default()
         };
         let p = generation_prompt(
             &profile,
@@ -140,6 +141,7 @@ mod tests {
             sentence_endings: vec![], avg_sentence_length_chars: 30, preferred_words: vec![], avoided_words: vec![],
             opens_with: String::new(), closes_with: String::new(), uses_emoji: false, representative_excerpts: vec![],
             one_line: String::new(),
+            ..Default::default()
         };
         let platform = PlatformRules { name: "X".into(), max_chars: Some(10), rules: "".into() };
         let p = shorten_prompt(&profile, "brief", &platform, "twelve chars");
@@ -156,6 +158,7 @@ mod tests {
             sentence_endings: vec![], avg_sentence_length_chars: 30, preferred_words: vec![], avoided_words: vec![],
             opens_with: String::new(), closes_with: String::new(), uses_emoji: false, representative_excerpts: vec![],
             one_line: String::new(),
+            ..Default::default()
         };
         let note = PlatformRules { name: "note".into(), max_chars: None, rules: "Plain text.".into() };
         let p = generation_prompt(&profile, "b", &note);

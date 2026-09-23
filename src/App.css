@@ -113,6 +113,15 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 .excerpts-wrap summary { list-style: none; }
 .excerpts { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 12px; }
 .excerpts blockquote { margin: 0 0 3px; padding-left: 12px; border-left: 3px solid var(--mint-soft); line-height: 1.6; }
+/* Why a value says what it says: the quotes Lita read, opened under the row. */
+.evidence { list-style: none; padding: 0; margin: 8px 0 2px; display: flex; flex-direction: column; gap: 10px; }
+.evidence blockquote { margin: 0 0 2px; padding-left: 12px; border-left: 3px solid var(--mint-soft); line-height: 1.6; }
+.evidence li .small { display: block; padding-left: 15px; }
+/* The second link on a row stays grey, so only "直す" carries the accent. */
+.sheet .why { color: var(--mute); font-weight: 400; }
+.sheet .why:hover { color: var(--mint-ink); }
+/* Said once, quietly, on a row Lita could not confirm. */
+.unsure { display: block; margin-top: 2px; }
 
 /* Intake */
 h3.step { font-size: 1rem; margin: 26px 0 10px; display: flex; align-items: center; gap: 8px; font-weight: 700; }

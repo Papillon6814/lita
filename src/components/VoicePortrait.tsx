@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { host, type Voice, type VoiceProfile } from "../platform/host";
+import { host, type Backing, type Voice, type VoiceProfile } from "../platform/host";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
 import { leadSentence } from "../summary";
 import { ErrorNote } from "./ErrorNote";
+import { connectionLabel } from "./SourceBox";
+import { mockScene } from "../platform/mock";
 import type { UiError } from "../platform/host";
 
 const LANGUAGES: Record<string, string> = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", fr: "Français", de: "Deutsch", es: "Español" };
@@ -28,6 +30,15 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const p = voice.profile;
   const lead = p.one_line.trim() || leadSentence(p);
+  // Where a value came from: the quotes Lita found, named by the writing they
+  // came from. Shown only when asked for, so the page stays quiet (2026-09-23).
+  const back = (field: string) => p.backing?.[field];
+  const sourceLabel = (piece: number) => {
+    const s = voice.voice_sources[piece];
+    return s ? connectionLabel(s.kind, s.account) : null;
+  };
+  // One scene opens the first row's quotes so the screenshot shows them.
+  const openField = mockScene() === "voice-evidence" ? "preferred_words" : null;
 
   useEffect(() => {
     if (!saved) return;
@@ -124,20 +135,33 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
       <div className="sheet-groups">
           <h4 className="sheet-head">{t("voice.group.words")}</h4>
           <dl className="sheet">
-            <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} />
-            <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} />
+            <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} backing={back("preferred_words")} sourceLabel={sourceLabel} openAtFirst={openField === "preferred_words"} />
+            <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} backing={back("avoided_words")} sourceLabel={sourceLabel} />
           </dl>
           <h4 className="sheet-head">{t("voice.group.tone")}</h4>
           <dl className="sheet">
-            <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} />
-            <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} />
-            <ListRow label={t("voice.card.tone")} items={p.tone} onSave={(v) => save({ ...p, tone: v })} />
-            <ListRow label={t("voice.card.endings")} items={p.sentence_endings} onSave={(v) => save({ ...p, sentence_endings: v })} />
+            <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} backing={back("first_person")} sourceLabel={sourceLabel} />
+            <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} backing={back("formality")} sourceLabel={sourceLabel} />
+            <ListRow label={t("voice.card.tone")} items={p.tone} onSave={(v) => save({ ...p, tone: v })} backing={back("tone")} sourceLabel={sourceLabel} />
+            <ListRow label={t("voice.card.endings")} items={p.sentence_endings} onSave={(v) => save({ ...p, sentence_endings: v })} backing={back("sentence_endings")} sourceLabel={sourceLabel} />
           </dl>
           <h4 className="sheet-head">{t("voice.group.structure")}</h4>
           <dl className="sheet">
-            <TextRow label={t("voice.card.opens")} value={p.opens_with} onSave={(v) => save({ ...p, opens_with: v })} />
-            <TextRow label={t("voice.card.closes")} value={p.closes_with} onSave={(v) => save({ ...p, closes_with: v })} />
+            <TextRow label={t("voice.card.opens")} value={p.opens_with} onSave={(v) => save({ ...p, opens_with: v })} backing={back("opens_with")} sourceLabel={sourceLabel} />
+            <TextRow label={t("voice.card.closes")} value={p.closes_with} onSave={(v) => save({ ...p, closes_with: v })} backing={back("closes_with")} sourceLabel={sourceLabel} />
+            {/* Only there when the stricter reading found them (2026-09-23). */}
+            {(p.rhetoric ?? "").trim() && (
+              <TextRow label={t("voice.card.rhetoric")} value={p.rhetoric ?? ""} onSave={(v) => save({ ...p, rhetoric: v })} backing={back("rhetoric")} sourceLabel={sourceLabel} />
+            )}
+            {(p.examples_and_numbers ?? "").trim() && (
+              <TextRow label={t("voice.card.examples")} value={p.examples_and_numbers ?? ""} onSave={(v) => save({ ...p, examples_and_numbers: v })} backing={back("examples_and_numbers")} sourceLabel={sourceLabel} />
+            )}
+            {(p.kana_choices?.length ?? 0) > 0 && (
+              <ListRow label={t("voice.card.kana")} items={p.kana_choices ?? []} onSave={(v) => save({ ...p, kana_choices: v })} backing={back("kana_choices")} sourceLabel={sourceLabel} />
+            )}
+            {(p.never_does?.length ?? 0) > 0 && (
+              <ListRow label={t("voice.card.never")} items={p.never_does ?? []} onSave={(v) => save({ ...p, never_does: v })} backing={back("never_does")} sourceLabel={sourceLabel} />
+            )}
           </dl>
           <p className="sheet-foot">
             <span>{t("voice.card.language")}: {languageName(p.language)}</span>
@@ -163,11 +187,42 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
   );
 }
 
+/** What every row can say about itself: the quotes behind it, and how sure Lita is. */
+type BackProps = { backing?: Backing; sourceLabel?: (piece: number) => string | null; openAtFirst?: boolean };
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (<><dt>{label}</dt><dd>{children}</dd></>);
 }
 
-function TextRow({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => void }) {
+/**
+ * Under the value: one quiet line when Lita is unsure, and a link that opens
+ * the quotes it read. Nothing appears on profiles made before 2026-09-23.
+ */
+function Backed({ backing, sourceLabel, openAtFirst }: BackProps) {
+  const [open, setOpen] = useState(Boolean(openAtFirst));
+  if (!backing) return null;
+  const quotes = backing.evidence?.slice(0, 4) ?? [];
+  return (
+    <>
+      {quotes.length > 0 && (
+        <button className="link edit why" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {open ? t("action.close") : t("voice.card.evidence")}
+        </button>
+      )}
+      {backing.confidence === "low" && <span className="muted small unsure">{t("voice.card.unsure")}</span>}
+      {open && quotes.length > 0 && (
+        <ul className="evidence">
+          {quotes.map((e, i) => {
+            const from = sourceLabel?.(e.piece) ?? null;
+            return (<li key={i}><blockquote>{e.quote}</blockquote>{from && <span className="muted small">{from}</span>}</li>);
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function TextRow({ label, value, onSave, backing, sourceLabel, openAtFirst }: { label: string; value: string; onSave: (v: string) => void } & BackProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   if (editing) {
@@ -185,11 +240,12 @@ function TextRow({ label, value, onSave }: { label: string; value: string; onSav
     <Row label={label}>
       {value.trim() ? value : <span className="muted">{t("voice.card.none")}</span>}
       <button className="link edit" onClick={() => { setDraft(value); setEditing(true); }}>{value.trim() ? t("action.fix") : t("action.add")}</button>
+      <Backed backing={backing} sourceLabel={sourceLabel} openAtFirst={openAtFirst} />
     </Row>
   );
 }
 
-function ListRow({ label, items, accent, onSave }: { label: string; items: string[]; accent?: boolean; onSave: (v: string[]) => void }) {
+function ListRow({ label, items, accent, onSave, backing, sourceLabel, openAtFirst }: { label: string; items: string[]; accent?: boolean; onSave: (v: string[]) => void } & BackProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(items.join("、"));
   const parse = (s: string) => s.split(/[、,]/).map((x) => x.trim()).filter(Boolean);
@@ -210,6 +266,7 @@ function ListRow({ label, items, accent, onSave }: { label: string; items: strin
         <span key={i}>{i > 0 && <span className="sep">/</span>}<span className={accent ? "hi" : undefined}>{x}</span></span>
       ))}
       <button className="link edit" onClick={() => { setDraft(items.join("、")); setEditing(true); }}>{items.length ? t("action.fix") : t("action.add")}</button>
+      <Backed backing={backing} sourceLabel={sourceLabel} openAtFirst={openAtFirst} />
     </Row>
   );
 }

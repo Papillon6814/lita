@@ -2,21 +2,26 @@ import { useEffect, useState } from "react";
 import { host, type VoiceProgress } from "../platform/host";
 import { t } from "../i18n";
 
-// The stage display is a presentation device (D-26): Codex reports only a
-// handful of coarse events over a ~60 s run, so the middle stage advances
-// on a timer rather than on real progress. Say so in the hint text.
-const STAGES: VoiceProgress["stage"][] = ["started", "thinking", "extracted", "saved"];
+// The stages are real since 2026-09-23 (voice quality): the material is
+// measured, the voice is read out of it, then checked against the material
+// for counter-examples with verified quotes.
+const STAGES: VoiceProgress["stage"][] = ["started", "thinking", "checking", "saved"];
 
 export function BuildingVoice({ onCancel, relearn }: { onCancel: () => void; relearn?: boolean }) {
-  const [reached, setReached] = useState<VoiceProgress["stage"]>("started");
+  const [progress, setProgress] = useState<VoiceProgress>({ stage: "started" });
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    void host.onVoiceProgress((p) => setReached(p.stage)).then((u) => (unlisten = u));
+    void host.onVoiceProgress((p) => setProgress(p)).then((u) => (unlisten = u));
     return () => unlisten?.();
   }, []);
 
+  const reached = progress.stage === "extracted" ? "checking" : progress.stage;
   const current = STAGES.indexOf(reached);
+  const label = (s: VoiceProgress["stage"]) =>
+    s === "reading" && progress.stage === "reading" && progress.total > 0
+      ? t("voice.stage.readingN", { done: String(progress.done), total: String(progress.total) })
+      : t(`voice.stage.${s}` as const);
   return (
     <div className="building" aria-live="polite">
       <div className="row between">
@@ -26,7 +31,7 @@ export function BuildingVoice({ onCancel, relearn }: { onCancel: () => void; rel
       <ol className="stages">
         {STAGES.map((s, i) => (
           <li key={s} className={i < current ? "done" : i === current ? "active" : ""} aria-current={i === current ? "step" : undefined}>
-            {t(`voice.stage.${s}` as const)}
+            {label(s)}
           </li>
         ))}
       </ol>

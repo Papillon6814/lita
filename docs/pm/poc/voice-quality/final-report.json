@@ -1,0 +1,34 @@
+{
+  "pieces_read": 9,
+  "pieces_total": 9,
+  "stage_secs": {
+    "check": 42,
+    "evidence": 0,
+    "extract": 29,
+    "measure": 0
+  },
+  "total_secs": 71,
+  "quotes_offered": 29,
+  "quotes_verified": 29,
+  "confidence": {
+    "high": 2,
+    "low": 4,
+    "medium": 3
+  },
+  "check_fit_pct": 72,
+  "redo": false,
+  "fell_back": false,
+  "dropped_words": [],
+  "notes": [],
+  "verdicts": {
+    "avoided_words": "partial",
+    "closes_with": "partial",
+    "first_person": "partial",
+    "formality": "fits",
+    "opens_with": "partial",
+    "preferred_words": "fits",
+    "sentence_endings": "fits",
+    "tone": "partial",
+    "uses_emoji": "fits"
+  }
+}

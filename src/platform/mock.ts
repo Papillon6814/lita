@@ -6,6 +6,7 @@
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-open (note row unfolded), intake-loaded, building, voice,
 // voice-open (same as voice: the eight items are no longer folded),
+// voice-evidence (one row's quotes already open),
 // voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
@@ -45,6 +46,62 @@ const profile: T.VoiceProfile = {
   one_line: scene === "voice-template" ? "" : "あなたの文章は、常体で分析的。エクイティやファイナンスを軸に問いを立て、「のだろうか」と含みを残して締める。",
 };
 
+// The stricter reading (2026-09-23): quotes behind each item, and how sure it
+// is. `voice-template` keeps the old shape, so the screen shows nothing extra.
+const strict: Partial<T.VoiceProfile> = {
+  rhetoric: "言い直して畳みかけ、最後に逆接を一つ置く",
+  examples_and_numbers: "自分が立ち会った場面を出し、数字は概数で置く",
+  kana_choices: ["できる", "こと", "ほとんど"],
+  never_does: ["感嘆符を使わない", "読者に呼びかけない", "体言止めをしない"],
+  word_usage: [
+    { word: "エクイティ", usage: "「借りる」と対にして、返さない代わりに何を渡すかの話に使う" },
+    { word: "構造", usage: "個人の努力の話を、仕組みの話に引き取るときに使う" },
+  ],
+  topic_words: ["資本政策", "投資家"],
+  backing: {
+    preferred_words: { confidence: "high", evidence: [
+      { piece: 0, quote: "エクイティは返さなくていい金ではなく、時間と自由を先に売る契約だ。" },
+      { piece: 1, quote: "ファイナンスの話は結局、時間をどう買うかに帰着すると思う。" },
+      { piece: 2, quote: "努力の差に見えるものは、たいてい構造の差だ。" },
+    ] },
+    avoided_words: { confidence: "low", evidence: [
+      { piece: 0, quote: "絶対に正しい資本政策というものは、たぶん無い。" },
+    ] },
+    first_person: { confidence: "high", evidence: [
+      { piece: 0, quote: "私はこの質問を、相談の最初に必ず置く。" },
+      { piece: 3, quote: "私が見てきた範囲では、ここで迷う人がいちばん多い。" },
+    ] },
+    formality: { confidence: "high", evidence: [
+      { piece: 1, quote: "資本政策は、何を諦めるかを先に決める作業だ。" },
+    ] },
+    tone: { confidence: "medium", evidence: [
+      { piece: 2, quote: "その数字は、本当に比べられるものを比べているのだろうか。" },
+    ] },
+    sentence_endings: { confidence: "high", evidence: [
+      { piece: 0, quote: "迷っている理由の方が本題ではないか。" },
+      { piece: 1, quote: "時間をどう買うかに帰着すると思う。" },
+    ] },
+    opens_with: { confidence: "medium", evidence: [
+      { piece: 3, quote: "いくら欲しいか、と聞かれて答えられる人は少ない。" },
+    ] },
+    closes_with: { confidence: "medium", evidence: [
+      { piece: 0, quote: "先に売る契約なのだろうか。" },
+    ] },
+    rhetoric: { confidence: "medium", evidence: [
+      { piece: 2, quote: "順番の問題だ。順番だけの問題だ。それでも順番は決まらない。" },
+    ] },
+    examples_and_numbers: { confidence: "medium", evidence: [
+      { piece: 3, quote: "十人ほど見てきたが、最初の一回で決められた人はいない。" },
+    ] },
+    kana_choices: { confidence: "high", evidence: [
+      { piece: 1, quote: "ここで決めることは、ほとんど決まっていると思う。" },
+    ] },
+    never_does: { confidence: "medium", evidence: [
+      { piece: 2, quote: "答えはほとんど決まっていると思う。" },
+    ] },
+  },
+};
+
 const sources: T.VoiceSource[] = [1, 2, 3, 4].map((i) => ({
   id: `s${i}`, kind: "note", origin: `https://note.com/kuno/n/n${i}`, account: "kuno",
   body: "資本政策は、何を諦めるかを先に決める作業なのだろうか。".repeat(8), created_at: "2026-09-22T09:00:00Z",
@@ -61,7 +118,7 @@ const mixedSources: T.VoiceSource[] = [
   { id: "p1", kind: "paste", origin: null, account: null, body: "貼った一段落。", created_at: "2026-09-23T02:30:00Z" },
 ];
 let voice: T.Voice = {
-  id: "v1", name: noteName, profile, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
+  id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
@@ -189,8 +246,8 @@ export const mockHost: T.Host = {
   importMedium: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: true }; },
   importXArchive: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: false }; },
   onVoiceProgress: async (handler) => {
-    const stages: T.VoiceProgress["stage"][] = ["thinking", "extracted"];
-    const timers = stages.map((stage, i) => setTimeout(() => handler({ stage }), 800 * (i + 1)));
+    const stages: T.VoiceProgress[] = [{ stage: "reading", done: 0, total: 3 }, { stage: "reading", done: 2, total: 3 }, { stage: "thinking" }, { stage: "checking" }, { stage: "extracted" }];
+    const timers = stages.map((p, i) => setTimeout(() => handler(p), 800 * (i + 1)));
     return () => timers.forEach(clearTimeout);
   },
   openExternal: async () => {},
