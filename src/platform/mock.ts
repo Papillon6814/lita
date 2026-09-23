@@ -6,8 +6,7 @@
 // Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-loaded, building, voice, voice-open, voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
-// update-available, update-downloading, update-latest, voice-trial,
-// voice-trial-generating, voice-trial-compare, articles, articles-empty, editor, editor-empty,
+// update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
 // editor-generating, editor-over, editor-save-failed, editor-versions, editor-note, write, write-generating,
 // write-result, write-over, write-error. Add `&lang=en` to force English.
 
@@ -22,6 +21,7 @@ export function mockScene(): string | null {
 }
 
 const never = <T,>() => new Promise<T>(() => {});
+const noteName = scene === "voices" ? "note・kuno" : "test";
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const profile: T.VoiceProfile = {
@@ -48,14 +48,12 @@ const sources: T.VoiceSource[] = [1, 2, 3, 4].map((i) => ({
   body: "資本政策は、何を諦めるかを先に決める作業なのだろうか。".repeat(8), created_at: "2026-09-22T09:00:00Z",
 }));
 
-let defaultVoice: string | null = "v1";
-let trialCount = 0;
 const voice2: T.Voice = {
-  id: "v2", name: "note 用", profile: { ...profile, formality: "です・ます調", tone: ["落ち着いた", "丁寧"], sentence_endings: ["と思います。", "ではないでしょうか。"], one_line: "あなたの文章は、です・ます調で落ち着いて丁寧。「ではないでしょうか」と問いかけて締める。" },
+  id: "v2", name: "貼った文章", profile: { ...profile, formality: "です・ます調", tone: ["落ち着いた", "丁寧"], sentence_endings: ["と思います。", "ではないでしょうか。"], one_line: "あなたの文章は、です・ます調で落ち着いて丁寧。「ではないでしょうか」と問いかけて締める。" },
   created_at: "2026-09-23T01:00:00Z", updated_at: "2026-09-23T01:00:00Z", voice_sources: sources.slice(0, 2),
 };
 let voice: T.Voice = {
-  id: "v1", name: "test", profile, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: sources,
+  id: "v1", name: noteName, profile, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: sources,
 };
 
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
@@ -147,15 +145,12 @@ export const mockHost: T.Host = {
   },
   restartApp: async () => {},
   onCheckUpdate: async () => () => {},
-  getSettings: async () => ({ default_voice_id: defaultVoice }),
-  setDefaultVoice: async (id) => { defaultVoice = id; },
-  trialWrite: async (_v, _b, _p, _e) => { if (scene === "voice-trial-generating") return never(); await wait(400); trialCount += 1; return { title: "", text: trialCount % 2 ? draftBody : "資本政策で最初に聞くのは何を諦められるかだ。エクイティは時間と自由を先に売る契約ではないか。", voice_notes: "常体で、問いで締めた。", elapsed_ms: 6600 }; },
   codexStatus: async () => codex,
   sessionStatus: async () => session,
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),
-  listVoices: async () => (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: sources.length }, ...(scene.startsWith("voices") || scene.startsWith("voice-trial") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []),
+  listVoices: async () => (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []),
   getVoice: async (id) => (id === "v2" ? voice2 : voice),
   deleteVoice: async () => true,
   renameVoice: async (_id, name) => { voice = { ...voice, name }; },
