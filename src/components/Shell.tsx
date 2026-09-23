@@ -13,7 +13,9 @@ import { VoiceSection } from "./VoiceSection";
 export type Route =
   | { kind: "articles"; filter: ArticleStatus | "all" }
   | { kind: "article"; id: string }
-  | { kind: "voices" };
+  // A voice can be opened from an article (the editor's 調整する link); then
+  // there is one way back, to that same article.
+  | { kind: "voices"; voiceId?: string; backTo?: { kind: "article"; id: string } };
 
 const ROUTE_KEY = "lita.route";
 
@@ -83,9 +85,22 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
           <ArticleList filter={route.filter} onOpen={(id) => setRoute({ kind: "article", id })} onNew={() => void newArticle()} onGoVoices={() => setRoute({ kind: "voices" })} />
         )}
         {route.kind === "article" && (
-          <Editor key={route.id} id={route.id} onBack={() => setRoute({ kind: "articles", filter: "all" })} onDeleted={() => setRoute({ kind: "articles", filter: "all" })} onGoVoices={() => setRoute({ kind: "voices" })} />
+          <Editor
+            key={route.id}
+            id={route.id}
+            onBack={() => setRoute({ kind: "articles", filter: "all" })}
+            onDeleted={() => setRoute({ kind: "articles", filter: "all" })}
+            onGoVoices={() => setRoute({ kind: "voices" })}
+            onAdjustVoice={(voiceId) => setRoute({ kind: "voices", voiceId, backTo: { kind: "article", id: route.id } })}
+          />
         )}
-        {route.kind === "voices" && <VoiceSection onWrite={(voiceId) => void newArticle(voiceId)} />}
+        {route.kind === "voices" && (
+          <VoiceSection
+            onWrite={(voiceId) => void newArticle(voiceId)}
+            voiceId={route.voiceId}
+            onBackToArticle={route.backTo ? () => setRoute(route.backTo!) : undefined}
+          />
+        )}
       </main>
     </div>
   );

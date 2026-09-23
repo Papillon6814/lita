@@ -5,19 +5,21 @@ import { t } from "../i18n";
 import { leadSentence } from "../summary";
 import { ErrorNote } from "./ErrorNote";
 import type { UiError } from "../platform/host";
-import { mockScene } from "../platform/mock";
 
 const LANGUAGES: Record<string, string> = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", fr: "Français", de: "Deutsch", es: "Español" };
 const languageName = (tag: string) => LANGUAGES[tag.toLowerCase().split("-")[0]] ?? tag;
 
 type Props = { voice: Voice; onChange: (v: Voice) => void; onDelete: () => void; onWrite?: () => void };
 
-// A page to read (UX review 2026-09-23): the name, Lita's one sentence, one
-// main action. Rename and delete hide behind "…"; the details fold below
-// in three short groups, and the sentence itself is edited in place.
+// The page where Lita's writing is adjusted (2026-09-23): the name, the one
+// sentence Lita goes by, one main action, and then the eight things that can
+// be changed, in three short groups, open from the start (requirement 2 of
+// the voice feature; this revises D-56's "fold the details"). Rename and
+// delete hide behind "…"; every row is edited in place.
 export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
-  const [open, setOpen] = useState(mockScene() === "voice-open");
   const [menu, setMenu] = useState(false);
+  // Said once, quietly, after a change is saved: what it does and does not touch.
+  const [saved, setSaved] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(voice.name);
   const [editingLine, setEditingLine] = useState(false);
@@ -25,8 +27,13 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
   const [error, setError] = useState<UiError | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const p = voice.profile;
-  const created = new Date(voice.created_at).toLocaleDateString();
   const lead = p.one_line.trim() || leadSentence(p);
+
+  useEffect(() => {
+    if (!saved) return;
+    const timer = window.setTimeout(() => setSaved(false), 10000);
+    return () => window.clearTimeout(timer);
+  }, [saved]);
 
   useEffect(() => {
     if (!menu) return;
@@ -52,6 +59,7 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
       const updated = await host.updateVoiceProfile(voice.id, profile);
       if (updated) onChange(updated);
       setError(null);
+      setSaved(true);
     } catch (e) {
       setError(asUiError(e));
     }
@@ -90,21 +98,21 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
               </>
             )}
           </div>
+          <p className="how">{t("voice.how")}</p>
           {editingLine ? (
             <form className="line-edit" onSubmit={(e) => { e.preventDefault(); void saveLine(); }}>
-              <textarea aria-label={t("voice.fixSummary")} value={line} onChange={(e) => setLine(e.target.value)} rows={2} autoFocus />
+              <textarea aria-label={t("voice.how")} value={line} onChange={(e) => setLine(e.target.value)} rows={2} autoFocus />
               <div className="row">
                 <button type="submit" className="btn sm">{t("action.save")}</button>
                 <button type="button" className="quiet sm" onClick={() => { setLine(p.one_line); setEditingLine(false); }}>{t("action.cancel")}</button>
               </div>
             </form>
           ) : (
-            <p className="lead">{lead}</p>
+            <p className="lead">
+              {lead}
+              <button className="link" onClick={() => { setLine(lead); setEditingLine(true); }}>{t("action.fix")}</button>
+            </p>
           )}
-          <p className="attr">
-            {t("voice.attribution", { n: String(voice.voice_sources.length), date: created })}{" "}
-            {!editingLine && <button className="link" onClick={() => { setLine(lead); setEditingLine(true); }}>{t("voice.fixSummary")}</button>}
-          </p>
           <div className="cta">
             <button className="btn pri" onClick={onWrite} disabled={!onWrite}>{t("voice.write")}</button>
           </div>
@@ -113,20 +121,18 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
 
       {error && <ErrorNote error={error} />}
 
-      <details className="more" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary>{open ? t("voice.details.hide") : t("voice.details.show")}</summary>
-        <div className="sheet-groups">
+      <div className="sheet-groups">
+          <h4 className="sheet-head">{t("voice.group.words")}</h4>
+          <dl className="sheet">
+            <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} />
+            <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} />
+          </dl>
           <h4 className="sheet-head">{t("voice.group.tone")}</h4>
           <dl className="sheet">
             <TextRow label={t("voice.card.firstPerson")} value={p.first_person} onSave={(v) => save({ ...p, first_person: v })} />
             <TextRow label={t("voice.card.formality")} value={p.formality} onSave={(v) => save({ ...p, formality: v })} />
             <ListRow label={t("voice.card.tone")} items={p.tone} onSave={(v) => save({ ...p, tone: v })} />
             <ListRow label={t("voice.card.endings")} items={p.sentence_endings} onSave={(v) => save({ ...p, sentence_endings: v })} />
-          </dl>
-          <h4 className="sheet-head">{t("voice.group.words")}</h4>
-          <dl className="sheet">
-            <ListRow label={t("voice.card.preferred")} items={p.preferred_words} accent onSave={(v) => save({ ...p, preferred_words: v })} />
-            <ListRow label={t("voice.card.avoided")} items={p.avoided_words} onSave={(v) => save({ ...p, avoided_words: v })} />
           </dl>
           <h4 className="sheet-head">{t("voice.group.structure")}</h4>
           <dl className="sheet">
@@ -151,8 +157,8 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
               </>
             )}
           </p>
-        </div>
-      </details>
+          {saved && <p className="saved" role="status">{t("voice.savedNote")}</p>}
+      </div>
     </div>
   );
 }

@@ -21,7 +21,15 @@ type State =
   | { kind: "rebuilding"; voice: Voice; count: number; names: string[] }
   | { kind: "voice"; voice: Voice; count: number; names: string[] };
 
-export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }) {
+type SectionProps = {
+  onWrite: (voiceId: string) => void;
+  /** Open this voice straight away (the editor's 調整する link). */
+  voiceId?: string;
+  /** Where 調整する came from, so there is one way back to the same article. */
+  onBackToArticle?: () => void;
+};
+
+export function VoiceSection({ onWrite, voiceId, onBackToArticle }: SectionProps) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const openVoice = useCallback(async (id: string, list: VoiceSummary[]) => {
@@ -46,7 +54,7 @@ export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }
       setState({ kind: "new", error: asUiError(e), first: true, names: [] });
     }
   }, [openVoice]);
-  useEffect(() => { void start(); }, [start]);
+  useEffect(() => { void start(voiceId); }, [start, voiceId]);
 
   const build = useCallback(async (name: string, sources: SourceInput[], first: boolean, names: string[]) => {
     setState({ kind: "building", first, names });
@@ -93,7 +101,11 @@ export function VoiceSection({ onWrite }: { onWrite: (voiceId: string) => void }
     case "voice":
       return (
         <div className="voice-page">
-          {state.count > 1 && <button className="back" onClick={() => setState({ kind: "list", names: state.names })}>← {t("nav.voices")}</button>}
+          {onBackToArticle ? (
+            <button className="back" onClick={onBackToArticle}>← {t("nav.backToArticle")}</button>
+          ) : state.count > 1 ? (
+            <button className="back" onClick={() => setState({ kind: "list", names: state.names })}>← {t("nav.voices")}</button>
+          ) : null}
           <VoicePortrait
             voice={state.voice}
             onChange={(voice) => setState({ ...state, voice })}

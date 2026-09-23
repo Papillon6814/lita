@@ -59,6 +59,8 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [review, setReview] = useState(false);
   const [budget, setBudget] = useState<MaterialBudget>({ per_piece_chars: 1500, total_chars: 20000 });
+  // Pressing 文体を作る with nothing gathered opens the first row instead of stalling.
+  const [openFirst, setOpenFirst] = useState(0);
 
   useEffect(() => { void host.materialBudget().then(setBudget).catch(() => {}); }, []);
   useEffect(() => {
@@ -88,9 +90,23 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
   return (
     <div className="intake">
       <h2>{t("voice.intake.title")}</h2>
-      <p className="sub">{empty ? t("voice.intake.leadEmpty") : t("voice.intake.lead")} {t("voice.intake.more")}</p>
+      <p className="sub">{t("voice.intake.lead")}</p>
 
-      <SourceBox hero={empty} known={known} connected={connectionsOf(pieces)} onGathered={add} onRemove={(kind, account) => setPieces((ps) => ps.filter((p) => !(p.kind === kind && p.account === account)))} />
+      {/* The shape of what is being made, before anything is in it: the same
+          three groups the voice page shows, as empty placeholders. */}
+      <section className="preview-card">
+        <h3 className="sheet-head">{t("voice.how")}</h3>
+        <dl className="sheet plain">
+          <dt>{t("voice.group.words")}</dt>
+          <dd className="muted">{t("voice.card.preferred")}<span className="sep">/</span>{t("voice.card.avoided")}</dd>
+          <dt>{t("voice.group.tone")}</dt>
+          <dd className="muted">{t("voice.card.firstPerson")}<span className="sep">/</span>{t("voice.card.formality")}<span className="sep">/</span>{t("voice.card.tone")}<span className="sep">/</span>{t("voice.card.endings")}</dd>
+          <dt>{t("voice.group.structure")}</dt>
+          <dd className="muted">{t("voice.card.opens")}<span className="sep">/</span>{t("voice.card.closes")}</dd>
+        </dl>
+      </section>
+
+      <SourceBox known={known} openFirst={openFirst} connected={connectionsOf(pieces)} onGathered={add} onRemove={(kind, account) => setPieces((ps) => ps.filter((p) => !(p.kind === kind && p.account === account)))} />
 
       {!empty && (
         <>
@@ -132,15 +148,21 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
 
       {error && <ErrorNote error={error} />}
 
-      {!empty && (
+      {empty ? (
+        <div className="row start-row">
+          <button className="btn pri" onClick={() => setOpenFirst((n) => n + 1)}>{t("voice.intake.build")}</button>
+        </div>
+      ) : (
         <div className="finish" role="region" aria-label={t("voice.intake.build")}>
-          <div className="ready"><div className="g">{t("ready.name", { name })}</div></div>
+          <div className="ready">
+            {t("ready.name", { name })}
+            <span className="g">{t("privacy.note")}</span>
+          </div>
           <button className="btn pri" disabled={use.count === 0} onClick={() => onBuild(name, selected.map(({ kind, origin, account, body }) => ({ kind, origin, account, body })))}>
             {t("voice.intake.build")}
           </button>
         </div>
       )}
-      <footer className="privacy">{t("privacy.note")}</footer>
     </div>
   );
 }

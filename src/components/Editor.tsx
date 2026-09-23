@@ -19,7 +19,7 @@ type Gen = { kind: "idle" } | { kind: "generating" } | { kind: "done"; notes: st
 // The editor: the text on the left, Lita's help on the right. Everything
 // the person types is saved as they go (D-46); Lita writes only when asked,
 // and always into the same text, so there is one thing to judge.
-export function Editor({ id, onBack, onDeleted, onGoVoices }: { id: string; onBack: () => void; onDeleted: () => void; onGoVoices: () => void }) {
+export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { id: string; onBack: () => void; onDeleted: () => void; onGoVoices: () => void; onAdjustVoice: (voiceId: string) => void }) {
   const [article, setArticle] = useState<Article | null>(null);
   const [text, setText] = useState<Text>({ title: "", body: "", brief: "" });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -211,13 +211,17 @@ export function Editor({ id, onBack, onDeleted, onGoVoices }: { id: string; onBa
             <span>{t("write.brief")}</span>
             <textarea value={text.brief} onChange={(e) => edit({ brief: e.target.value })} placeholder={t("write.briefPlaceholder")} rows={4} disabled={gen.kind === "generating"} />
           </label>
-          <label className="field">
-            <span>{t("assist.voice")}</span>
-            <select value={article.voice_id ?? ""} onChange={(e) => void setField({ voice_id: e.target.value || null })} disabled={gen.kind === "generating"}>
+          <div className="field">
+            <div className="field-head">
+              <span id="voice-field-label">{t("assist.voice")}</span>
+              {/* Straight to the voice this article is written in, and straight back (scene c). */}
+              {article.voice_id && <button className="link" onClick={() => onAdjustVoice(article.voice_id!)}>{t("assist.voiceFix")}</button>}
+            </div>
+            <select aria-labelledby="voice-field-label" value={article.voice_id ?? ""} onChange={(e) => void setField({ voice_id: e.target.value || null })} disabled={gen.kind === "generating"}>
               {!article.voice_id && <option value="">{t("assist.noVoice")}</option>}
               {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
-          </label>
+          </div>
           <label className="field">
             <span>{t("write.platform")}</span>
             <select value={article.platform_id} onChange={(e) => void setField({ platform_id: e.target.value })} disabled={gen.kind === "generating"}>

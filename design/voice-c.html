@@ -1,0 +1,275 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>Lita — 文体の案</title><style>@font-face{font-family:"Zen Kaku Gothic New";src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-300-normal.woff2) format("woff2");font-weight:300;font-style:normal;font-display:block;}
+@font-face{font-family:"Zen Kaku Gothic New";src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-400-normal.woff2) format("woff2");font-weight:400;font-style:normal;font-display:block;}
+@font-face{font-family:"Zen Kaku Gothic New";src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-500-normal.woff2) format("woff2");font-weight:500;font-style:normal;font-display:block;}
+@font-face{font-family:"Zen Kaku Gothic New";src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-700-normal.woff2) format("woff2");font-weight:700;font-style:normal;font-display:block;}
+@font-face{font-family:"Zen Kaku Gothic New";src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-900-normal.woff2) format("woff2");font-weight:900;font-style:normal;font-display:block;}
+
+:root{
+  color-scheme: light;
+  --bg:#fffdf9; --fg:#2b2a27; --mute:#6b675f; --line:#ece7dd; --soft:#f6f2ea;
+  --mint:#41c9b4; --mint-soft:#e3f6f2; --mint-ink:#1d7f70; --mint-ink-deep:#176a5d;
+  --r-ctl:8px; --r-box:12px;
+  font-family:"Zen Kaku Gothic New", ui-sans-serif, system-ui, -apple-system, "Hiragino Sans", sans-serif;
+  font-size:15.5px; line-height:1.65;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:#e9e4da;color:var(--fg);}
+.caption{font-size:0.85rem;color:var(--mute);padding:14px 0 6px;max-width:1120px;margin:0 auto;}
+.caption b{color:var(--fg);}
+.frame{width:1120px;height:900px;margin:0 auto 18px;background:var(--bg);overflow:hidden;display:grid;grid-template-columns:220px 1fr;box-shadow:0 1px 0 rgba(0,0,0,.06);}
+.frame.short{height:420px;}
+body.shot{background:var(--bg);}
+body.shot .frame{margin:0;box-shadow:none;}
+
+/* sidebar */
+.sidebar{display:flex;flex-direction:column;gap:18px;padding:16px 14px;border-right:1px solid var(--line);background:#fff;}
+.side-top{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 4px;}
+.wordmark{font-size:1.1rem;font-weight:900;letter-spacing:-0.01em;}
+.wordmark::after{content:".";color:var(--mint);}
+.side-group{display:flex;flex-direction:column;gap:2px;}
+.side-head{font:inherit;font-weight:700;text-align:left;background:none;border:none;padding:7px 10px;border-radius:6px;color:var(--fg);}
+.side-head.on{color:var(--mint-ink);}
+.side-list{list-style:none;margin:0;padding:0 0 0 4px;display:flex;flex-direction:column;gap:1px;}
+.side-item{font:inherit;font-size:0.92rem;text-align:left;background:none;border:none;padding:6px 10px;border-radius:6px;color:var(--mute);width:100%;}
+.side-bottom{margin-top:auto;display:flex;flex-direction:column;gap:10px;}
+.pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:4px 12px 4px 10px;font-size:0.85rem;font-weight:500;}
+.pill.quiet{color:var(--mute);}
+.side-pill{flex-direction:column;align-items:flex-start;border-radius:var(--r-ctl);padding:8px 10px;border:1px solid var(--line);}
+.acct{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid transparent;width:100%;justify-content:flex-start;padding:6px 8px;border-radius:var(--r-ctl);font:inherit;}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--mint-soft);color:var(--mint-ink);display:inline-grid;place-items:center;font-size:0.75rem;font-weight:700;}
+.acct-email{font-size:0.82rem;color:var(--mute);}
+
+/* main */
+.main{min-width:0;padding:26px 36px 32px;position:relative;overflow:hidden;}
+.main.bar{padding-bottom:86px;}
+h2{font-size:1.5rem;margin:0 0 4px;font-weight:700;letter-spacing:-0.01em;}
+.sub{color:var(--mute);margin:0 0 14px;max-width:62ch;}
+.muted{color:var(--mute);}
+.small{font-size:0.85rem;}
+.row{display:flex;gap:8px;align-items:center;}
+
+/* controls */
+.btn{font:inherit;font-weight:700;padding:10px 18px;border-radius:var(--r-ctl);border:1px solid var(--line);background:#fff;color:var(--fg);line-height:1.2;white-space:nowrap;}
+.btn.pri{background:var(--mint-ink);color:#fff;border-color:var(--mint-ink);}
+.btn.sm{padding:6px 11px;font-size:0.85rem;font-weight:500;}
+.link{color:var(--mint-ink);background:none;border:none;font:inherit;padding:0;font-weight:500;text-decoration:underline;text-underline-offset:3px;}
+.quiet{color:var(--mute);background:none;border:none;font:inherit;padding:4px 6px;border-radius:6px;}
+input,textarea{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-ctl);background:#fff;color:var(--fg);width:100%;}
+textarea{resize:none;line-height:1.6;}
+input::placeholder,textarea::placeholder{color:#a39f97;}
+.focused{border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft);}
+select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-ctl);background:#fff;color:var(--fg);width:100%;}
+.check{display:inline-flex;align-items:center;gap:6px;font-size:0.88rem;color:var(--mute);}
+
+/* portrait */
+.portrait{display:grid;grid-template-columns:64px 1fr;gap:18px;align-items:start;padding:22px 24px;border-radius:16px;background:linear-gradient(135deg,var(--mint-soft),var(--bg) 70%);border:1px solid #d9efe9;}
+.portrait.empty{background:#fff;border-color:var(--line);display:block;padding:16px 24px 20px;}
+.portrait.empty .sheet dt,.portrait.empty .sheet dd{padding:7px 0;}
+.portrait.empty .sheet dt{padding-top:9px;}
+.portrait.empty .sheet{border:0;padding:0;}
+.portrait.empty .sheet dt,.portrait.empty .sheet dd{padding:10px 0;}
+.portrait.empty .sheet dt{padding-top:12px;}
+.mono{width:64px;height:64px;border-radius:18px;background:var(--mint-ink);color:#fff;display:grid;place-items:center;font-size:1.7rem;font-weight:900;}
+.mono.blank{background:var(--soft);color:#bdb7ab;}
+.name-row{display:flex;align-items:center;gap:10px;min-height:32px;}
+.name-row h2{margin:0;font-size:1.15rem;color:var(--mint-ink);}
+.kebab-wrap{margin-left:auto;}
+.kebab{font:inherit;font-size:1.1rem;line-height:1;padding:2px 10px 6px;border-radius:999px;border:1px solid transparent;background:none;color:var(--mute);letter-spacing:1px;}
+.lead{font-size:1.3rem;font-weight:700;line-height:1.55;margin:4px 0 10px;letter-spacing:-0.005em;}
+.lead .link{font-size:0.85rem;font-weight:500;margin-left:10px;vertical-align:middle;}
+.cta{display:flex;gap:10px;align-items:center;}
+.cta .btn.pri{padding:11px 20px;}
+
+/* sheet */
+.sheet-groups{margin-top:10px;}
+.sheet-head{margin:16px 0 0;font-size:0.8rem;font-weight:700;color:var(--mute);letter-spacing:0.04em;}
+.sheet-head:first-child{margin-top:4px;}
+.sheet{display:grid;grid-template-columns:130px 1fr;gap:0;margin:8px 0 0;background:#fff;border:1px solid var(--line);border-radius:var(--r-box);padding:2px 22px;}
+.sheet dt,.sheet dd{padding:9px 0;border-bottom:1px solid var(--line);margin:0;}
+.sheet dt{color:var(--mute);font-size:0.88rem;padding-top:11px;}
+.sheet dd{line-height:1.7;}
+.sheet dt:nth-last-of-type(1),.sheet dd:last-of-type{border-bottom:0;}
+.sheet .sep{color:#d8d2c6;margin:0 8px;font-weight:300;}
+.sheet .hi{color:var(--mint-ink);font-weight:700;}
+.sheet .edit{margin-left:10px;font-size:0.85rem;}
+.saved{color:var(--mint-ink);font-size:0.85rem;margin:8px 0 0;display:flex;align-items:center;gap:7px;}
+.saved::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--mint);}
+.sheet-foot{color:var(--mute);font-size:0.85rem;margin:14px 0 0;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;}
+.sheet-foot .sep{color:#d8d2c6;}
+
+/* source box */
+.srcbox{background:var(--soft);border-radius:var(--r-box);padding:14px 16px;}
+.srcbox.hero{padding:18px 28px;}
+.srcrow{display:grid;grid-template-columns:72px 1fr auto;gap:12px;align-items:start;padding:12px 0;border-bottom:1px solid var(--line);margin:0;}
+.srcrow:last-child{border-bottom:0;}
+.srcrow.on{align-items:baseline;}
+.src-label{font-weight:700;color:var(--mute);font-size:0.9rem;padding-top:8px;}
+.srcrow.on .src-label{color:var(--mint-ink);padding-top:0;}
+.src-body{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.srcrow.on .src-body{flex-direction:row;gap:10px;align-items:baseline;flex-wrap:wrap;}
+.src-body.manual{flex-direction:row;gap:14px;flex-wrap:wrap;padding-top:8px;font-size:0.92rem;}
+.src-hint{color:var(--mute);font-size:0.82rem;line-height:1.5;}
+.src-actions{display:flex;gap:14px;align-items:center;padding-top:4px;font-size:0.88rem;white-space:nowrap;}
+.srcrow.lite{grid-template-columns:72px 1fr;align-items:baseline;padding:9px 0;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;font:inherit;color:var(--fg);}
+.srcrow.lite:last-child{border-bottom:0;}
+.srcrow.lite .src-label{font-weight:500;padding-top:0;}
+.srcrow.lite .src-label::before,.src-toggle::before{content:"▸";display:inline-block;font-size:0.75rem;margin-right:6px;}
+.src-toggle{background:none;border:0;text-align:left;font:inherit;font-weight:700;font-size:0.9rem;color:var(--mute);padding:0;}
+.src-toggle.open::before{content:"▾";}
+.srcrow.hand{padding:9px 0;align-items:center;}
+.srcrow.hand .src-label{font-weight:500;padding-top:0;padding-left:15px;}
+.srcrow.hand .src-body.manual{margin:0;padding-top:0;font-size:0.88rem;}
+.srcrow.hand .link{color:var(--mute);font-weight:400;}
+.conn-name{font-weight:700;color:var(--mint-ink);}
+
+/* finish bar */
+.finish{position:absolute;left:0;right:0;bottom:0;padding:12px 36px;background:rgb(255 253 249 / 0.94);border-top:1px solid var(--line);display:flex;gap:16px;align-items:center;}
+.ready{flex:1;min-width:0;font-size:0.88rem;}
+.ready .g{color:var(--mute);font-size:0.82rem;display:block;}
+.using-line{margin:14px 0 0;font-size:0.92rem;}
+
+/* sources block on the voice page */
+.sources{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);}
+.sources-head{display:flex;align-items:baseline;gap:10px;}
+.sources h3{margin:0;font-size:1rem;}
+.sources-head .muted{font-size:0.85rem;}
+.sources-head .btn{margin-left:auto;}
+
+/* editor strip */
+.editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start;}
+.paper{background:#fff;border:1px solid var(--line);border-radius:var(--r-box);padding:22px 28px 14px;min-height:300px;display:flex;flex-direction:column;}
+.paper .title{font-size:1.4rem;font-weight:700;color:#a39f97;margin:0 0 10px;}
+.paper .body{font-size:1.02rem;line-height:1.85;margin:0;max-width:60ch;}
+.assist{background:var(--soft);border-radius:var(--r-box);padding:16px 18px 12px;display:flex;flex-direction:column;gap:12px;}
+.assist h3{margin:0;font-size:1rem;}
+.assist .field{display:flex;flex-direction:column;gap:6px;}
+.assist .field > span{color:var(--mute);font-size:0.85rem;}
+.field-head{display:flex;align-items:baseline;gap:10px;}
+.field-head > span{color:var(--mute);font-size:0.85rem;}
+.field-head .link{margin-left:auto;font-size:0.85rem;}
+.assist textarea{font-size:0.95rem;}
+.back{font:inherit;background:none;border:none;color:var(--mute);padding:0 0 12px;font-size:0.9rem;}
+</style></head><body class=""><p class="caption"><b>案 C: 誘導型</b> — 入口（空）— 一度に一つだけ聞く</p><div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><span class="wordmark">Lita</span><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head">記事</button>
+    <ul class="side-list"><li><button class="side-item">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head on">文体</button></div>
+  <div class="side-bottom">
+    <div class="pill side-pill quiet">v0.3.0 が利用できます</div>
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside><main class="main">
+<h2>Lita の書き方を決める</h2>
+<p class="sub">どこにあなたの文章がありますか。</p>
+<div class="srcbox hero">
+  <div class="srcrow on" style="align-items:center"><button class="src-toggle open">note</button><span class="src-body" style="flex-direction:column;align-items:stretch;gap:5px"><input class="focused" placeholder="https://note.com/あなたの ID"><span class="src-hint">公開記事を読みます。有料記事は除きます。</span></span><span class="src-actions"><button class="btn pri">文体を作る</button></span></div>
+  <div class="srcrow lite"><span class="src-label">Medium</span><span class="src-hint">直近 10 件の投稿を読みます。</span></div>
+  <div class="srcrow lite"><span class="src-label">X</span><span class="src-hint">設定から申請したアーカイブを選びます。</span></div>
+  <div class="srcrow hand"><span class="src-label">手作業</span><span class="src-body manual"><button class="link">自分で書く・貼る</button><button class="link">テキストファイルを選ぶ</button></span></div>
+</div></main></div>
+<p class="caption"><b>案 C: 誘導型</b> — 材料が入った直後 — つないだところ</p><div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><span class="wordmark">Lita</span><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head">記事</button>
+    <ul class="side-list"><li><button class="side-item">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head on">文体</button></div>
+  <div class="side-bottom">
+    <div class="pill side-pill quiet">v0.3.0 が利用できます</div>
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside><main class="main bar">
+<h2>Lita の書き方を決める</h2>
+<p class="sub">この文章から読み取ります。</p>
+<div class="srcbox hero">
+  <div class="srcrow on"><span class="src-label">✓</span><span class="src-body"><span class="conn-name">note・kuno</span> <span class="muted">10 件</span></span><span class="src-actions"><button class="link">外す</button></span></div>
+  <div class="srcrow lite"><span class="src-label">Medium</span><span class="src-hint">直近 10 件の投稿を読みます。</span></div>
+  <div class="srcrow lite"><span class="src-label">X</span><span class="src-hint">設定から申請したアーカイブを選びます。</span></div>
+  <div class="srcrow hand"><span class="src-label">手作業</span><span class="src-body manual"><button class="link">自分で書く・貼る</button><button class="link">テキストファイルを選ぶ</button></span></div>
+</div>
+<p class="using-line">10 件の文章を使います。 <button class="link">見直す</button></p>
+<div class="finish">
+  <div class="ready">「note・kuno」という名前で保存します。名前は後で変えられます。<span class="g">Codex に送るのは、選んだ文章と文体の要約だけです。</span></div>
+  <button class="btn pri">文体を作る</button>
+</div></main></div>
+<p class="caption"><b>案 C: 誘導型</b> — 文体ページ（1 本）— 8 項目は畳まない</p><div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><span class="wordmark">Lita</span><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head">記事</button>
+    <ul class="side-list"><li><button class="side-item">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head on">文体</button></div>
+  <div class="side-bottom">
+    <div class="pill side-pill quiet">v0.3.0 が利用できます</div>
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside><main class="main">
+<section class="portrait">
+  <div class="mono">n</div>
+  <div>
+    <div class="name-row"><h2>note・kuno</h2><div class="kebab-wrap"><button class="kebab">…</button></div></div>
+    
+    <p class="lead">あなたの文章は、常体で分析的。エクイティやファイナンスを軸に問いを立て、「のだろうか」と含みを残して締める。<button class="link">直す</button></p>
+    <div class="cta"><button class="btn pri">この文体で書く</button></div>
+  </div>
+</section>
+<div class="sheet-groups">
+  
+<h4 class="sheet-head">言葉</h4>
+<dl class="sheet">
+  <dt>あなたらしい言葉</dt><dd><span class="hi">エクイティ</span><span class="sep">/</span><span class="hi">ファイナンス</span><span class="sep">/</span><span class="hi">構造</span><button class="link edit">直す</button></dd>
+  <dt>避けている言葉</dt><dd>絶対<span class="sep">/</span>最強<button class="link edit">直す</button></dd>
+</dl>
+<h4 class="sheet-head">口調</h4>
+<dl class="sheet">
+  <dt>一人称</dt><dd>私<button class="link edit">直す</button></dd>
+  <dt>丁寧さ</dt><dd>常体<button class="link edit">直す</button></dd>
+  <dt>トーン</dt><dd>分析的<span class="sep">/</span>懐疑的<button class="link edit">直す</button></dd>
+  <dt>文末</dt><dd>のだろうか。<span class="sep">/</span>と思う。<span class="sep">/</span>ではないか。<button class="link edit">直す</button></dd>
+</dl>
+<h4 class="sheet-head">組み立て</h4>
+<dl class="sheet">
+  <dt>書き出し</dt><dd>問いから入る<button class="link edit">直す</button></dd>
+  <dt>締め</dt><dd>含みを残して締める<button class="link edit">直す</button></dd>
+</dl>
+  <p class="saved">次に書くときから反映されます。</p>
+</div>
+<div class="sources">
+  <div class="sources-head"><h3>元にした文章</h3><span class="muted">4 件・2026/9/22</span><button class="btn sm">この材料で学び直す</button></div>
+  <div class="srcbox" style="margin-top:10px">
+    <div class="srcrow on"><span class="src-label">✓</span><span class="src-body"><span class="conn-name">note・kuno</span> <span class="muted">4 件</span></span><span class="src-actions"><button class="link">新しい記事を取り込む</button><button class="link">外す</button></span></div>
+    <div class="srcrow lite"><span class="src-label">Medium</span><span class="src-hint">直近 10 件の投稿を読みます。</span></div>
+    <div class="srcrow lite"><span class="src-label">X</span><span class="src-hint">設定から申請したアーカイブを選びます。</span></div>
+    <div class="srcrow hand"><span class="src-label">手作業</span><span class="src-body manual"><button class="link">自分で書く・貼る</button><button class="link">テキストファイルを選ぶ</button></span></div>
+  </div>
+</div>
+</main></div><p class="caption"><b>案 C: 誘導型</b> — エディタの「文体」の隣に「調整する」（必須 12）</p><div class="frame short">
+<aside class="sidebar">
+  <div class="side-top"><span class="wordmark">Lita</span><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head">記事</button>
+    <ul class="side-list"><li><button class="side-item">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head on">文体</button></div>
+  <div class="side-bottom">
+    <div class="pill side-pill quiet">v0.3.0 が利用できます</div>
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside><main class="main">
+<div class="editor-grid">
+  <div class="paper">
+    <div class="title">タイトル</div>
+    <p class="body">資本政策の相談で最初に聞くのは、いくら欲しいかではなく、何を諦められるかだ。エクイティは返さなくていい金ではなく、時間と自由を先に売る契約なのだろうか。</p>
+  </div>
+  <div class="assist">
+    <h3>Lita に書かせる</h3>
+    <div class="field"><span>ブリーフ</span><textarea rows="2">利益率の議論が空回りする理由について、経営者向けに。</textarea></div>
+    <div class="field">
+      <div class="field-head"><span>文体</span><button class="link">調整する</button></div>
+      <select><option>note・kuno</option></select>
+    </div>
+    <div class="field"><span>出す先</span><select><option>X（280 文字まで）</option></select></div>
+    <div class="row" style="margin-top:2px"><button class="btn pri">書き直す</button><span class="muted small">⌘⏎ でも書けます</span></div>
+  </div>
+</div></main></div></body></html>

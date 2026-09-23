@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { host, type Imported, type SourceKind, type UiError } from "../platform/host";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
@@ -37,6 +37,8 @@ type Props = {
   /** Pull new articles from a connection (voice page). Absent on the intake, where everything is new anyway. */
   onRefresh?: (kind: SourceKind, account: string | null) => void;
   refreshing?: string | null;
+  /** Bump to unfold the first row: the intake's primary button, pressed with no material yet. */
+  openFirst?: number;
 };
 
 // The one place writing enters Lita, as a row per place it can come from:
@@ -45,12 +47,13 @@ type Props = {
 // input on click, so the box reads as "any one of these is enough" rather
 // than a four-field form (2026-09-23). Shared by the intake and by the
 // voice page's learning sources.
-export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefresh, refreshing }: Props) {
+export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefresh, refreshing, openFirst }: Props) {
   const [inputs, setInputs] = useState<Record<Service, string>>({ note: "", medium: "", x: "" });
   const [rows, setRows] = useState<Partial<Record<Service, RowState>>>({});
   // The one folded row opened by hand; a row that is fetching or has something to say stays open on its own.
   const [open, setOpen] = useState<Service | null>(mockScene() === "intake-open" ? "note" : null);
   const [xReplies, setXReplies] = useState(false);
+  useEffect(() => { if (openFirst) setOpen("note"); }, [openFirst]);
   const xInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
