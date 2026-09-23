@@ -103,7 +103,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       await host.setPolicy(policyRef.current);
       // Lined up in the order they were offered, not the order they were ticked.
       const titles = (topics ?? []).filter((x) => picked.includes(x));
-      await host.enqueueArticles(titles, voiceId, platformId, "best", direction.trim());
+      await host.enqueueArticles(titles, voiceId, platformId, "quality", direction.trim());
       onQueued(titles.length);
     } catch (e) { setError(asUiError(e)); setWorking(false); }
   };

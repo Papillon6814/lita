@@ -99,7 +99,7 @@ impl AppState {
             build_cancel: Arc::new(AtomicBool::new(false)),
             generate_cancel: Arc::new(AtomicBool::new(false)),
             queue_running: AtomicBool::new(false),
-            queue_effort: Mutex::new(StoredEffort::Best),
+            queue_effort: Mutex::new(StoredEffort::Quality),
         })
     }
 
