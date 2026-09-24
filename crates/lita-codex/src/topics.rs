@@ -44,10 +44,9 @@ impl Policy {
         if !self.takeaway.trim().is_empty() {
             out.push(format!("{t}: {}", self.takeaway.trim()));
         }
-        let topics: Vec<&str> = self.topics.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).collect();
-        if !topics.is_empty() {
-            out.push(format!("{s}: {}", topics.join("、")));
-        }
+        // `topics` is no longer shown or written (D-66: the cloud carries the
+        // subjects); old rows may still hold it, and it stays out of prompts.
+        let _ = s;
         if !self.avoid.trim().is_empty() {
             out.push(format!("{v}: {}", self.avoid.trim()));
         }
@@ -74,6 +73,98 @@ impl Lang {
 pub struct Existing {
     pub title: String,
     pub first_line: String,
+}
+
+/// One word of the cloud: what the person keeps writing about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudWord {
+    pub word: String,
+    /// 1 to 5: how often this person comes back to it (not a count).
+    pub weight: u8,
+    /// True when an article with this subject already exists.
+    #[serde(default)]
+    pub written: bool,
+}
+
+/// The cloud as stored: words plus when and from how much it was gathered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TopicCloud {
+    #[serde(default)]
+    pub words: Vec<CloudWord>,
+    #[serde(default)]
+    pub gathered_at: String,
+    /// Sources + articles at gathering time, so the screen can say "more since".
+    #[serde(default)]
+    pub material_count: usize,
+}
+
+/// What Codex returns when gathering the cloud.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatheredCloud {
+    pub words: Vec<CloudWord>,
+}
+
+pub fn cloud_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["words"],
+        "properties": {
+            "words": {
+                "type": "array",
+                "description": "Twenty to forty subjects this person keeps writing about, most central first.",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["word", "weight", "written"],
+                    "properties": {
+                        "word": { "type": "string", "description": "A noun phrase: 2 to 10 characters in Japanese, 1 to 3 words in English. Not a generic word (こと, 仕事, 今日), not a person's or company's name, not a number." },
+                        "weight": { "type": "integer", "description": "1 to 5: how often the person comes back to this subject across their writing. 5 means it runs through most pieces; 1 means it appears once or twice but clearly matters to them." },
+                        "written": { "type": "boolean", "description": "True if one of the ARTICLES ALREADY WRITTEN is about this subject." }
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// The prompt that gathers the cloud from the person's writing.
+pub fn cloud_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], lang: Lang) -> String {
+    let language = match lang {
+        Lang::Ja => "Japanese",
+        Lang::En => "English",
+    };
+    let policy_lines = policy.lines(lang);
+    let policy_block = if policy_lines.is_empty() { "(none written yet)".to_string() } else { policy_lines.join("\n") };
+    let existing_block = existing_block(existing);
+    let existing_block = if existing_block.is_empty() { "(none yet)".to_string() } else { existing_block };
+    format!(
+        "Read this person's writing and list the subjects they keep coming back to: the things they think \
+         about, argue about, and return to across pieces. Aim for thirty words, no fewer than twenty and no \
+         more than forty, in {language}, most central first. Each is a short noun phrase a reader would \
+         recognise as a subject (資金繰り, 撤退の基準, 採用面接), not a generic word, not a name, not a number. \
+         Weight each 1 to 5 by how often the person returns to it, not by how often the string appears. Mark \
+         `written` true when an article already written is about that subject.\n\n\
+         EDITORIAL POLICY:\n{policy_block}\n\n\
+         WRITING SAMPLES:\n{samples}\n\n\
+         ARTICLES ALREADY WRITTEN:\n{existing_block}",
+        samples = samples_block(samples),
+    )
+}
+
+/// Keeps the cloud tidy: trims, drops empties and repeats, clamps weights,
+/// orders heaviest first (Codex does not always), caps at forty.
+pub fn tidy_cloud(words: Vec<CloudWord>) -> Vec<CloudWord> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<CloudWord> = words
+        .into_iter()
+        .map(|w| CloudWord { word: w.word.trim().to_string(), weight: w.weight.clamp(1, 5), written: w.written })
+        .filter(|w| !w.word.is_empty())
+        .filter(|w| seen.insert(w.word.to_lowercase()))
+        .collect();
+    out.sort_by(|a, b| b.weight.cmp(&a.weight));
+    out.truncate(40);
+    out
 }
 
 /// What the suggestion call returns.
@@ -131,7 +222,7 @@ fn existing_block(existing: &[Existing]) -> String {
 
 /// The prompt that asks for `n` titles. `direction` is the person's one
 /// line for this round ("今回は採用寄りで") and may be empty.
-pub fn topics_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], direction: &str, n: usize, lang: Lang) -> String {
+pub fn topics_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], subjects: &[String], direction: &str, n: usize, lang: Lang) -> String {
     let policy_lines = policy.lines(lang);
     let policy_block = if policy_lines.is_empty() {
         "(none written yet: infer the subjects from the writing samples)".to_string()
@@ -140,6 +231,8 @@ pub fn topics_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], d
     };
     let direction = direction.trim();
     let direction_block = if direction.is_empty() { String::new() } else { format!("\nDIRECTION FOR THIS ROUND (weigh it heavily):\n{direction}\n") };
+    let subjects: Vec<&str> = subjects.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let subjects_block = if subjects.is_empty() { String::new() } else { format!("\nSUBJECTS THE PERSON PICKED FOR THIS ROUND (every title is about one or more of these):\n{}\n", subjects.join("、")) };
     let existing_block = existing_block(existing);
     let existing_block = if existing_block.is_empty() { "(none yet)".to_string() } else { existing_block };
     let language = match lang {
@@ -150,7 +243,7 @@ pub fn topics_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], d
         "Suggest {n} titles for articles this person could write next, in their own field and from their own \
          experience. The person will pick a few and have them written.\n\n\
          EDITORIAL POLICY (what to write about; the voice is handled elsewhere):\n{policy_block}\n\
-         {direction_block}\n\
+         {subjects_block}{direction_block}\n\
          WRITING SAMPLES BY THIS PERSON (their subjects and stance; do not copy their titles):\n{samples}\n\n\
          ALREADY WRITTEN (do not repeat these or close variants):\n{existing}\n\n\
          Rules: each title is one line in {language}, concrete and specific, at most 30 characters in Japanese \
@@ -167,11 +260,10 @@ pub fn policy_schema() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "required": ["audience", "takeaway", "topics", "avoid"],
+        "required": ["audience", "takeaway", "avoid"],
         "properties": {
             "audience": { "type": "string", "description": "Who the writing is for, in one short phrase." },
             "takeaway": { "type": "string", "description": "What a reader should take away, in one short sentence." },
-            "topics": { "type": "array", "description": "Subjects this person keeps returning to: one to three short phrases.", "items": { "type": "string" } },
             "avoid": { "type": "string", "description": "What this writing never touches, in one short phrase. Empty if nothing stands out." }
         }
     })
@@ -187,15 +279,14 @@ pub fn policy_prompt(samples: &[&str], existing: &[Existing], lang: Lang) -> Str
     let existing_block = existing_block(existing);
     let existing_block = if existing_block.is_empty() { "(none yet)".to_string() } else { existing_block };
     format!(
-        "Read this person's writing and draft their editorial policy: four short fields describing what they \
+        "Read this person's writing and draft their editorial policy: three short fields describing what they \
          write about (not how; the voice is handled elsewhere). Write it as the person would state it \
          themselves, in {language}, in plain words. Stay within what the writing shows; do not invent a \
          business or an audience it does not point to.\n\n\
          WRITING SAMPLES:\n{samples}\n\n\
          ARTICLES ALREADY WRITTEN:\n{existing}\n\n\
          `audience`: who this is for (one phrase). `takeaway`: what a reader should leave with (one sentence). \
-         `topics`: one to three subjects that recur (short phrases). `avoid`: what the writing steers clear \
-         of, if anything stands out; otherwise an empty string.",
+         `avoid`: what the writing steers clear of, if anything stands out; otherwise an empty string.",
         samples = samples_block(samples),
         existing = existing_block,
     )
@@ -247,14 +338,18 @@ pub fn brief_prompt(title: &str, policy: &Policy, samples: &[&str], existing: &[
 /// direction, the length and the no-research rule reach generation without
 /// changing `post::generation_prompt` (D-28/D-29/D-59). The person sees and
 /// can edit it in the editor like any brief.
-pub fn brief_for(title: &str, policy: &Policy, direction: &str, lang: Lang) -> String {
+pub fn brief_for(title: &str, policy: &Policy, subjects: &[String], direction: &str, lang: Lang) -> String {
     let mut lines = Vec::new();
     let title = title.trim();
     let direction = direction.trim();
+    let subjects: Vec<&str> = subjects.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
     match lang {
         Lang::Ja => {
             lines.push(format!("題: {title}"));
             lines.extend(policy.lines(lang));
+            if !subjects.is_empty() {
+                lines.push(format!("題材: {}", subjects.join("、")));
+            }
             if !direction.is_empty() {
                 lines.push(format!("今回の方向: {direction}"));
             }
@@ -264,6 +359,9 @@ pub fn brief_for(title: &str, policy: &Policy, direction: &str, lang: Lang) -> S
         Lang::En => {
             lines.push(format!("Title: {title}"));
             lines.extend(policy.lines(lang));
+            if !subjects.is_empty() {
+                lines.push(format!("Subjects: {}", subjects.join(", ")));
+            }
             if !direction.is_empty() {
                 lines.push(format!("Direction this round: {direction}"));
             }
@@ -317,11 +415,12 @@ mod tests {
     #[test]
     fn brief_carries_policy_direction_length_and_no_research() {
         let policy = Policy { audience: "これから会社を買う経営者".into(), takeaway: String::new(), topics: vec!["資金繰り".into(), "".into()], avoid: "個別の会社名".into() };
-        let b = brief_for("撤退の基準は、始める前に決める", &policy, "今回は採用寄りで", Lang::Ja);
+        let b = brief_for("撤退の基準は、始める前に決める", &policy, &["撤退".into(), "".into()], "今回は採用寄りで", Lang::Ja);
+        assert!(b.contains("題材: 撤退\n今回の方向: 今回は採用寄りで"));
         assert!(b.starts_with("題: 撤退の基準は、始める前に決める\n"));
         assert!(b.contains("誰に向けて: これから会社を買う経営者"));
         assert!(!b.contains("持ち帰ってほしいこと"));
-        assert!(b.contains("よく書く題材: 資金繰り\n"));
+        assert!(!b.contains("よく書く題材"));
         assert!(b.contains("今回の方向: 今回は採用寄りで"));
         assert!(b.contains("1,500〜3,000 字"));
         assert!(b.contains("調べず"));
@@ -331,10 +430,11 @@ mod tests {
     fn empty_policy_still_makes_a_prompt_and_a_brief() {
         let p = Policy::default();
         assert!(p.is_empty());
-        let prompt = topics_prompt(&p, &["資本政策の相談で最初に聞くのは"], &[], "", 10, Lang::Ja);
+        let prompt = topics_prompt(&p, &["資本政策の相談で最初に聞くのは"], &[], &[], "", 10, Lang::Ja);
+        assert!(!prompt.contains("SUBJECTS THE PERSON PICKED"));
         assert!(prompt.contains("(none written yet"));
         assert!(prompt.contains("exactly 10 titles"));
-        let b = brief_for("題", &p, "", Lang::Ja);
+        let b = brief_for("題", &p, &[], "", Lang::Ja);
         assert_eq!(b.lines().count(), 3);
     }
 
@@ -349,9 +449,32 @@ mod tests {
     }
 
     #[test]
+    fn subjects_reach_the_title_prompt_as_their_own_block() {
+        let p = topics_prompt(&Policy::default(), &["x"], &[], &["資金繰り".into(), "採用".into()], "今回は短めに", 10, Lang::Ja);
+        assert!(p.contains("SUBJECTS THE PERSON PICKED FOR THIS ROUND (every title is about one or more of these):\n資金繰り、採用\n"));
+        assert!(p.contains("DIRECTION FOR THIS ROUND"));
+    }
+
+    #[test]
+    fn tidy_cloud_drops_repeats_and_clamps() {
+        let out = tidy_cloud(vec![
+            CloudWord { word: " 資金繰り ".into(), weight: 9, written: false },
+            CloudWord { word: "資金繰り".into(), weight: 3, written: true },
+            CloudWord { word: "".into(), weight: 3, written: false },
+            CloudWord { word: "採用".into(), weight: 0, written: true },
+        ]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], CloudWord { word: "資金繰り".into(), weight: 5, written: false });
+        assert_eq!(out[1].weight, 1);
+        let sorted = tidy_cloud(vec![CloudWord { word: "a".into(), weight: 1, written: false }, CloudWord { word: "b".into(), weight: 4, written: false }]);
+        assert_eq!(sorted[0].word, "b");
+    }
+
+    #[test]
     fn prompts_never_carry_credentials() {
-        let p = topics_prompt(&Policy::default(), &["x"], &[existing("y")], "z", 10, Lang::En);
+        let p = topics_prompt(&Policy::default(), &["x"], &[existing("y")], &["s".into()], "z", 10, Lang::En);
         crate::assert_no_credentials(&p);
+        crate::assert_no_credentials(&cloud_prompt(&Policy::default(), &["x"], &[], Lang::Ja));
         crate::assert_no_credentials(&policy_prompt(&["x"], &[], Lang::Ja));
     }
 }

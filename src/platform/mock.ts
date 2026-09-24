@@ -19,8 +19,13 @@
 // editor-generating-long (writing a note article, where the wait is minutes),
 // write, write-generating,
 // write-result, write-over, write-error,
-// topics (picking titles, policy empty), topics-picked (ten titles, three
-// picked, policy filled), articles-queued (one writing, two waiting),
+// topics (picking titles, policy empty, the cloud already gathered),
+// topics-picked (ten titles, three picked, policy filled),
+// topics-cloud-first (no cloud yet, gathering it on open, never finishing),
+// topics-cloud-picked (three words pressed), topics-cloud-more (more
+// material since the cloud was gathered), topics-cloud-few (too few words
+// to make a cloud), topics-cloud-failed (gathering did not work),
+// articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
 // `&delay=<ms>` slows every read (the lists, one article, one voice), so the
@@ -202,7 +207,37 @@ const fullPolicy: T.Policy = {
   topics: ["資金繰り", "買収", "採用"],
   avoid: "個別の会社名",
 };
-let policy: T.Policy = scene === "topics-picked" ? fullPolicy : emptyPolicy;
+let policy: T.Policy = scene === "topics-picked" || scene === "topics-cloud-picked" ? fullPolicy : emptyPolicy;
+
+// The words someone keeps writing about (2026-09-24). `weight` is 1–5 and is
+// folded into three sizes on screen; `written` marks a subject already used
+// as a title. Thirty-six words, the middle of the 20–40 the gatherer returns.
+const cloudWords: T.CloudWord[] = ([
+  ["在庫", 1, false], ["契約書", 2, false], ["顧問", 1, true], ["粗利", 3, false], ["月次", 2, false],
+  ["人件費", 3, false], ["事業承継", 3, false], ["銀行", 3, false], ["資金繰り", 5, false],
+  ["値付け", 3, false], ["のれん", 3, true], ["買収", 5, false], ["借入", 3, false],
+  ["売り手", 3, false], ["数字の読み方", 3, false], ["採用", 5, false], ["権限委譲", 3, false],
+  ["撤退基準", 3, false], ["資本政策", 3, true], ["現場", 3, false], ["定着", 3, false],
+  ["社長の時間", 3, false], ["評価", 3, false], ["投資家", 3, true], ["会議", 1, false],
+  ["経営計画", 3, false], ["引き継ぎ", 2, false], ["税務", 1, false], ["キャッシュ", 3, false],
+  ["組織", 3, false], ["給与", 2, false], ["独立", 1, false], ["小さな会社", 4, false],
+  ["業界構造", 2, false], ["デューデリジェンス", 2, false], ["ミドルマネジメント", 1, false],
+] as [string, number, boolean][]).map(([word, weight, written]) => ({ word, weight, written }));
+
+const fullCloud: T.TopicCloud = { words: cloudWords, gathered_at: ago(2), material_count: 18 };
+// Under five words is not a cloud; the screen says so in one line instead.
+const sparseCloud: T.TopicCloud = { words: cloudWords.slice(0, 3), gathered_at: ago(2), material_count: 2 };
+
+const cloudView = (): T.CloudView => {
+  if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
+  if (scene === "topics-cloud-first") return { cloud: null, material_count: 18 };
+  if (scene === "topics-cloud-few") return { cloud: sparseCloud, material_count: 2 };
+  if (scene === "topics-cloud-failed") return { cloud: null, material_count: 18 };
+  // More material than the cloud was gathered from: one quiet line offers to
+  // gather again, and never says how many more.
+  if (scene === "topics-cloud-more") return { cloud: fullCloud, material_count: 24 };
+  return { cloud: fullCloud, material_count: 18 };
+};
 
 const topicRounds = [
   [
@@ -231,6 +266,21 @@ const topicRounds = [
   ],
 ];
 let topicRound = 0;
+
+// What ten titles look like once words have been pressed: every one of them
+// is about the subjects that were picked.
+const subjectTitles = [
+  "小さな会社の採用は、席ではなく仕事で決める",
+  "入社 3 か月で辞める人と、辞めない人の差",
+  "求人票に書けないことを、面接で先に言う",
+  "評価は、上げる理由より下げない理由で書く",
+  "採用の前に、いまの人の仕事を一つ減らす",
+  "給与を上げる前に、決める順番がある",
+  "定着しない職場に共通する、朝の 10 分",
+  "未経験を採るなら、教える人の時間を先に空ける",
+  "社長が面接に出るのをやめる日",
+  "辞めた人の理由は、辞める前に聞ける",
+];
 
 const queueHandlers = new Set<(e: T.QueueEvent) => void>();
 const emitQueue = (e: T.QueueEvent) => queueHandlers.forEach((h) => h(e));
@@ -312,21 +362,35 @@ export const mockHost: T.Host = {
   },
   getPolicy: async () => policy,
   setPolicy: async (p) => { policy = p; },
-  draftPolicy: async () => { await wait(1200); return fullPolicy; },
-  suggestTopics: async (_direction) => {
+  // The editorial policy no longer carries what you often write about; the
+  // cloud does (D-66), so the draft leaves that field empty.
+  draftPolicy: async () => { await wait(1200); return { ...fullPolicy, topics: [] }; },
+  getTopicCloud: async () => { await wait(readDelay); return cloudView(); },
+  gatherTopicCloud: async () => {
+    // The first-run scene stays on the gathering line, so the quiet wait and
+    // the way out of it can be seen.
+    if (scene === "topics-cloud-first") return never();
+    if (scene === "topics-cloud-failed") { await wait(readDelay || 800); throw { code: "codex_failed", detail: "topic cloud: empty response" }; }
+    await wait(readDelay || 1500);
+    return { cloud: { ...fullCloud, material_count: cloudView().material_count }, material_count: cloudView().material_count };
+  },
+  suggestTopics: async (subjects, _direction) => {
     await wait(scene === "topics-picked" ? 200 : 1200);
-    const list = topicRounds[topicRound % topicRounds.length];
-    topicRound += 1;
+    // Picked words steer the titles, so they are visibly about those subjects.
+    const list = subjects.length > 0 ? subjectTitles : topicRounds[topicRound % topicRounds.length];
+    if (subjects.length === 0) topicRound += 1;
     const taken = new Set(articles.map((a) => a.title.trim()));
     return list.filter((t) => !taken.has(t));
   },
-  enqueueArticles: async (titles, voiceId, platformId, _effort, direction) => {
+  enqueueArticles: async (titles, voiceId, platformId, _effort, subjects, direction) => {
+    // The subject and the angle stay on separate lines, so neither reads as
+    // the other (requirement 12–13).
     const brief = [
       policy.audience && `誰に向けて: ${policy.audience}`,
       policy.takeaway && `持ち帰ってほしいこと: ${policy.takeaway}`,
-      policy.topics.length > 0 && `よく書く題材: ${policy.topics.join("、")}`,
       policy.avoid && `触れないこと: ${policy.avoid}`,
-      direction.trim(),
+      subjects.length > 0 && `題材: ${subjects.join("、")}`,
+      direction.trim() && `今回の方向: ${direction.trim()}`,
       "長さは 1,500〜3,000 字。",
       "外部の事実は調べず、自分の経験と意見の範囲で書く。数字や出来事は断定しない。",
     ].filter(Boolean).join("\n");

@@ -137,6 +137,11 @@ export type ArticleSummary = {
 };
 /** The editorial policy: one per app, four short free-text fields, all optional. */
 export type Policy = { audience: string; takeaway: string; topics: string[]; avoid: string };
+/** One word the person keeps writing about. `weight` 1–5 is folded into three sizes on screen; never shown as a number. */
+export type CloudWord = { word: string; weight: number; written: boolean };
+export type TopicCloud = { words: CloudWord[]; gathered_at: string; material_count: number };
+/** `material_count` is sources + articles now; more than `cloud.material_count` means "more since". */
+export type CloudView = { cloud: TopicCloud | null; material_count: number };
 export type QueueEvent =
   /** A queued article changed state; re-list. */
   | { kind: "changed" }
@@ -200,10 +205,14 @@ export type Host = {
   draftPolicy: () => Promise<Policy>;
   /** A brief drafted from the article's title (needs a title). Not saved. Stopped by `cancelGenerate`. */
   suggestBrief: (articleId: string) => Promise<string>;
-  /** Ten titles, none already used. `direction` may be empty. */
-  suggestTopics: (direction: string) => Promise<string[]>;
+  /** Ten titles, none already used. `subjects` are picked cloud words (0–3); `direction` may be empty. */
+  suggestTopics: (subjects: string[], direction: string) => Promise<string[]>;
   /** One draft per title, brief filled, queued in order. Starts the queue. */
-  enqueueArticles: (titles: string[], voiceId: string, platformId: string, effort: Effort, direction: string) => Promise<ArticleSummary[]>;
+  enqueueArticles: (titles: string[], voiceId: string, platformId: string, effort: Effort, subjects: string[], direction: string) => Promise<ArticleSummary[]>;
+  /** The cloud as last gathered (null until gathered) and the material count now. */
+  getTopicCloud: () => Promise<CloudView>;
+  /** Codex gathers the words (10–20 s) and saves them. Stopped by `cancelGenerate`. */
+  gatherTopicCloud: () => Promise<CloudView>;
   /** Resumes a queue left over from last time. Safe to call when nothing is waiting. */
   startQueue: () => Promise<void>;
   /** Waiting: the article is deleted. Writing: stopped, kept as an empty draft. */

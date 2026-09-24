@@ -13,7 +13,7 @@ use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
-use lita_codex::topics::{self, Existing, Lang, Policy, SuggestedBrief, Topics};
+use lita_codex::topics::{self, Existing, GatheredCloud, Lang, Policy, SuggestedBrief, TopicCloud, Topics};
 use lita_codex::voice::{VoiceProfile, pipeline};
 use lita_codex::{CodexCli, Preflight, Request};
 use lita_sources::Piece;
@@ -788,7 +788,7 @@ async fn draft_policy(app: AppHandle) -> Result<Policy, UiError> {
         let req = Request { prompt: topics::policy_prompt(&refs, &existing, lang), schema: topics::policy_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
         let run = CodexCli::on_path().run_typed::<Policy>(&req, |_| {}).map_err(fail)?;
         let mut policy = run.value;
-        policy.topics.truncate(3);
+        policy.topics.clear();
         Ok(policy)
     })
     .await
@@ -824,9 +824,76 @@ async fn suggest_brief(app: AppHandle, article_id: String) -> Result<String, UiE
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// The cloud as last gathered, plus whether there is more material since.
+#[derive(Debug, Serialize)]
+pub struct CloudView {
+    pub cloud: Option<TopicCloud>,
+    /// Sources + articles now; the screen compares with `cloud.material_count`.
+    pub material_count: usize,
+}
+
+fn material_count(store: &lita_store::UserStore<'_>) -> Result<usize, UiError> {
+    let sources: usize = store.voices().map_err(fail)?.iter().map(|v| v.source_count.max(0) as usize).sum();
+    let articles = store.articles(None).map_err(fail)?.len();
+    Ok(sources + articles)
+}
+
+#[tauri::command]
+async fn get_topic_cloud(app: AppHandle) -> Result<CloudView, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let cloud = store.settings().map_err(fail)?.topic_cloud;
+        Ok(CloudView { material_count: material_count(&store)?, cloud })
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Codex gathers the words the person keeps writing about, and the result
+/// is saved as the one cloud (requirement 6). Stopped by `cancel_generate`.
+#[tauri::command]
+async fn gather_topic_cloud(app: AppHandle) -> Result<CloudView, UiError> {
+    let token = app.state::<AppState>().access_token()?;
+    let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&working_dir).map_err(|e| UiError::unknown(e.to_string()))?;
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let policy = store.settings().map_err(fail)?.policy;
+        let (samples, existing, lang) = topic_material(&store)?;
+        if samples.is_empty() && existing.is_empty() {
+            return Err(UiError::invalid("nothing to read yet"));
+        }
+        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        let req = Request { prompt: topics::cloud_prompt(&policy, &refs, &existing, lang), schema: topics::cloud_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
+        state.generate_cancel.store(false, Ordering::Relaxed);
+        let cancel = Arc::clone(&state.generate_cancel);
+        let run = CodexCli::on_path().run_typed_cancellable::<GatheredCloud>(&req, |_| {}, cancel).map_err(fail)?;
+        let material_count = material_count(&store)?;
+        let cloud = TopicCloud {
+            words: topics::tidy_cloud(run.value.words),
+            gathered_at: chrono_now(),
+            material_count,
+        };
+        store.set_topic_cloud(&cloud).map_err(fail)?;
+        Ok(CloudView { cloud: Some(cloud), material_count })
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// RFC 3339 without pulling in a date crate: seconds since the epoch is
+/// enough for "when was this gathered".
+fn chrono_now() -> String {
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    secs.to_string()
+}
+
 /// Ten titles the person could write next, none already written.
 #[tauri::command]
-async fn suggest_topics(app: AppHandle, direction: String) -> Result<Vec<String>, UiError> {
+async fn suggest_topics(app: AppHandle, subjects: Vec<String>, direction: String) -> Result<Vec<String>, UiError> {
     const N: usize = 10;
     let token = app.state::<AppState>().access_token()?;
     let working_dir = app.path().app_data_dir().map_err(|e| UiError::unknown(e.to_string()))?;
@@ -838,7 +905,7 @@ async fn suggest_topics(app: AppHandle, direction: String) -> Result<Vec<String>
         let (samples, existing, lang) = topic_material(&store)?;
         let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
         // Ask for a few more than shown, so dropping repeats still leaves ten.
-        let req = Request { prompt: topics::topics_prompt(&policy, &refs, &existing, &direction, N + 4, lang), schema: topics::topics_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
+        let req = Request { prompt: topics::topics_prompt(&policy, &refs, &existing, &subjects, &direction, N + 4, lang), schema: topics::topics_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
         let run = CodexCli::on_path().run_typed::<Topics>(&req, |_| {}).map_err(fail)?;
         Ok(topics::dedupe(run.value.topics, &existing, N))
     })
@@ -849,7 +916,7 @@ async fn suggest_topics(app: AppHandle, direction: String) -> Result<Vec<String>
 /// One draft per title, brief filled from the policy, queued in the order
 /// given. Starts the worker. Returns the new rows as the list shows them.
 #[tauri::command]
-async fn enqueue_articles(app: AppHandle, titles: Vec<String>, voice_id: String, platform_id: String, effort: StoredEffort, direction: String) -> Result<Vec<ArticleSummary>, UiError> {
+async fn enqueue_articles(app: AppHandle, titles: Vec<String>, voice_id: String, platform_id: String, effort: StoredEffort, subjects: Vec<String>, direction: String) -> Result<Vec<ArticleSummary>, UiError> {
     let titles: Vec<String> = titles.into_iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
     if titles.is_empty() || titles.len() > 5 {
         return Err(UiError::invalid("pick one to five titles"));
@@ -870,7 +937,7 @@ async fn enqueue_articles(app: AppHandle, titles: Vec<String>, voice_id: String,
                         voice_id: Some(voice_id.clone()),
                         platform_id: platform_id.clone(),
                         title: title.clone(),
-                        brief: topics::brief_for(&title, &policy, &direction, lang),
+                        brief: topics::brief_for(&title, &policy, &subjects, &direction, lang),
                         queue: Some(QueueState::Waiting),
                         ..Default::default()
                     })
@@ -1379,6 +1446,8 @@ pub fn run() {
             draft_policy,
             suggest_topics,
             suggest_brief,
+            get_topic_cloud,
+            gather_topic_cloud,
             enqueue_articles,
             start_queue,
             dequeue_article,

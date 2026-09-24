@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, bail};
 use lita_codex::Effort;
 use lita_codex::voice::VoiceProfile;
-pub use lita_codex::topics::Policy;
+pub use lita_codex::topics::{Policy, TopicCloud};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -237,6 +237,9 @@ pub struct UserSettings {
     pub default_voice_id: Option<Id>,
     #[serde(default)]
     pub policy: Policy,
+    /// The words the person keeps writing about; `None` until gathered.
+    #[serde(default)]
+    pub topic_cloud: Option<TopicCloud>,
 }
 
 /// Connection details for one Supabase project. Cheap to clone.
@@ -504,8 +507,20 @@ impl UserStore<'_> {
     // ----- settings --------------------------------------------------------
 
     pub fn settings(&self) -> Result<UserSettings> {
-        let rows: Vec<UserSettings> = self.get_many("user_settings", &[("select", "default_voice_id,policy"), ("limit", "1")])?;
+        let rows: Vec<UserSettings> = self.get_many("user_settings", &[("select", "default_voice_id,policy,topic_cloud"), ("limit", "1")])?;
         Ok(rows.into_iter().next().unwrap_or_default())
+    }
+
+    /// Upsert of the topic cloud (one per person).
+    pub fn set_topic_cloud(&self, cloud: &TopicCloud) -> Result<()> {
+        self.request(
+            self.store
+                .http
+                .post(self.url("user_settings"))
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .json(&json!({ "topic_cloud": cloud })),
+        )?;
+        Ok(())
     }
 
     /// Upsert of the editorial policy (one per person).

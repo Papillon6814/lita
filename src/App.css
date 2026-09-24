@@ -337,6 +337,43 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .pf .v:focus { outline: none; box-shadow: none; border-bottom: 1px solid var(--mint); border-radius: 0; }
 .aim { display: flex; gap: 12px; align-items: center; }
 .aim input { flex: 1; }
+
+/* The words someone keeps writing (2026-09-24). Three sizes, no numbers.
+   Already-written subjects are faded and still pressable. */
+.cloud-box { background: var(--soft); border-radius: var(--r-box); padding: 12px var(--pad-x) 14px; margin-top: var(--gap); }
+.cloud-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; }
+.cloud-head h4 { margin: 0; font-size: 0.88rem; font-weight: 700; }
+.cloud-head .muted { font-size: 0.82rem; }
+.cloud-head .grow { flex: 1; }
+.cloud-head .link { font-size: 0.85rem; }
+.cloud { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 12px; padding: 4px 2px; }
+.w { font: inherit; background: none; border: 1px solid transparent; border-radius: var(--r-ctl); color: var(--fg); padding: 2px 8px; line-height: 1.5; white-space: nowrap; cursor: pointer; transition: background-color .18s ease, color .18s ease; }
+.w.s1 { font-size: 0.95rem; font-weight: 400; color: var(--mute); }
+.w.s2 { font-size: 1.2rem; font-weight: 500; }
+.w.s3 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+.w.done { opacity: 0.4; }
+.w[aria-pressed="true"] { background: var(--mint-ink); color: #fff; opacity: 1; }
+.w:focus-visible { outline: none; border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-soft); }
+/* Three pressed: the rest cannot be pressed, and say so by their colour. */
+.w:disabled { color: var(--mute); opacity: 0.5; cursor: default; }
+.w.done:disabled { opacity: 0.25; }
+.cloud-foot { color: var(--mute); font-size: 0.82rem; margin: 6px 0 0; text-align: center; }
+/* The one line that stands in for the cloud: gathering, failed, more since. */
+.cloud-note { display: flex; align-items: center; gap: 9px; color: var(--mute); font-size: 0.88rem; margin: 0 0 8px; }
+.cloud-note:last-child { margin-bottom: 0; }
+.cloud-note.lone { margin: var(--gap) 0 0; }
+.cloud-note .link { font-size: 0.85rem; }
+.cloud-note .spinner { width: 14px; height: 14px; border-width: 2px; }
+
+/* Pressed words land in "this time" as tags, beside anything typed there. */
+.seedfield { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 5px 10px; }
+.seedfield:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-soft); }
+.seed { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 0.9rem; font-weight: 700; background: var(--mint-soft); color: var(--mint-ink); border: 0; border-radius: var(--r-ctl); padding: 4px 9px; cursor: pointer; }
+.seed .x { font-weight: 400; opacity: 0.65; }
+.seed:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--mint-soft); }
+.seedfield input { border: 0; padding: 4px 0; background: none; flex: 1; min-width: 150px; }
+.seedfield input:focus { outline: none; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .w { transition: none; } }
 .topics { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); }
 .trow { display: flex; gap: 10px; align-items: center; padding: 5px 14px; border-bottom: 1px solid var(--line); font-size: 0.95rem; cursor: pointer; }
 .topics li:last-child .trow { border-bottom: 0; }
