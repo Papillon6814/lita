@@ -7,8 +7,9 @@ type Props = {
   route: Route;
   onRoute: (r: Route) => void;
   onNew: () => void;
-  // The main pane already has a mint button, so this one steps back to a
-  // plain one; it stays in the same place with the same words (D-67).
+  onGoTopics: () => void;
+  // The main pane already has a mint button, so the top one steps back to a
+  // plain one; it stays in the same place with the same words (D-68).
   quietNew: boolean;
   session: SessionStatus | null;
   codex: CodexStatus | null;
@@ -24,7 +25,7 @@ type Props = {
 export const FILTERS: (ArticleStatus | "all")[] = ["all", "draft"];
 
 // Quiet when everything is fine; the Codex pill appears only when it is not.
-export function Sidebar({ route, onRoute, onNew, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
+export function Sidebar({ route, onRoute, onNew, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -52,7 +53,10 @@ export function Sidebar({ route, onRoute, onNew, quietNew, session, codex, codex
     <nav className="sidebar" aria-label={t("nav.label")}>
       <div className="side-top">
         <b className="wordmark">Lita</b>
-        <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onNew}>{t("article.new")}</button>
+        {/* Two ways to start, in the order they are meant to be taken: from
+            a title first, from a blank page second (D-68). */}
+        <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onGoTopics}>{t("topics.entry")}</button>
+        <button className="btn sm new" onClick={onNew}>{t("article.new")}</button>
       </div>
 
       <div className="side-group">

@@ -12,8 +12,8 @@ type Props = {
   onNew: () => void;
   onGoVoices: () => void;
   onGoTopics: () => void;
-  // The sidebar's 「新しく書く」 steps back while this screen carries its own
-  // main button, so only one of them is mint at a time (D-67, principle 3).
+  // The sidebar's 「題から書く」 steps back while this screen carries its own
+  // main button, so only one of them is mint at a time (D-68, principle 3).
   onMainPrimary: (v: boolean) => void;
   onShowCodexSteps: () => void;
 };
@@ -81,7 +81,7 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onM
   const error = actionError ?? list.error;
 
   // Only one mint button at a time: while this screen is empty it carries
-  // the main button, so the sidebar's steps back (D-67).
+  // the main button, so the sidebar's steps back (D-68).
   useEffect(() => { onMainPrimary(nothingAtAll); return () => onMainPrimary(false); }, [nothingAtAll, onMainPrimary]);
 
   const drop = async (id: string) => { try { setActionError(null); await host.dequeueArticle(id); await reload(); } catch (e) { setActionError(asUiError(e)); } };
@@ -94,8 +94,8 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onM
         <div className="head-right">
           {/* The search keeps its place from the first paint, so the heading
               row never shifts when the rows arrive. The way into topics is
-              no longer here: beside the search it read as a list tool
-              (D-67). */}
+              no longer here: it lives in the sidebar, above the blank page
+              (D-68). */}
           <input className={`search${nothingAtAll ? " hidden-keep" : ""}`} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("article.search")} aria-label={t("article.search")} tabIndex={nothingAtAll ? -1 : undefined} />
         </div>
       </div>
@@ -129,7 +129,7 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onM
             <>
               {/* The first screen used to hand over a blank page. With a
                   voice in hand, the one next step is writing from a title;
-                  the blank page stays, as a faint link (D-67). */}
+                  the blank page stays, as a faint link (D-68). */}
               <p className="lead-sm">{filter === "all" ? t("article.emptyAll") : t("article.emptyFilter")}</p>
               {filter === "all" && (
                 <div className="cta-row">
@@ -140,19 +140,6 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onM
             </>
           )}
         </div>
-      )}
-
-      {/* Where "what do I write next" is decided: the head of the list.
-          It is here whether or not there is a voice (#112): hiding it hid
-          the way in, and pressing it with no voice lands on the one line
-          that says why. When the list is empty the empty state asks
-          instead, so the entry stands down there only. */}
-      {list.settled && !nothingAtAll && (
-        <button className="list-lead" onClick={onGoTopics}>
-          <span className="list-lead-name">{t("topics.entry")}</span>
-          <span className="list-lead-why">{t("topics.entryWhy")}</span>
-          <span className="list-lead-arrow" aria-hidden="true">→</span>
-        </button>
       )}
 
       {list.settled && !nothingAtAll && (
