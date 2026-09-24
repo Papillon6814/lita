@@ -205,7 +205,6 @@ export const ja: Record<MessageKey, string> = {
   "nav.articles": "記事",
   "nav.voices": "文体",
   "nav.backToArticle": "記事に戻る",
-  "article.new": "空から書く",
   "article.filter.all": "すべての記事",
   "article.filter.draft": "下書き",
   "article.filter.approved": "採用した",

@@ -229,3 +229,13 @@
 | `topics-path/impl-a-articles-first-run.png` | 文体なし（本文は「文体を作る」1 つ） |
 | `topics-path/impl-a-topics.png` | 「書く題を決める」（サイドバーの主が白） |
 | `topics-path/impl-a-editor.png` | 記事を開いた画面（懸念 1） |
+
+---
+
+## 改訂（2026-09-24、「空から書く」の廃止）
+
+本人の一言「空から書くのはなくてもいいかも」で、記事を作る入口はサイドバーの **「題から書く」1 つ**にしました（D-69。D-68 の 2 ボタンを改訂）。Issue #121。サイドバーの副ボタンと、記事 0 の空の状態の薄いリンクを消し、`article.new`（「空から書く」/ "Write from blank"）を ja/en から削除、`.empty .cta-row` の CSS も削除しています。`quietNew` の規則は変えていません。
+
+手数は変わらず（題から 3 本を積むまで 6 クリック）、「どちらの入口が自分の用か」という判断が 0 のまま、選択肢が 1 つ減りました。日本語は 6 字減っています。
+
+残る懸念: 文体の画面の主ボタン「この文体で書く」は、いまも白紙の記事を作ります（`Shell.newArticle` は文体 ID 必須にしました）。白紙の入口を完全になくすなら、ここを要件側で決め直す必要があります。画は `topics-path/impl-noblank-articles.png` / `impl-noblank-articles-empty.png` / `impl-noblank-articles-first-run.png`。

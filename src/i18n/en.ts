@@ -203,7 +203,6 @@ export const en = {
   "nav.articles": "Articles",
   "nav.voices": "Voices",
   "nav.backToArticle": "Back to the article",
-  "article.new": "Write from blank",
   "article.filter.all": "All articles",
   "article.filter.draft": "Drafts",
   "article.filter.approved": "Approved",
