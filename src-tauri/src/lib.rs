@@ -5,6 +5,7 @@ mod config;
 mod errors;
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -72,6 +73,9 @@ pub struct AppState {
     store: Store,
     keychain: SessionStore,
     session: Mutex<Option<Session>>,
+    /// When the current access token was issued, so it can be renewed
+    /// before it runs out (#105). Supabase tokens last `expires_in` seconds.
+    session_since: Mutex<Option<Instant>>,
     /// True until the launch-time restore has finished.
     restoring: AtomicBool,
     /// Set by `cancel_sign_in`; cleared when a sign-in starts.
@@ -94,6 +98,7 @@ impl AppState {
             store: Store::new(config::SUPABASE_URL, config::SUPABASE_ANON_KEY)?,
             keychain: SessionStore::new(config::KEYCHAIN_SERVICE),
             session: Mutex::new(None),
+            session_since: Mutex::new(None),
             restoring: AtomicBool::new(true),
             sign_in_cancel: Arc::new(AtomicBool::new(false)),
             build_cancel: Arc::new(AtomicBool::new(false)),
@@ -124,8 +129,44 @@ impl AppState {
                 None
             }
         };
-        *self.session.lock().unwrap() = restored;
+        self.set_session(restored);
         self.restoring.store(false, Ordering::Release);
+    }
+
+    fn set_session(&self, session: Option<Session>) {
+        *self.session_since.lock().unwrap() = session.as_ref().map(|_| Instant::now());
+        *self.session.lock().unwrap() = session;
+    }
+
+    /// Renews the access token when it is within five minutes of running
+    /// out. Called from a background thread once a minute and from
+    /// `access_token`, so a token never expires under a running app or
+    /// after the Mac wakes from sleep. A failed renewal keeps the old
+    /// token: the next request then fails as `session_expired`, and the
+    /// screen offers to sign in again.
+    fn refresh_if_stale(&self) {
+        const MARGIN: Duration = Duration::from_secs(300);
+        let (refresh_token, stale) = {
+            let session = self.session.lock().unwrap();
+            let since = self.session_since.lock().unwrap();
+            match (session.as_ref(), *since) {
+                (Some(s), Some(at)) => {
+                    let lifetime = Duration::from_secs(s.expires_in.max(600));
+                    (s.refresh_token.clone(), at.elapsed() + MARGIN >= lifetime)
+                }
+                _ => return,
+            }
+        };
+        if !stale {
+            return;
+        }
+        match self.auth.refresh(&refresh_token) {
+            Ok(fresh) => {
+                let _ = self.keychain.save(&fresh);
+                self.set_session(Some(fresh));
+            }
+            Err(e) => eprintln!("session could not be renewed: {e:#}"),
+        }
     }
 
     fn status(&self) -> SessionStatus {
@@ -137,6 +178,7 @@ impl AppState {
 
     /// The current access token, or the error the UI shows when signed out.
     fn access_token(&self) -> Result<String, UiError> {
+        self.refresh_if_stale();
         self.session
             .lock()
             .unwrap()
@@ -191,7 +233,7 @@ async fn sign_in(app: AppHandle) -> Result<SessionStatus, UiError> {
 
     let state = app.state::<AppState>();
     state.keychain.save(&session).map_err(fail)?;
-    *state.session.lock().unwrap() = Some(session);
+    state.set_session(Some(session));
     Ok(state.status())
 }
 
@@ -203,7 +245,7 @@ fn cancel_sign_in(state: State<'_, AppState>) {
 #[tauri::command]
 fn sign_out(state: State<'_, AppState>) -> Result<SessionStatus, UiError> {
     state.keychain.clear().map_err(fail)?;
-    *state.session.lock().unwrap() = None;
+    state.set_session(None);
     Ok(state.status())
 }
 
@@ -1302,6 +1344,12 @@ pub fn run() {
             // Off the main thread: the refresh is a network round trip.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn_blocking(move || handle.state::<AppState>().restore());
+            // Keep the token fresh while the app runs (#105).
+            let keeper = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(60));
+                keeper.state::<AppState>().refresh_if_stale();
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

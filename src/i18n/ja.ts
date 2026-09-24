@@ -21,6 +21,7 @@ export const ja: Record<MessageKey, string> = {
   "action.retry": "もう一度確認",
   "action.cancel": "やめる",
   "action.showDetails": "詳細を表示",
+  "action.signInAgain": "サインインし直す",
   "action.seeSteps": "手順を見る",
   "action.save": "保存",
   "action.fix": "直す",
