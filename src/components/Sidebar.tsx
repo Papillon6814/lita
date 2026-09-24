@@ -6,7 +6,6 @@ import type { Route } from "./Shell";
 type Props = {
   route: Route;
   onRoute: (r: Route) => void;
-  onNew: () => void;
   onGoTopics: () => void;
   // The main pane already has a mint button, so the top one steps back to a
   // plain one; it stays in the same place with the same words (D-68).
@@ -25,7 +24,7 @@ type Props = {
 export const FILTERS: (ArticleStatus | "all")[] = ["all", "draft"];
 
 // Quiet when everything is fine; the Codex pill appears only when it is not.
-export function Sidebar({ route, onRoute, onNew, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
+export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -53,10 +52,9 @@ export function Sidebar({ route, onRoute, onNew, onGoTopics, quietNew, session, 
     <nav className="sidebar" aria-label={t("nav.label")}>
       <div className="side-top">
         <b className="wordmark">Lita</b>
-        {/* Two ways to start, in the order they are meant to be taken: from
-            a title first, from a blank page second (D-68). */}
+        {/* One way to start an article: from a title (D-69). The blank page
+            is gone; a title is what the writer is actually missing. */}
         <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onGoTopics}>{t("topics.entry")}</button>
-        <button className="btn sm new" onClick={onNew}>{t("article.new")}</button>
       </div>
 
       <div className="side-group">

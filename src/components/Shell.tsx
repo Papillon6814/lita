@@ -68,18 +68,10 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
   }, [session]);
 
 
-  // A new article starts with the voice used last (D-55: there is no
-  // "default" voice); with a single voice, that one.
-  const newArticle = useCallback(async (voiceId?: string) => {
-    let id = voiceId;
-    if (!id) {
-      try {
-        const recent = await host.listArticles();
-        id = recent.find((a) => a.voice_id)?.voice_id ?? undefined;
-        if (!id) { const voices = await host.listVoices(); if (voices.length === 1) id = voices[0].id; }
-      } catch {}
-    }
-    const a = await host.createArticle(undefined, id);
+  // The only blank page left is "write in this voice" on the voice screen
+  // (D-69 removed the two general entries), so the voice is always known.
+  const newArticle = useCallback(async (voiceId: string) => {
+    const a = await host.createArticle(undefined, voiceId);
     setRoute({ kind: "article", id: a.id });
   }, []);
 
@@ -89,7 +81,6 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
         route={route}
         onRoute={setRoute}
         quietNew={mainPrimary || route.kind === "topics"}
-        onNew={() => void newArticle()}
         onGoTopics={() => setRoute({ kind: "topics" })}
         session={session}
         codex={codex}
@@ -104,7 +95,6 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
           <ArticleList
             filter={route.filter}
             onOpen={(id) => setRoute({ kind: "article", id })}
-            onNew={() => void newArticle()}
             onGoVoices={() => setRoute({ kind: "voices" })}
             onGoTopics={() => setRoute({ kind: "topics" })}
             onMainPrimary={setMainPrimary}

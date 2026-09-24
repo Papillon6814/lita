@@ -9,7 +9,6 @@ import { ErrorNote } from "./ErrorNote";
 type Props = {
   filter: ArticleStatus | "all";
   onOpen: (id: string) => void;
-  onNew: () => void;
   onGoVoices: () => void;
   onGoTopics: () => void;
   // The sidebar's 「題から書く」 steps back while this screen carries its own
@@ -28,7 +27,7 @@ const STOPPED: Record<string, MessageKey> = {
 
 // The home screen: what has been written, newest first. Nothing on it is a
 // number for its own sake; dates and destinations only.
-export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onMainPrimary, onShowCodexSteps }: Props) {
+export function ArticleList({ filter, onOpen, onGoVoices, onGoTopics, onMainPrimary, onShowCodexSteps }: Props) {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [q, setQ] = useState("");
   const [stopped, setStopped] = useState<UiError | null>(null);
@@ -127,16 +126,10 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onM
             </>
           ) : (
             <>
-              {/* The first screen used to hand over a blank page. With a
-                  voice in hand, the one next step is writing from a title;
-                  the blank page stays, as a faint link (D-68). */}
+              {/* The one next step is writing from a title; the blank page
+                  is gone (D-69). */}
               <p className="lead-sm">{filter === "all" ? t("article.emptyAll") : t("article.emptyFilter")}</p>
-              {filter === "all" && (
-                <div className="cta-row">
-                  <button className="btn pri" onClick={onGoTopics}>{t("topics.entry")}</button>
-                  <button className="link quiet-link" onClick={onNew}>{t("article.new")}</button>
-                </div>
-              )}
+              {filter === "all" && <button className="btn pri" onClick={onGoTopics}>{t("topics.entry")}</button>}
             </>
           )}
         </div>
