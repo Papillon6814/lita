@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { forgetAll } from "./hooks/useQuietLoad";
+import { SIGN_IN_AGAIN } from "./components/ErrorNote";
 import { host, type CodexStatus, type SessionStatus, type UiError } from "./platform/host";
 import { asUiError } from "./errors";
 import { t } from "./i18n";
@@ -59,6 +60,13 @@ export default function App() {
     try { setView({ kind: "done", status: await host.codexStatus() }); }
     catch (e) { setView({ kind: "done", status: { status: "error", message: String(e) } }); }
   }, []);
+
+  // "サインインし直す" from any error note (#105).
+  useEffect(() => {
+    const on = () => void signIn();
+    window.addEventListener(SIGN_IN_AGAIN, on);
+    return () => window.removeEventListener(SIGN_IN_AGAIN, on);
+  }, [signIn]);
 
   useEffect(() => {
     void check();

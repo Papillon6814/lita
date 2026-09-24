@@ -19,6 +19,7 @@ export const en = {
   "action.retry": "Check again",
   "action.cancel": "Cancel",
   "action.showDetails": "Show details",
+  "action.signInAgain": "Sign in again",
   "action.seeSteps": "See what to do",
   "action.save": "Save",
   "action.fix": "Edit",
