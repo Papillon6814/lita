@@ -1,6 +1,7 @@
 export const en = {
   "app.tagline": "Your posts, in your voice.",
-  "codex.checking": "Checking Codex…",
+  "launch.slow": "This is taking a while. Please hold on a moment.",
+  "codex.checking": "Lita is checking Codex.",
   "codex.notLoggedIn": "Codex is installed but not logged in.",
   "codex.notLoggedIn.hint": "Run this in a terminal, then check again:",
   "codex.notInstalled": "Codex CLI is not installed.",
@@ -26,7 +27,7 @@ export const en = {
   "action.add": "Add",
   "action.remove": "Remove",
   "action.done": "Done",
-  "session.checking": "Checking your session…",
+  "session.checking": "Lita is checking your sign-in.",
   "session.signedOut": "Sign in to keep your voices and drafts on every computer you use.",
   "session.waiting": "Finish signing in with Google in your browser…",
   "session.error": "Sign-in did not complete.",

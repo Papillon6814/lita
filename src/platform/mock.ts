@@ -3,7 +3,8 @@
 // opened in an ordinary browser, which is how design reviews take their
 // screenshots. The scene comes from the URL: `?scene=voice`, `?scene=write`…
 //
-// Scenes: signed-out, signing-in, codex-not-logged-in, codex-not-installed,
+// Scenes: launch (waiting on the sign-in), launch-slow (waiting on Codex,
+// past three seconds), signed-out, signing-in, codex-not-logged-in, codex-not-installed,
 // intake, intake-open (note row unfolded), intake-connecting (note import
 // running, never finishing), intake-loaded, intake-manual (three pieces
 // pasted by hand), intake-both (one pasted piece plus a note import),
@@ -164,7 +165,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "topics-no-voice"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -445,8 +446,11 @@ export const mockHost: T.Host = {
   },
   restartApp: async () => {},
   onCheckUpdate: async () => () => {},
-  codexStatus: async () => codex,
-  sessionStatus: async () => session,
+  // The launch scenes hold one of the two checks open so a screenshot catches
+  // the launch screen: "launch" waits on the sign-in, "launch-slow" waits on
+  // Codex long enough for the slow line to appear.
+  codexStatus: async () => (scene === "launch-slow" ? never<T.CodexStatus>() : codex),
+  sessionStatus: async () => (scene === "launch" ? never<T.SessionStatus>() : session),
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),

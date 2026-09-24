@@ -1,0 +1,51 @@
+/* 起動画面の静的試作（Issue #111）。色・角丸・書体はトークンのみ。
+   新しい色も角丸も足していない。動きは点の明滅と文字のフェードだけで、
+   prefers-reduced-motion では止まる。 */
+
+@font-face{font-family:Z;font-weight:400;src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-400-normal.woff2) format("woff2")}
+@font-face{font-family:Z;font-weight:500;src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-500-normal.woff2) format("woff2")}
+@font-face{font-family:Z;font-weight:700;src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-700-normal.woff2) format("woff2")}
+@font-face{font-family:Z;font-weight:900;src:url(../node_modules/@fontsource/zen-kaku-gothic-new/files/zen-kaku-gothic-new-japanese-900-normal.woff2) format("woff2")}
+
+:root{
+  --bg:#fffdf9; --fg:#2b2a27; --mute:#6b675f; --line:#ece7dd; --soft:#f6f2ea;
+  --mint:#41c9b4; --mint-soft:#e3f6f2; --mint-ink:#1d7f70;
+  --r-ctl:8px; --r-box:12px;
+}
+html,body{margin:0;background:var(--soft);color:var(--fg);
+  font-family:Z,"Zen Kaku Gothic New",ui-sans-serif,system-ui,sans-serif;font-size:15.5px;line-height:1.65;}
+.caption{max-width:1040px;margin:18px auto 8px;padding:0 8px;color:var(--mute);font-size:0.85rem;}
+.caption b{color:var(--fg);}
+.frame{max-width:1040px;margin:0 auto 22px;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r-box);overflow:hidden;}
+
+/* 窓そのもの。起動中は上のバーも出さない（原則 2: 正常時は静か） */
+.win{height:330px;display:grid;place-items:center;text-align:center;}
+.stage{animation:rise .7s ease-out both;}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.mark{font-weight:900;font-size:2.7rem;letter-spacing:-0.01em;line-height:1.1;margin:0;}
+.mark .dot{color:var(--mint);}
+.tag{color:var(--mute);margin:6px 0 0;}
+.line{color:var(--mute);font-size:0.9rem;margin:26px 0 0;min-height:1.6em;}
+.slow{color:var(--mute);font-size:0.85rem;margin:4px 0 0;}
+
+/* 点がゆっくり明滅する（案 A） */
+.mark .dot.beat{animation:beat 2.4s ease-in-out infinite;}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* 二段階（案 B） */
+.steps{display:flex;align-items:center;justify-content:center;gap:0;margin:28px 0 0;}
+.step{display:grid;justify-items:center;gap:6px;width:120px;}
+.step .bead{width:10px;height:10px;border-radius:50%;background:var(--line);}
+.step .bead.done{background:var(--mint-ink);}
+.step .bead.now{background:var(--mint);animation:beat 2.4s ease-in-out infinite;}
+.step .lb{font-size:0.82rem;color:var(--mute);}
+.step.now .lb{color:var(--fg);}
+.bar{width:88px;height:1px;background:var(--line);margin-bottom:20px;}
+.bar.done{background:var(--mint-ink);}
+
+@media (prefers-reduced-motion: reduce){
+  .stage{animation:none}
+  .mark .dot.beat,.step .bead.now{animation:none}
+}

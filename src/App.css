@@ -494,3 +494,21 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .notes-box { max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; line-height: 1.6; margin: 10px 0 0; }
 .progress { height: 8px; background: var(--soft); border-radius: 999px; overflow: hidden; margin-top: 12px; }
 .progress-bar { height: 100%; background: var(--mint-ink); transition: width .2s; }
+
+/* Launch (#111). The first second or two: the name on paper, the tagline the
+   sign-in screen also carries, and one sentence about what is being waited
+   on. No top bar, no footer — there is nothing to act on yet. Only the mint
+   dot moves, and only slowly. */
+.launch { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 24px; }
+.launch-stage { animation: launch-rise .7s ease-out both; }
+@keyframes launch-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.launch-mark { margin: 0; font-size: 2.7rem; font-weight: 900; letter-spacing: -0.01em; line-height: 1.1; }
+.launch-mark .dot { color: var(--mint); animation: launch-beat 2.4s ease-in-out infinite; }
+@keyframes launch-beat { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.launch-tag { margin: 6px 0 0; color: var(--mute); }
+.launch-line { margin: 26px 0 0; color: var(--mute); font-size: 0.9rem; }
+.launch-slot { min-height: 1.5rem; margin-top: 4px; }
+.launch-slow { margin: 0; color: var(--mute); font-size: 0.85rem; }
+@media (prefers-reduced-motion: reduce) {
+  .launch-stage, .launch-mark .dot { animation: none; }
+}
