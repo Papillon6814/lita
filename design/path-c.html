@@ -1,0 +1,133 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>Lita — 題を出すまでの導線（案 C: 入口を一つにして、押した先で分ける）</title>
+<link rel="stylesheet" href="_path.css">
+<script src="_path.js" defer></script>
+</head><body>
+
+<p class="caption"><b>案 C: 入口を一つにする</b> — ①記事がある、ふだんの画面。入口は「新しく書く」だけ。見出し行の小ボタンは消える</p>
+<div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><b class="wordmark">Lita</b><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head on">記事</button>
+    <ul class="side-list"><li><button class="side-item on">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head">文体</button></div>
+  <div class="side-bottom">
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside>
+<main class="main">
+  <div class="page-head"><h2>すべての記事</h2>
+    <div class="head-right"><input class="search" type="search" placeholder="記事を探す"></div>
+  </div>
+  <ul class="article-rows">
+    <li class="arow"><div class="arow-main">
+      <span class="a-title">資本政策は諦める順番を決める作業</span>
+      <span class="a-excerpt">資本政策の相談で最初に聞くのは、いくら欲しいかではなく、何を諦められるかだ。</span>
+      <span class="a-meta"><span class="badge">X</span><span class="badge status-approved">採用</span><span>test</span><span>35 分前</span></span>
+    </div></li>
+    <li class="arow"><div class="arow-main">
+      <span class="a-title">投資家との最初の会話で聞くこと</span>
+      <span class="a-excerpt">投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。</span>
+      <span class="a-meta"><span class="badge">note</span><span>test</span><span>1 日前</span></span>
+    </div></li>
+    <li class="arow"><div class="arow-main">
+      <span class="a-title">ファイナンスは時間を買う話</span>
+      <span class="a-excerpt">ファイナンスの話は結局、時間をどう買うかに帰着すると思う。</span>
+      <span class="a-meta"><span class="badge">X</span><span class="badge status-archived">保管</span><span>test</span><span>4 日前</span></span>
+    </div></li>
+  </ul>
+</main>
+</div>
+
+<p class="caption"><b>案 C</b> — ②「新しく書く」を押した直後。モーダルではなく一覧の頭に開く。上の行に戻る道（閉じる）がある</p>
+<div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><b class="wordmark">Lita</b><button class="btn pri sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head on">記事</button>
+    <ul class="side-list"><li><button class="side-item on">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head">文体</button></div>
+  <div class="side-bottom">
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside>
+<main class="main">
+  <div class="page-head"><h2>すべての記事</h2>
+    <div class="head-right"><input class="search" type="search" placeholder="記事を探す"></div>
+  </div>
+  <section class="choose">
+    <div class="choose-head"><h3>どう書きますか</h3><span class="grow"></span><button class="quiet sm">閉じる</button></div>
+    <div class="choose-list">
+      <button class="choose-row on"><span><b>題から書く</b><span class="g">よく書いている言葉から題を出し、選んだぶんをまとめて下書きにします。</span></span><span class="arrow">→</span></button>
+      <button class="choose-row"><span><b>空から書く</b><span class="g">白紙のエディタを開きます。</span></span><span class="arrow">→</span></button>
+    </div>
+  </section>
+  <ul class="article-rows">
+    <li class="arow"><div class="arow-main">
+      <span class="a-title">資本政策は諦める順番を決める作業</span>
+      <span class="a-excerpt">資本政策の相談で最初に聞くのは、いくら欲しいかではなく、何を諦められるかだ。</span>
+      <span class="a-meta"><span class="badge">X</span><span class="badge status-approved">採用</span><span>test</span><span>35 分前</span></span>
+    </div></li>
+    <li class="arow"><div class="arow-main">
+      <span class="a-title">投資家との最初の会話で聞くこと</span>
+      <span class="a-excerpt">投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。</span>
+      <span class="a-meta"><span class="badge">note</span><span>test</span><span>1 日前</span></span>
+    </div></li>
+  </ul>
+</main>
+</div>
+
+<p class="caption"><b>案 C</b> — ③記事が 0、文体はある（初回）。空の状態の主ボタンは「新しく書く」のまま。押すと同じ 2 択が下に開く（ここでは開いた状態）</p>
+<div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><b class="wordmark">Lita</b><button class="btn sm">新しく書く</button></div>
+  <div class="side-group"><button class="side-head on">記事</button>
+    <ul class="side-list"><li><button class="side-item on">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head">文体</button></div>
+  <div class="side-bottom">
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside>
+<main class="main">
+  <div class="page-head"><h2>すべての記事</h2>
+    <div class="head-right"><input class="search" type="search" placeholder="記事を探す" style="visibility:hidden"></div>
+  </div>
+  <div class="empty">
+    <p class="lead-sm">まだ記事がありません。最初の一本を書きましょう。</p>
+    <div class="cta-row"><button class="btn pri">新しく書く</button></div>
+  </div>
+  <section class="choose" style="margin-top:22px">
+    <div class="choose-head"><h3>どう書きますか</h3><span class="grow"></span><button class="quiet sm">閉じる</button></div>
+    <div class="choose-list">
+      <button class="choose-row on"><span><b>題から書く</b><span class="g">よく書いている言葉から題を出し、選んだぶんをまとめて下書きにします。</span></span><span class="arrow">→</span></button>
+      <button class="choose-row"><span><b>空から書く</b><span class="g">白紙のエディタを開きます。</span></span><span class="arrow">→</span></button>
+    </div>
+  </section>
+</main>
+</div>
+
+<p class="caption"><b>案 C</b> — ④文体がまだ無い。A・B と同じで、空の状態は文体だけを勧める</p>
+<div class="frame">
+<aside class="sidebar">
+  <div class="side-top"><b class="wordmark">Lita</b><button class="btn sm dim">新しく書く</button></div>
+  <div class="side-group"><button class="side-head on">記事</button>
+    <ul class="side-list"><li><button class="side-item on">すべての記事</button></li><li><button class="side-item">下書き</button></li></ul>
+  </div>
+  <div class="side-group"><button class="side-head">文体</button></div>
+  <div class="side-bottom">
+    <button class="acct"><span class="avatar">K</span><span class="acct-email">kuno@muumoo.online</span></button>
+  </div>
+</aside>
+<main class="main">
+  <div class="page-head"><h2>すべての記事</h2>
+    <div class="head-right"><input class="search" type="search" placeholder="記事を探す" style="visibility:hidden"></div>
+  </div>
+  <div class="empty">
+    <p class="lead-sm">まず、あなたの書き方を Lita に教えましょう。文章を集めて文体を作ると、ここから書けます。</p>
+    <div class="cta-row"><button class="btn pri">文体を作る</button></div>
+  </div>
+</main>
+</div>
+
+</body></html>

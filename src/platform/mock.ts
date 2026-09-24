@@ -165,7 +165,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "topics-no-voice"].includes(scene);
+const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "articles-no-voice", "topics-no-voice"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 

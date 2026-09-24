@@ -1,0 +1,36 @@
+@import "_queue.css";
+
+/* 「題を出す」までの導線の 3 案。既存のトークンだけを使う（新しい色・角丸なし）。 */
+
+/* 空の状態（src/App.css の .empty と同じ骨格） */
+.empty{padding:36px 0 0;max-width:62ch;}
+.empty .lead-sm{font-size:1.02rem;margin:0 0 14px;color:var(--fg);}
+.empty .lead-sm.mute{color:var(--mute);}
+.empty .cta-row{display:flex;gap:16px;align-items:center;}
+.empty .cta-row .link{font-size:0.9rem;}
+.empty .why{color:var(--mute);font-size:0.88rem;margin:12px 0 0;}
+
+/* A: サイドバーに 2 つの入口を縦に並べる */
+.side-cta{display:flex;flex-direction:column;gap:7px;padding:2px 6px 4px;}
+.side-cta .wordmark{padding-bottom:6px;}
+.side-cta .btn{width:100%;text-align:center;}
+
+/* B: 一覧の頭の一行の入口 */
+.list-lead{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;
+  background:var(--mint-soft);color:var(--mint-ink);border:0;border-radius:var(--r-ctl);
+  padding:11px 14px;font-weight:700;margin:0 0 14px;}
+.list-lead .g{font-weight:400;color:var(--mute);font-size:0.88rem;}
+.list-lead .arrow{margin-left:auto;font-weight:400;}
+
+/* C: 「新しく書く」を押した先の選び分け（行内。モーダルにしない） */
+.choose{background:var(--soft);border-radius:var(--r-box);padding:14px var(--pad-x) 16px;margin:0 0 16px;}
+.choose-head{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;}
+.choose-head h3{margin:0;font-size:0.95rem;}
+.choose-head .grow{flex:1;}
+.choose-list{display:flex;flex-direction:column;gap:8px;}
+.choose-row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;font:inherit;
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-ctl);padding:13px 16px;color:var(--fg);}
+.choose-row.on{border-color:var(--mint-ink);box-shadow:inset 0 0 0 1px var(--mint-ink);}
+.choose-row b{font-size:1rem;}
+.choose-row .g{display:block;color:var(--mute);font-size:0.86rem;font-weight:400;margin-top:2px;}
+.choose-row .arrow{margin-left:auto;color:var(--mute);}

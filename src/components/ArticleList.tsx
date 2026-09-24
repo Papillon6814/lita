@@ -12,6 +12,9 @@ type Props = {
   onNew: () => void;
   onGoVoices: () => void;
   onGoTopics: () => void;
+  // The sidebar's 「新しく書く」 steps back while this screen carries its own
+  // main button, so only one of them is mint at a time (D-67, principle 3).
+  onMainPrimary: (v: boolean) => void;
   onShowCodexSteps: () => void;
 };
 // When the whole queue stops, the sentence says what to do next, not what
@@ -25,7 +28,7 @@ const STOPPED: Record<string, MessageKey> = {
 
 // The home screen: what has been written, newest first. Nothing on it is a
 // number for its own sake; dates and destinations only.
-export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onShowCodexSteps }: Props) {
+export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onMainPrimary, onShowCodexSteps }: Props) {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [q, setQ] = useState("");
   const [stopped, setStopped] = useState<UiError | null>(null);
@@ -53,6 +56,7 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onS
 
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); }, []);
 
+
   useEffect(() => {
     let live = true;
     let off: (() => void) | undefined;
@@ -76,6 +80,10 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onS
   const inQueue = all.filter((r) => r.queue === "waiting" || r.queue === "writing").length;
   const error = actionError ?? list.error;
 
+  // Only one mint button at a time: while this screen is empty it carries
+  // the main button, so the sidebar's steps back (D-67).
+  useEffect(() => { onMainPrimary(nothingAtAll); return () => onMainPrimary(false); }, [nothingAtAll, onMainPrimary]);
+
   const drop = async (id: string) => { try { setActionError(null); await host.dequeueArticle(id); await reload(); } catch (e) { setActionError(asUiError(e)); } };
   const clear = async () => { try { setActionError(null); await host.clearQueue(); await reload(); } catch (e) { setActionError(asUiError(e)); } };
 
@@ -84,12 +92,11 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onS
       <div className="page-head">
         <h2>{t(`article.filter.${filter}` as const)}</h2>
         <div className="head-right">
-          {/* Both keep their place from the first paint, so the heading row
-              never shifts when the rows or the voices arrive. */}
+          {/* The search keeps its place from the first paint, so the heading
+              row never shifts when the rows arrive. The way into topics is
+              no longer here: beside the search it read as a list tool
+              (D-67). */}
           <input className={`search${nothingAtAll ? " hidden-keep" : ""}`} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("article.search")} aria-label={t("article.search")} tabIndex={nothingAtAll ? -1 : undefined} />
-          {/* Always here, voice or not (#112). Hiding it hid the way in;
-              pressing it with no voice lands on the one line that says why. */}
-          <button className="btn sm" onClick={onGoTopics}>{t("topics.suggest")}</button>
         </div>
       </div>
 
@@ -120,11 +127,32 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onS
             </>
           ) : (
             <>
+              {/* The first screen used to hand over a blank page. With a
+                  voice in hand, the one next step is writing from a title;
+                  the blank page stays, as a faint link (D-67). */}
               <p className="lead-sm">{filter === "all" ? t("article.emptyAll") : t("article.emptyFilter")}</p>
-              {filter === "all" && <button className="btn pri" onClick={onNew}>{t("article.new")}</button>}
+              {filter === "all" && (
+                <div className="cta-row">
+                  <button className="btn pri" onClick={onGoTopics}>{t("topics.entry")}</button>
+                  <button className="link quiet-link" onClick={onNew}>{t("article.new")}</button>
+                </div>
+              )}
             </>
           )}
         </div>
+      )}
+
+      {/* Where "what do I write next" is decided: the head of the list.
+          It is here whether or not there is a voice (#112): hiding it hid
+          the way in, and pressing it with no voice lands on the one line
+          that says why. When the list is empty the empty state asks
+          instead, so the entry stands down there only. */}
+      {list.settled && !nothingAtAll && (
+        <button className="list-lead" onClick={onGoTopics}>
+          <span className="list-lead-name">{t("topics.entry")}</span>
+          <span className="list-lead-why">{t("topics.entryWhy")}</span>
+          <span className="list-lead-arrow" aria-hidden="true">→</span>
+        </button>
       )}
 
       {list.settled && !nothingAtAll && (
