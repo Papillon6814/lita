@@ -45,9 +45,11 @@ export const tauriHost: T.Host = {
   setPolicy: (policy) => invoke<void>("set_policy", { policy }),
   draftPolicy: () => invoke<T.Policy>("draft_policy"),
   suggestBrief: (articleId) => invoke<string>("suggest_brief", { articleId }),
-  suggestTopics: (direction) => invoke<string[]>("suggest_topics", { direction }),
-  enqueueArticles: (titles, voiceId, platformId, effort, direction) =>
-    invoke<T.ArticleSummary[]>("enqueue_articles", { titles, voiceId, platformId, effort, direction }),
+  suggestTopics: (subjects, direction) => invoke<string[]>("suggest_topics", { subjects, direction }),
+  enqueueArticles: (titles, voiceId, platformId, effort, subjects, direction) =>
+    invoke<T.ArticleSummary[]>("enqueue_articles", { titles, voiceId, platformId, effort, subjects, direction }),
+  getTopicCloud: () => invoke<T.CloudView>("get_topic_cloud"),
+  gatherTopicCloud: () => invoke<T.CloudView>("gather_topic_cloud"),
   startQueue: () => invoke<void>("start_queue"),
   dequeueArticle: (id) => invoke<void>("dequeue_article", { id }),
   clearQueue: () => invoke<void>("clear_queue"),

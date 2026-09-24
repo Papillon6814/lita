@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
 
     for (label, pol) in [("empty policy", Policy::default()), ("drafted policy", policy)] {
         let t = std::time::Instant::now();
-        let req = Request { prompt: topics::topics_prompt(&pol, &refs, &existing, &direction, 14, Lang::Ja), schema: topics::topics_schema(), model: None, effort: Effort::Quality, working_dir: wd.clone() };
+        let req = Request { prompt: topics::topics_prompt(&pol, &refs, &existing, &[], &direction, 14, Lang::Ja), schema: topics::topics_schema(), model: None, effort: Effort::Quality, working_dir: wd.clone() };
         let out = cli.run_typed::<Topics>(&req, |_| {})?.value;
         let kept = topics::dedupe(out.topics.clone(), &existing, 10);
         println!("== titles with {label} ({}s, {} returned, {} kept) ==", t.elapsed().as_secs(), out.topics.len(), kept.len());

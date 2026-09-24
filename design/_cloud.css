@@ -1,0 +1,72 @@
+@import "_queue.css";
+
+/* 題材の雲（Issue #108 の静的試作）。色・角丸・書体は _manual.css のトークンだけ。
+   新しい色は一つも足していない。動きは 0.18s の色替えのみで、
+   prefers-reduced-motion で止まる。 */
+
+/* --- 雲そのもの（案 A・B が使う） --- */
+.cloud-box{background:var(--soft);border-radius:var(--r-box);padding:12px var(--pad-x) 14px;}
+.cloud-head{display:flex;align-items:baseline;gap:10px;margin:0 0 6px;}
+.cloud-head h4{margin:0;font-size:0.88rem;font-weight:700;}
+.cloud-head .muted{font-size:0.82rem;}
+.cloud-head .grow{flex:1;}
+.cloud-head .link{font-size:0.85rem;}
+.cloud{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 12px;padding:4px 2px;}
+
+.w{font:inherit;background:none;border:1px solid transparent;border-radius:var(--r-ctl);
+   color:var(--fg);padding:2px 8px;line-height:1.5;white-space:nowrap;
+   transition:background-color .18s ease, color .18s ease;}
+/* 大きさは 3 段だけ（要件 必須 4）。弱 / 中 / 強 */
+.w.s1{font-size:0.95rem;font-weight:400;color:var(--mute);}
+.w.s2{font-size:1.2rem;font-weight:500;}
+.w.s3{font-size:1.6rem;font-weight:700;letter-spacing:-0.01em;}
+/* すでに書いた題材は薄く */
+.w.done{opacity:0.4;}
+.w[aria-pressed="true"]{background:var(--mint-ink);color:#fff;opacity:1;}
+.w:focus-visible{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft);}
+.cloud-foot{color:var(--mute);font-size:0.82rem;margin:6px 0 0;text-align:center;}
+/* 3 つ選んだあと。選べない語は押せないことが色で分かる */
+.capped .w[aria-pressed="false"]{color:#b4afa5;}
+.capped .w[aria-pressed="false"].done{opacity:0.3;}
+.capped .chip[aria-pressed="false"]{color:#b4afa5;border-color:#f4f0e7;}
+.capped .chip[aria-pressed="false"].done{opacity:0.35;}
+/* 雲の場所に出す一文（拾っている・拾えなかった・材料が増えた） */
+.cloud-note{display:flex;align-items:center;gap:9px;color:var(--mute);font-size:0.88rem;margin:0 0 8px;}
+.cloud-note .link{font-size:0.85rem;}
+/* 中心が大きい丸い雲（案 B）。行ごとに幅を狭めて塊に見せる */
+.cloud.round{flex-direction:column;gap:2px;}
+.cloud.round .crow{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:2px 14px;margin:0 auto;}
+/* 選んだ言葉の再掲（案 B） */
+.recap{color:var(--mute);font-size:0.85rem;margin:8px 0 0;}
+.recap b{color:var(--mint-ink);font-weight:700;margin-left:8px;}
+
+/* --- 今回の方向に入った種（案 A） --- */
+.seedfield{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:0;
+  background:#fff;border:1px solid var(--line);border-radius:var(--r-ctl);padding:5px 10px;}
+.seedfield.focused{border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft);}
+.seed{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:0.9rem;font-weight:700;
+  background:var(--mint-soft);color:var(--mint-ink);border:0;border-radius:var(--r-ctl);padding:4px 9px;}
+.seed .x{font-weight:400;opacity:0.65;}
+.seedfield input{border:0;padding:4px 0;background:none;flex:1;min-width:150px;}
+.seedfield input:focus{outline:none;}
+
+/* --- 方向の欄の下の小さな帯（案 C） --- */
+.band{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 8px;margin-top:9px;}
+.band .lead-word{color:var(--mute);font-size:0.82rem;margin-right:2px;}
+.chip{font:inherit;background:#fff;border:1px solid var(--line);border-radius:var(--r-ctl);
+  color:var(--mute);padding:3px 10px;line-height:1.5;white-space:nowrap;
+  transition:background-color .18s ease, color .18s ease, border-color .18s ease;}
+.chip.c1{font-size:0.85rem;}
+.chip.c2{font-size:0.95rem;color:var(--fg);}
+.chip.c3{font-size:1.05rem;color:var(--fg);font-weight:700;}
+.chip.done{opacity:0.45;}
+.chip[aria-pressed="true"]{background:var(--mint-ink);border-color:var(--mint-ink);color:#fff;opacity:1;}
+.chip:focus-visible{outline:none;border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft);}
+.band .link{font-size:0.82rem;}
+
+/* 縦長の撮影用（?tall=1）。画の外に出るものを確かめるためだけ */
+body.tall .frame{height:1400px;}
+
+@media (prefers-reduced-motion: reduce){
+  .w,.chip{transition:none;}
+}
