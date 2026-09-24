@@ -127,6 +127,10 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 /* Said once, quietly, on a row Lita could not confirm. */
 .unsure { display: block; margin-top: 2px; }
 
+/* Said once on a voice that came with Lita, under its sentence: lighter than
+   the eight rows, no badge, no tint (D-70). */
+.preset-note { color: var(--mute); font-size: 0.85rem; margin: -6px 0 12px; max-width: 42em; }
+
 /* Intake */
 h3.step { font-size: 1rem; margin: 26px 0 10px; display: flex; align-items: center; gap: 8px; font-weight: 700; }
 h3.step::before { display: none; content: ""; display: inline-grid; place-items: center; font-size: 0.78rem; }
@@ -140,6 +144,14 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
    radius; only the heading tells them apart. */
 .box { background: var(--soft); border-radius: var(--r-box); padding: 12px var(--pad-x) 16px; margin-top: var(--gap); }
 .box-head { font-size: 0.95rem; font-weight: 700; margin: 0 0 8px; }
+/* The other road out of the intake (D-70): one line under the one primary
+   button, a link with the voice's own name and sentence beside it, so what
+   arrives is readable before it is pressed. No box, no button, no colour. */
+.preset-start { margin: 12px 0 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.preset-start .link { font-size: 0.9rem; flex: none; }
+.preset-start .small { flex: 1; min-width: 12em; line-height: 1.55; }
+.preset-start .pname { margin-right: 4px; }
+
 /* The line between the two boxes: a sentence, not a fork (2026-09-24). */
 .both-note { color: var(--mute); font-size: 0.85rem; text-align: center; margin: 10px 0 0; }
 .connect-box { padding-bottom: 4px; }

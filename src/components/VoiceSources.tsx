@@ -90,7 +90,12 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
     <section className="sources">
       <div className="sources-head">
         <h3>{t("voice.sources.title")}</h3>
-        <span className="muted small">{t("voice.sources.meta", { n: String(voice.voice_sources.length), date: learned })}</span>
+        {/* No count when there is nothing yet: "0 件" is Lita's business,
+            not the reader's (D-70). The section itself stays, because this
+            is where your own writing goes in. */}
+        {voice.voice_sources.length > 0 && (
+          <span className="muted small">{t("voice.sources.meta", { n: String(voice.voice_sources.length), date: learned })}</span>
+        )}
         {newer && <span className="hint">{t("voice.sources.newer")}</span>}
         <button className={newer ? "btn pri sm" : "btn sm"} disabled={busy !== null || voice.voice_sources.length === 0} onClick={rebuild}>{t("voice.sources.rebuild")}</button>
       </div>

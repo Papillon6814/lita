@@ -94,6 +94,9 @@ export type Voice = {
   voice_sources: VoiceSource[];
 };
 
+/** A voice bundled with Lita (D-70): picked, it becomes the person's own. */
+export type VoicePreset = { id: string; name: string; one_line: string };
+
 export type VoiceSummary = {
   id: string;
   name: string;
@@ -177,6 +180,10 @@ export type Host = {
   renameVoice: (id: string, name: string) => Promise<void>;
   updateVoiceProfile: (id: string, profile: VoiceProfile) => Promise<Voice | null>;
   createVoice: (name: string, sources: SourceInput[]) => Promise<Voice>;
+  /** Bundled voices to start from. Static. */
+  listVoicePresets: () => Promise<VoicePreset[]>;
+  /** Copies a bundled voice into the person's own (no material, no evidence). */
+  createVoiceFromPreset: (id: string) => Promise<Voice>;
   addVoiceSources: (voiceId: string, sources: SourceInput[]) => Promise<Voice | null>;
   removeVoiceSources: (voiceId: string, kind: SourceKind, account: string | null) => Promise<Voice | null>;
   /** Drops one piece by id (manual intake). */

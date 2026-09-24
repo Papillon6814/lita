@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { host, type MaterialBudget, type SourceInput, type SourceKind, type UiError } from "../platform/host";
+import { host, type MaterialBudget, type SourceInput, type SourceKind, type UiError, type VoicePreset } from "../platform/host";
 import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 import { mockScene } from "../platform/mock";
@@ -51,21 +51,25 @@ export function connectionsOf<T extends { kind: SourceKind; account: string | nu
   return out;
 }
 
-type Props = { onBuild: (name: string, sources: SourceInput[]) => void; error?: UiError; existing?: string[] };
+type Props = { onBuild: (name: string, sources: SourceInput[]) => void; onPreset?: (id: string) => void; error?: UiError; existing?: string[] };
 
 // One road (UX review 2026-09-23): gather from as many places as you like,
 // then build. Material arrives two ways, in two boxes: pasted or dropped by
 // hand (PasteBox, first, its pieces always in view) or pulled from where it
 // was published (SourceBox, second, folded behind "見直す"). Either box alone
 // is enough, and there is still one primary button.
-export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
+export function VoiceIntake({ onBuild, onPreset, error, existing = [] }: Props) {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [review, setReview] = useState(false);
   const [budget, setBudget] = useState<MaterialBudget>({ per_piece_chars: 1500, total_chars: 20000 });
   // Pressing 文体を作る with nothing gathered puts the keyboard in the paste field.
   const [focusPaste, setFocusPaste] = useState(0);
+  // The voices bundled with Lita (D-70). One today, so no list is drawn: the
+  // first one's name and sentence are read straight out on the quiet line.
+  const [preset, setPreset] = useState<VoicePreset | null>(null);
 
   useEffect(() => { void host.materialBudget().then(setBudget).catch(() => {}); }, []);
+  useEffect(() => { void host.listVoicePresets().then((ps) => setPreset(ps[0] ?? null)).catch(() => {}); }, []);
   // Strict mode runs an effect twice; the seeded scenes must not double up.
   const seeded = useRef(false);
   useEffect(() => {
@@ -218,6 +222,17 @@ export function VoiceIntake({ onBuild, error, existing = [] }: Props) {
             {t("voice.intake.build")}
           </button>
         </div>
+      )}
+
+      {/* The other road, one line, under the one primary button (D-70): a
+          voice that comes with Lita, so there is something to write with
+          before any of your own writing is here. What is gathered above is
+          not folded into it; it stays where it is. */}
+      {preset && onPreset && (
+        <p className="preset-start">
+          <button className="link" onClick={() => onPreset(preset.id)}>{t("voice.preset.start")}</button>
+          <span className="muted small"><span className="pname">「{preset.name}」</span>{preset.one_line}</span>
+        </p>
       )}
     </div>
   );

@@ -9,6 +9,7 @@
 pub mod post;
 pub mod sample;
 pub mod topics;
+pub mod presets;
 pub mod voice;
 
 use std::fmt;

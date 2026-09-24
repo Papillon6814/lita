@@ -11,6 +11,10 @@
 // building, voice,
 // voice-open (same as voice: the eight items are no longer folded),
 // voice-evidence (one row's quotes already open),
+// intake-preset (the intake with the road to the voice that comes with
+// Lita in view; the same screen as intake, kept as its own name so the
+// screenshot has one), voice-preset (that voice, just made: no writing
+// behind it yet),
 // voice-sources (mixed connections), voice-template (older
 // profile without one_line), voices (two voices), articles-first-run,
 // update-available, update-downloading, update-latest, articles, articles-empty, editor, editor-empty,
@@ -124,6 +128,30 @@ const strict: Partial<T.VoiceProfile> = {
   },
 };
 
+// The voice that comes with Lita (D-70): written by hand, copied as it is.
+// No backing, no quotes, no measurements — there is no writing behind it,
+// and that is a normal state, not a fault.
+const PRESET_ONE_LINE = "あなたの文章は、です・ます調で平易に、要点を先に言い、読者への一つのお願いで静かに締めます。";
+const presetProfile: T.VoiceProfile = {
+  language: "ja",
+  first_person: "私たち",
+  formality: "です・ます調",
+  tone: ["丁寧", "平易"],
+  sentence_endings: ["です。", "ます。", "ません。"],
+  avg_sentence_length_chars: 38,
+  preferred_words: ["お知らせします", "ご案内します", "たとえば"],
+  avoided_words: ["弊社", "させていただく", "業界初"],
+  opens_with: "要点を先に一文で言う",
+  closes_with: "読者への一つのお願いで締める",
+  uses_emoji: false,
+  representative_excerpts: [],
+  one_line: PRESET_ONE_LINE,
+};
+const presetVoice: T.Voice = {
+  id: "v-preset", name: "広報のです・ます", profile: presetProfile,
+  created_at: "2026-09-24T02:00:00Z", updated_at: "2026-09-24T02:00:00Z", voice_sources: [],
+};
+
 const sources: T.VoiceSource[] = [1, 2, 3, 4].map((i) => ({
   id: `s${i}`, kind: "note", origin: `https://note.com/kuno/n/n${i}`, account: "kuno",
   body: "資本政策は、何を諦めるかを先に決める作業なのだろうか。".repeat(8), created_at: "2026-09-22T09:00:00Z",
@@ -148,6 +176,8 @@ let voice: T.Voice = {
   id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
+if (scene === "voice-preset") voice = presetVoice;
+
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
   title: ["資本政策は諦める順番を決める作業", "ファイナンスは時間を買う話", "エクイティの重さについて", "投資家との最初の会話で聞くこと", "利益率の議論が空回りする理由"][i],
   url: `https://note.com/kuno/n/n${i + 1}`, published_at: "2026-09-01",
@@ -165,7 +195,7 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
-const hasVoice = !["intake", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "articles-no-voice", "topics-no-voice"].includes(scene);
+let hasVoice = !["intake", "intake-preset", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "articles-no-voice", "topics-no-voice"].includes(scene);
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -454,12 +484,14 @@ export const mockHost: T.Host = {
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),
-  listVoices: async () => { await wait(readDelay); return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
+  listVoices: async () => { await wait(readDelay); return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: voice.voice_sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
   getVoice: async (id) => { await wait(readDelay); return id === "v2" ? voice2 : voice; },
   deleteVoice: async () => true,
   renameVoice: async (_id, name) => { voice = { ...voice, name }; },
   updateVoiceProfile: async (_id, profile) => (voice = { ...voice, profile }),
   createVoice: () => never(),
+  listVoicePresets: async () => [{ id: "pr-polite-ja", name: "広報のです・ます", one_line: PRESET_ONE_LINE }],
+  createVoiceFromPreset: async (_id) => { voice = { ...presetVoice }; hasVoice = true; return voice; },
   addVoiceSources: async (_id, added) => { await wait(300); voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
   removeVoiceSource: async (_id, sourceId) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => s.id !== sourceId) }; return voice; },
   removeVoiceSources: async (_id, kind, account) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => !(s.kind === kind && s.account === account)) }; return voice; },

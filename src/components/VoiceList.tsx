@@ -49,7 +49,9 @@ export function VoiceList({ onOpen, onNew }: Props) {
                   <span className="voice-text">
                     <span className="voice-name">{v.name}</span>
                     <span className="voice-line">{f ? (f.profile.one_line.trim() || leadSentence(f.profile)) : "…"}</span>
-                    <span className="voice-meta">{t("voice.list.meta", { n: String(v.source_count), when: relativeDate(v.updated_at) })}</span>
+                    <span className="voice-meta">{v.source_count > 0
+                      ? t("voice.list.meta", { n: String(v.source_count), when: relativeDate(v.updated_at) })
+                      : t("voice.list.metaDate", { when: relativeDate(v.updated_at) })}</span>
                   </span>
                 </button>
               </li>
