@@ -13,6 +13,7 @@ use errors::UiError;
 
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
+use lita_codex::presets;
 use lita_codex::topics::{self, Existing, GatheredCloud, Lang, Policy, SuggestedBrief, TopicCloud, Topics};
 use lita_codex::voice::{VoiceProfile, pipeline};
 use lita_codex::{CodexCli, Preflight, Request};
@@ -480,6 +481,34 @@ async fn rebuild_voice(app: AppHandle, voice_id: String) -> Result<Voice, UiErro
         store.update_profile(&voice_id, &profile).map_err(fail)?;
         let _ = app.emit("voice-progress", VoiceProgress::Saved);
         store.voice(&voice_id).map_err(fail)?.ok_or_else(|| UiError::invalid("voice vanished"))
+    })
+    .await
+    .map_err(|e| UiError::unknown(e.to_string()))?
+}
+
+/// Voices bundled with Lita (D-70). Static; no network.
+#[tauri::command]
+fn list_voice_presets() -> Vec<presets::PresetSummary> {
+    presets::list()
+}
+
+/// Copies a bundled voice into the person's own, with no material. The
+/// name gets a number when it is taken already.
+#[tauri::command]
+async fn create_voice_from_preset(app: AppHandle, id: String) -> Result<Voice, UiError> {
+    let (name, profile) = presets::find(&id).ok_or_else(|| UiError::invalid("no such preset"))?;
+    let token = app.state::<AppState>().access_token()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let store = state.store.as_user(token);
+        let taken: Vec<String> = store.voices().map_err(fail)?.into_iter().map(|v| v.name).collect();
+        let mut unique = name.to_string();
+        let mut n = 2;
+        while taken.contains(&unique) {
+            unique = format!("{name} ({n})");
+            n += 1;
+        }
+        store.create_voice(&unique, &profile, &[]).map_err(fail)
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
@@ -1436,6 +1465,8 @@ pub fn run() {
             remove_voice_source,
             rebuild_voice,
             cancel_voice_build,
+            list_voice_presets,
+            create_voice_from_preset,
             material_budget,
             platforms,
             preview_prompt,

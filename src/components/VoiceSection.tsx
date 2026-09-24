@@ -50,11 +50,14 @@ export function VoiceSection({ onWrite, voiceId, onBackToArticle }: SectionProps
   const decide = useCallback(async (list: VoiceSummary[], prefer?: string) => {
     const names = list.map((x) => x.name);
     const scene = mockScene();
+    // A voice just made (or asked for by name) wins over the scene: pressing
+    // おすすめの文体から始める on ?scene=intake-preset lands on its page.
+    if (prefer) return openVoice(prefer, list);
     if (scene === "building") return setState({ kind: "building", first: list.length === 0, names });
     if (scene?.startsWith("intake")) return setState({ kind: "new", first: list.length === 0, names });
     if (list.length === 0) return setState({ kind: "new", first: true, names });
     if (scene?.startsWith("voices")) return setState({ kind: "list", names });
-    if (prefer || list.length === 1 || scene?.startsWith("voice")) return openVoice(prefer ?? list[0].id, list);
+    if (list.length === 1 || scene?.startsWith("voice")) return openVoice(list[0].id, list);
     setState({ kind: "list", names });
   }, [openVoice]);
 
@@ -76,6 +79,20 @@ export function VoiceSection({ onWrite, voiceId, onBackToArticle }: SectionProps
     setState({ kind: "building", first, names });
     try {
       const voice = await host.createVoice(name, sources);
+      forget(VOICES_KEY); forget("voiceRows");
+      prime(voiceKey(voice.id), voice);
+      await start(voice.id);
+    } catch (e) {
+      const error = asUiError(e);
+      setState({ kind: "new", error: error.code === "cancelled" ? undefined : error, first, names });
+    }
+  }, [start]);
+
+  // A voice that comes with Lita (D-70): copied, not generated, so there is
+  // no waiting screen and no Codex call — the page just opens.
+  const fromPreset = useCallback(async (id: string, first: boolean, names: string[]) => {
+    try {
+      const voice = await host.createVoiceFromPreset(id);
       forget(VOICES_KEY); forget("voiceRows");
       prime(voiceKey(voice.id), voice);
       await start(voice.id);
@@ -113,7 +130,7 @@ export function VoiceSection({ onWrite, voiceId, onBackToArticle }: SectionProps
       return (
         <div>
           {!state.first && <button className="back" onClick={() => void start()}>← {t("nav.voices")}</button>}
-          <VoiceIntake existing={state.names} onBuild={(name, sources) => void build(name, sources, state.first, state.names)} error={state.error} />
+          <VoiceIntake existing={state.names} onBuild={(name, sources) => void build(name, sources, state.first, state.names)} onPreset={(id) => void fromPreset(id, state.first, state.names)} error={state.error} />
         </div>
       );
     case "building": return <BuildingVoice onCancel={() => void host.cancelVoiceBuild()} />;

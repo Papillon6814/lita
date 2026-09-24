@@ -124,6 +124,10 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
               <button className="link" onClick={() => { setLine(lead); setEditingLine(true); }}>{t("action.fix")}</button>
             </p>
           )}
+          {/* Where this voice started, said once and quietly (D-70). Nothing
+              but a voice that came with Lita has no writing behind it, so the
+              line goes as soon as any of your own is added. */}
+          {voice.voice_sources.length === 0 && <p className="preset-note">{t("voice.preset.note")}</p>}
           <div className="cta">
             <button className="btn pri" onClick={onWrite} disabled={!onWrite}>{t("voice.write")}</button>
           </div>
