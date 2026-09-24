@@ -272,7 +272,9 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .frame { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
 .sidebar { display: flex; flex-direction: column; gap: 18px; padding: 16px 14px; border-right: 1px solid var(--line); background: #fff; position: sticky; top: 0; height: 100vh; }
 .side-top { display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 4px; }
-.side-top .new { padding: 6px 12px; }
+.side-top .new { padding: 6px 12px; transition: none; }
+/* Stepping back happens the moment the list is known, not as a fade: a
+   button that slowly loses its colour reads as something happening. */
 .side-group { display: flex; flex-direction: column; gap: 2px; }
 .side-head { font: inherit; font-weight: 700; text-align: left; background: none; border: none; padding: 7px 10px; border-radius: 6px; color: var(--fg); cursor: pointer; }
 .side-head.on { color: var(--mint-ink); }
@@ -292,6 +294,16 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .search { width: 260px; padding: 8px 12px; }
 .empty { padding: 48px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
 .lead-sm { font-size: 1.1rem; margin: 0; color: var(--mute); }
+/* One main button and one faint way out, on a line (D-67). */
+.empty .cta-row { display: flex; gap: 16px; align-items: center; }
+
+/* The way into topics, at the head of the list: one mint line, the whole
+   of it pressable (D-67). Existing tokens only. */
+.list-lead { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; background: var(--mint-soft); color: var(--mint-ink); border: 0; border-radius: var(--r-ctl); padding: 11px 14px; margin: 0 0 14px; cursor: pointer; }
+.list-lead:hover { filter: brightness(0.97); } /* No new colour: the mint just deepens. */
+.list-lead-name { font-weight: 700; }
+.list-lead-why { color: var(--mute); font-size: 0.88rem; }
+.list-lead-arrow { margin-left: auto; }
 
 /* Article list */
 .article-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }

@@ -53,6 +53,9 @@ type Props = {
 
 export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
   const [route, setRoute] = useState<Route>(initialRoute);
+  // Set by the screen in the main pane when it shows a main button of its
+  // own; the sidebar's 「新しく書く」 goes quiet while it does (D-67).
+  const [mainPrimary, setMainPrimary] = useState(false);
   useEffect(() => { try { sessionStorage.setItem(ROUTE_KEY, JSON.stringify(route)); } catch {} }, [route]);
 
   // Anything left waiting from last time goes on quietly, once, as soon as
@@ -85,6 +88,7 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
       <Sidebar
         route={route}
         onRoute={setRoute}
+        quietNew={mainPrimary || route.kind === "topics"}
         onNew={() => void newArticle()}
         session={session}
         codex={codex}
@@ -102,6 +106,7 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
             onNew={() => void newArticle()}
             onGoVoices={() => setRoute({ kind: "voices" })}
             onGoTopics={() => setRoute({ kind: "topics" })}
+            onMainPrimary={setMainPrimary}
             onShowCodexSteps={onShowCodexSteps}
           />
         )}
