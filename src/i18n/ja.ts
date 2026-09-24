@@ -2,7 +2,8 @@ import type { MessageKey } from "./en";
 
 export const ja: Record<MessageKey, string> = {
   "app.tagline": "あなたの文体で、あなたの投稿を。",
-  "codex.checking": "Codex を確認しています…",
+  "launch.slow": "時間がかかっています。もう少しお待ちください。",
+  "codex.checking": "Codex を確かめています。",
   "codex.notLoggedIn": "Codex はインストール済みですが、ログインしていません。",
   "codex.notLoggedIn.hint": "ターミナルで次を実行してから、もう一度確認してください。",
   "codex.notInstalled": "Codex CLI がインストールされていません。",
@@ -28,7 +29,7 @@ export const ja: Record<MessageKey, string> = {
   "action.add": "追加",
   "action.remove": "外す",
   "action.done": "閉じる",
-  "session.checking": "セッションを確認しています…",
+  "session.checking": "サインインを確かめています。",
   "session.signedOut": "サインインすると、文体と記事をどの PC からでも使えます。",
   "session.waiting": "ブラウザで Google のサインインを完了してください…",
   "session.error": "サインインが完了しませんでした。",

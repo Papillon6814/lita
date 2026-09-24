@@ -87,7 +87,9 @@ export function ArticleList({ filter, onOpen, onNew, onGoVoices, onGoTopics, onS
           {/* Both keep their place from the first paint, so the heading row
               never shifts when the rows or the voices arrive. */}
           <input className={`search${nothingAtAll ? " hidden-keep" : ""}`} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("article.search")} aria-label={t("article.search")} tabIndex={nothingAtAll ? -1 : undefined} />
-          <button className={`btn sm${noVoice ? " hidden-keep" : ""}`} onClick={onGoTopics} tabIndex={noVoice ? -1 : undefined}>{t("topics.suggest")}</button>
+          {/* Always here, voice or not (#112). Hiding it hid the way in;
+              pressing it with no voice lands on the one line that says why. */}
+          <button className="btn sm" onClick={onGoTopics}>{t("topics.suggest")}</button>
         </div>
       </div>
 

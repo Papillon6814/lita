@@ -7,6 +7,7 @@ import { t } from "./i18n";
 import { ErrorNote } from "./components/ErrorNote";
 import { TopBar } from "./components/TopBar";
 import { Shell } from "./components/Shell";
+import { Launch } from "./components/Launch";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { useUpdates } from "./hooks/useUpdates";
 import "./App.css";
@@ -19,6 +20,9 @@ type Auth = { kind: "checking" } | { kind: "waiting" } | { kind: "done"; status:
 export default function App() {
   const [view, setView] = useState<View>({ kind: "checking" });
   const [auth, setAuth] = useState<Auth>({ kind: "checking" });
+  // Once both checks have answered, the app is up: a later re-check of Codex
+  // shows its own steps, not the launch screen again.
+  const [booted, setBooted] = useState(false);
   const stepsRef = useRef<HTMLElement>(null);
   const updates = useUpdates();
   const updateDialog = updates.update && (
@@ -78,6 +82,14 @@ export default function App() {
   const codex = view.kind === "done" ? view.status : null;
   const codexReady = codex?.status === "ready";
 
+  if (!booted && auth.kind === "done" && view.kind === "done") setBooted(true);
+
+  // Nothing has been decided yet, so there is nothing to act on: one picture
+  // for the whole launch, with the line swapping as it moves on (#111).
+  if (!booted && (auth.kind === "checking" || (signedIn && view.kind === "checking"))) {
+    return <Launch step={auth.kind === "checking" ? "session" : "codex"} />;
+  }
+
   if (signedIn && codexReady) {
     return (
       <>
@@ -115,7 +127,7 @@ export default function App() {
 
         {signedIn && !codexReady && (
           <section className="panel" ref={stepsRef}>
-            {view.kind === "checking" ? <p className="muted">{t("codex.checking")}</p> : <CodexSteps status={view.status} onRetry={() => void check()} />}
+            {view.kind === "checking" ? <p className="muted" role="status">{t("codex.checking")}</p> : <CodexSteps status={view.status} onRetry={() => void check()} />}
           </section>
         )}
 
