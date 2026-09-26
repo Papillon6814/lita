@@ -1,0 +1,32 @@
+@import "_simple.css";
+
+/* #129 段 2・4 の試作（2026-09-26）。色・角丸・書体は既存のトークンだけ。新しい色も角丸も足していない。 */
+
+/* 雲の場所に置く次の一手（雲が出ないとき）。雲と同じ箱で、見出しの位置を動かさない */
+.cloud-invite{display:flex;justify-content:center;align-items:baseline;gap:10px;color:var(--mute);font-size:0.92rem;padding:22px 0 18px;margin:0;}
+.cloud-invite .link{font-size:0.92rem;}
+
+/* その場で開いた「文章を足す」。編集方針を開いたときと同じ組み方 */
+.add-open{margin:0 0 4px;}
+.add-open .sect-head .grow{flex:1;}
+.add-open .add-why{color:var(--mute);font-size:0.85rem;margin:0 0 10px;}
+.add-open .connect-box{margin-top:0;}
+.both-note{color:var(--mute);font-size:0.85rem;text-align:center;margin:8px 0;}
+
+/* 貼る欄の見出しの右に置く、会話も貼れるという一文 */
+.box-top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 0 8px;}
+.box-top .box-head{margin:0;}
+.box-top .src-hint{flex:1;min-width:0;}
+
+/* 会話だと分かったときの一文（count-line と同じ場所・同じ重さ） */
+.talk-line{font-size:0.92rem;margin:10px 0 0;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;}
+.talk-line b{font-weight:500;}
+
+/* あなたはどれか（名前だけ。数字は出さない） */
+.who{background:#fff;border:1px solid var(--line);border-radius:var(--r-ctl);padding:14px 14px 12px;}
+.who p{margin:0 0 10px;font-size:0.95rem;}
+.who .names{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.who .names .link{margin-left:6px;font-size:0.85rem;}
+.paste-area.kept{color:var(--fg);}
+.paste-area.fixed{height:150px;}
+.btn.sm[disabled]{opacity:0.45;}
