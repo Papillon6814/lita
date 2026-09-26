@@ -97,3 +97,45 @@ mock の場面: `topics-add-empty`（おすすめの文体だけ、文章 0・�
 2. **区画を閉じても、進行中の note などの取り込みは止まらない。** 取り込み終えると文体に足して拾い始める。つなぐを押したのは本人なので害は小さいと判断した。
 3. **足す先の文体を画面で選べない。** `add.where` に文体の名前が出るだけ。文体が 2 つ以上あって記事が 0 本の人は一覧の先頭に入る（設計書 7.2 のとおり）。
 4. `topics-add-failed` は設計書 7.3 に無い場面で、受け入れ条件 7 を画で確かめるために足した。
+
+## レビュー対応（2026-09-26）
+
+lita-ux は承認済み（`docs/pm/ux/2026-09-26-gather-writing-stage2-review.md`）。/code-review の指摘 3 件と、lita-ux の任意の指摘 1 件を直した。lita-ux のレビュー、直した設計書 `2026-09-26-gather-writing-stage2-4.md`、画 `docs/pm/ux/gather-writing/review/s2-*.png` は中身を変えずに含めた。
+
+### 直したこと
+
+| # | 指摘 | 直し方 | 確かめ方 | 判定 |
+| --- | --- | --- | --- | --- |
+| 1（中） | 足したあと `materialCount` が古いまま。直後の拾いを「やめる」と 0 のままで「文章を足す」に戻り、足し直すと重複する | 足せたら `getTopicCloud` で数を取り直してから（待たずに）拾う | `topics-add-empty` で貼る→「足す」→拾っている間に「やめる」 | ◎。箱は C「言葉を拾うのをやめました。拾い直す」（直す前の筋道では A の「文章を足す」に戻っていた） |
+| 2（低） | 足す先の文体が無い（`listVoices` の失敗）とき黙って return し、貼る欄が成功扱いで空になる | 例外を投げ、区画の下に `ErrorNote`（既存の `error.unknown`「問題が起きました。」）。貼った文字は欄に残る | 新しい mock 場面 `topics-add-unlisted`（文体の一覧が読めない）で貼る→「足す」 | ◎。欄の 93 字が残り、「問題が起きました。」＋「詳細を表示」。「題を出す」は押せる |
+| 3（低） | 保存された雲が読めないと、見出しだけの空の箱が残り、次の一手が無い | 読めなければ、拾うのに失敗したときと同じ一文「言葉を拾えませんでした。もう一度お試しください。」＋「拾い直す」を箱に出す（既存の文言。新しいキーは足していない）。拾えたら、言葉が少ないときの一文なども出るよう、拾えた時点で「読めた」扱いにする | 新しい mock 場面 `topics-cloud-unread` を開く→「拾い直す」 | ◎。一文＋「拾い直す」、押すと雲が出る |
+| 任意 | 取り込み中に題を出したあと、取り込み後の自動の拾いで押した言葉が外れる | 足したあとの自動の拾いは、押した言葉のうち新しい雲にも残る語だけを押したままにする（「拾い直す」を押したときは今までどおり外す） | コードを読んで確認（mock で取り込みと押す操作を重ねる場面は作れないため画は無い） | ○ |
+
+触ったファイル: `src/components/TopicPicker.tsx`、`src/platform/mock.ts`（場面 `topics-add-unlisted`・`topics-cloud-unread`）。文言・CSS・Rust は無変更。
+
+### 受け入れ条件 2 の実物の確認
+
+- 本人の公開記事（note、`pondebekkio` の 1 本）の本文先頭 1,500 字を「貼った文章 1 本・記事 0 本」として、アプリと同じ `topics::cloud_prompt`・`cloud_schema`・`tidy_cloud` で本物の `codex` を起動した（一時の example を作って走らせ、消した。commit していない。Codex の認証情報には触れていない）
+- 結果: **14 秒、13 語**（下限 3 語を超える。重み 5 が 2 語、4 が 2 語、3 が 2 語、2 が 4 語、1 が 3 語）。1,500 字 1 本で雲は出る
+- アプリを起動して画面から通した確認はしていない（GUI の自動操作は使えないため）。画面の流れは mock、Codex の部分は上の実物で確かめた
+
+### 実行したコマンドと結果
+
+- `cargo test --workspace` → 75 passed, 0 failed
+- `cargo clippy --workspace --all-targets` → 既存の警告のみ（`lita-codex` 8 件、`lita` 1 件）
+- `npx tsc --noEmit -p tsconfig.json` → エラーなし
+- `npm run build` → 成功
+- `npm run mock` → headless Chrome を DevTools Protocol で動かして撮影（スクリプトは scratchpad、commit していない）。回帰として `topics-add-empty` の流れ（貼る→足す→拾う→雲）、`topics-cloud-stopped`・`topics-cloud-few`・`topics-cloud-more` の見え方が変わらないことも確かめた。撮影後 `pkill -f "vite.*1430"`
+
+### 画（PNG）
+
+`docs/pm/ux/gather-writing/impl/`
+
+- `fix-topics-add-empty-add-then-stop.png`（指摘 1: 足した直後に止めた → C）
+- `fix-topics-add-unlisted-after-add.png`（指摘 2: 足す先が無い → 一文、貼った文字は残る）
+- `fix-topics-cloud-unread.png`・`fix-topics-cloud-unread-again.png`（指摘 3: 読めない → 一文＋「拾い直す」→ 雲）
+
+### 懸念
+
+1. 指摘 2 の一文は既存の `error.unknown`「問題が起きました。」で、次の行動は書いていない（貼った文字が残るので、もう一度「足す」を押せる）。文体の一覧が読めないのはまれなので、新しい文言は足していない。
+2. 指摘 3 で、雲が読めず、しかも本人の文章が 0 本のとき、「拾い直す」を押しても拾う材料が無いので失敗の一文に戻る（「文章を足す」には行けない）。読めないことと文章 0 本が重なるときだけで、「題を出す」は押せる。

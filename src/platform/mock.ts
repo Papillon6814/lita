@@ -40,7 +40,9 @@
 // comes with Lita: no writing, no articles), topics-add-open (the same, with
 // "add writing" opened; adding gathers the words), topics-add-failed (the
 // same, and adding does not work), topics-add-articles (articles, but no
-// writing of one's own),
+// writing of one's own), topics-add-unlisted (the same as topics-add-empty,
+// but the voices cannot be listed, so there is nowhere to add to),
+// topics-cloud-unread (the saved cloud cannot be read),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -187,7 +189,7 @@ let voice: T.Voice = {
   id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
-if (["voice-preset", "topics-add-empty", "topics-add-open", "topics-add-failed"].includes(scene)) voice = presetVoice;
+if (["voice-preset", "topics-add-empty", "topics-add-open", "topics-add-failed", "topics-add-unlisted"].includes(scene)) voice = presetVoice;
 // Lita wrote the articles; none of the writing is the person's own.
 if (scene === "topics-add-articles") voice = { ...voice, voice_sources: [] };
 
@@ -220,7 +222,7 @@ const articleBodies = [
   { title: "投資家との最初の会話で聞くこと", body: "投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。\n\nリターンの話は後からいくらでもできる。恐れが分かれば、こちらの提案の形はほとんど決まる。\n\n## 恐れは三つに分かれる\n\n一つ目は時間、二つ目は評判、三つ目は次の資金調達だ。", brief: "投資家との初回面談で何を聞くべきか。note 向けに 1,500 字ほど。", platform: "note", status: "draft", at: ago(60 * 26) },
   { title: "ファイナンスは時間を買う話", body: draftBody, brief: "ファイナンスの選択肢の話。", platform: "x", status: "archived", at: ago(60 * 24 * 4) },
 ];
-const articles: T.Article[] = ["articles-empty", "articles-first-run", "topics-add-empty", "topics-add-open", "topics-add-failed"].includes(scene) ? [] : articleBodies.map((a, i) => ({
+const articles: T.Article[] = ["articles-empty", "articles-first-run", "topics-add-empty", "topics-add-open", "topics-add-failed", "topics-add-unlisted"].includes(scene) ? [] : articleBodies.map((a, i) => ({
   id: `a${i + 1}`, voice_id: "v1", platform_id: a.platform, title: a.title, body: a.body, brief: a.brief,
   status: a.status as T.ArticleStatus, queue: null, created_at: a.at, updated_at: a.at,
 }));
@@ -426,7 +428,12 @@ export const mockHost: T.Host = {
   // The editorial policy no longer carries what you often write about; the
   // cloud does (D-66), so the draft leaves that field empty.
   draftPolicy: async () => { await wait(1200); return { ...fullPolicy, topics: [] }; },
-  getTopicCloud: async () => { await wait(readDelay); return cloudView(); },
+  getTopicCloud: async () => {
+    await wait(readDelay);
+    // The saved cloud cannot be read: the box says so, and gathering again is the way on.
+    if (scene === "topics-cloud-unread") throw { code: "unknown", detail: "database is locked" };
+    return cloudView();
+  },
   gatherTopicCloud: async () => {
     // The first-run scene stays on the gathering line, so the quiet wait and
     // the way out of it can be seen.
@@ -515,7 +522,11 @@ export const mockHost: T.Host = {
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),
-  listVoices: async () => { await wait(readDelay); return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: voice.voice_sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
+  listVoices: async () => {
+    await wait(readDelay);
+    // The voices cannot be listed, so there is no voice to add writing to.
+    if (scene === "topics-add-unlisted") throw { code: "unknown", detail: "database is locked" };
+    return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: voice.voice_sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
   getVoice: async (id) => { await wait(readDelay); return id === "v2" ? voice2 : voice; },
   deleteVoice: async () => true,
   renameVoice: async (_id, name) => { voice = { ...voice, name }; },

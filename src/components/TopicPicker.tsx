@@ -131,7 +131,9 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
         once.current = true;
         void suggest(picks).then((list) => { if (list) setPicked([list[0], list[2], list[7]].filter(Boolean)); });
       }
-    }).catch(() => {});
+      // Unread, the box would stand empty: it says the words could not be had,
+      // and gathering them again is the way on.
+    }).catch(() => setCloudFailed(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,8 +149,12 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       if (run !== gatherRun.current) return;
       setCloud(v.cloud);
       setMaterialCount(v.material_count);
+      setCloudRead(true);
       // The words themselves changed, so what was pressed no longer holds.
+      // Gathered on its own (after adding writing), the pressed words that
+      // are still there stay pressed.
       if (manual) setSubjects([]);
+      else setSubjects((s) => s.filter((w) => v.cloud?.words.some((x) => x.word === w)));
     } catch {
       if (run !== gatherRun.current) return;
       setCloudFailed(true);
@@ -209,13 +215,23 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   // the box comes back and gathers the words straight away. A failure keeps
   // the boxes open with what was pasted, and says so in one sentence.
   const addWriting = async (items: SourceInput[]) => {
-    if (!addToId || items.length === 0) return;
+    if (items.length === 0) return;
+    // No voice to add to (the list could not be read): nothing is saved, and
+    // what was pasted stays in the box.
+    if (!addToId) {
+      const e: UiError = { code: "unknown", detail: "no voice to add the writing to" };
+      setAddError(e);
+      throw e;
+    }
     setAddBusy(true);
     setAddError(null);
     try {
       await host.addVoiceSources(addToId, items);
       setAdding(false);
-      void gather(true);
+      // The writing is counted again, so a gather stopped straight away
+      // leaves "gather again", not "add writing" a second time.
+      void host.getTopicCloud().then((v) => setMaterialCount(v.material_count)).catch(() => {});
+      void gather(false);
     } catch (e) {
       setAddError(asUiError(e));
       throw e;
