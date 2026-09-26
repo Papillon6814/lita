@@ -15,8 +15,8 @@ import { ErrorNote } from "./ErrorNote";
 const MAX_PICKS = 5;
 /** Words that can be pressed at once. More than three and the titles scatter. */
 const MAX_WORDS = 3;
-/** Fewer than five words is not a cloud, and nothing stands in for it. */
-const MIN_WORDS = 5;
+/** Fewer than three words is not a cloud: there is nothing to choose between (#129). */
+const MIN_WORDS = 3;
 
 /** 1–5 folded into the three sizes on screen. The number itself is never shown. */
 const size = (weight: number) => (weight >= 4 ? 3 : weight === 3 ? 2 : 1);
@@ -89,15 +89,20 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     setPlatformId(longForm.id);
   }, [platforms, platformId]);
 
-  // The cloud as it was last gathered. With material but no cloud yet, it is
-  // gathered once on opening (requirement 7a); never again on its own.
+  // The cloud as it was last gathered. With writing but no cloud yet, it is
+  // gathered once on opening (requirement 7a). A cloud too thin to show is
+  // gathered again once when the writing changed since (#129): nothing on
+  // screen would offer to. Clouds saved before #129 come back already counted
+  // again as writing only (`topics::recount`), so the two numbers compare.
+  // A cloud that shows is never gathered again on its own.
   useEffect(() => {
     void host.getTopicCloud().then((v) => {
       setCloud(v.cloud);
       setMaterialCount(v.material_count);
       const picks = v.cloud ? scenePicks(v.cloud) : [];
       if (v.cloud) setSubjects(picks);
-      if (!v.cloud && v.material_count > 0) void gather(false);
+      const thin = v.cloud !== null && v.cloud.words.length < MIN_WORDS && v.material_count !== v.cloud.material_count;
+      if (v.material_count > 0 && (!v.cloud || thin)) void gather(false);
       // The mock's "three picked" scenes start where a person would be after
       // pressing the words, offering once, and choosing three.
       if (isPickedScene() && !once.current) {

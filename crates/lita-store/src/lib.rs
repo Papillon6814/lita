@@ -353,6 +353,17 @@ impl UserStore<'_> {
         self.insert_sources(voice_id, sources)
     }
 
+    /// When each piece of writing was added, across every voice. Only the
+    /// times: enough to count what a cloud was gathered from (#129).
+    pub fn source_times(&self) -> Result<Vec<String>> {
+        #[derive(Deserialize)]
+        struct Row {
+            created_at: String,
+        }
+        let rows: Vec<Row> = self.get_many("voice_sources", &[("select", "created_at")])?;
+        Ok(rows.into_iter().map(|r| r.created_at).collect())
+    }
+
     /// Drops one connection's pieces: every source of `kind` from `account`
     /// (`None` matches the pasted / file pieces, which have no account).
     pub fn delete_sources(&self, voice_id: &str, kind: SourceKind, account: Option<&str>) -> Result<()> {

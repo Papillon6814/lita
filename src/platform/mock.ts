@@ -32,7 +32,10 @@
 // topics-cloud-first (no cloud yet, gathering it on open, never finishing),
 // topics-cloud-picked (three words pressed), topics-cloud-more (more
 // material since the cloud was gathered), topics-cloud-few (too few words
-// to make a cloud: no cloud and no sentence in its place), topics-cloud-failed (gathering did not work),
+// to make a cloud: no cloud and no sentence in its place), topics-cloud-three
+// (three words, the fewest that still make a cloud), topics-cloud-few-more
+// (too few words, and writing added since: gathered again on opening),
+// topics-cloud-failed (gathering did not work),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -245,7 +248,7 @@ let policy: T.Policy = ["topics-picked", "topics-cloud-picked", "topics-policy-o
 
 // The words someone keeps writing about (2026-09-24). `weight` is 1–5 and is
 // folded into three sizes on screen; `written` marks a subject already used
-// as a title. Thirty-six words, the middle of the 20–40 the gatherer returns.
+// as a title. Thirty-six words, near the thirty the gatherer aims for.
 const cloudWords: T.CloudWord[] = ([
   ["在庫", 1, false], ["契約書", 2, false], ["顧問", 1, true], ["粗利", 3, false], ["月次", 2, false],
   ["人件費", 3, false], ["事業承継", 3, false], ["銀行", 3, false], ["資金繰り", 5, false],
@@ -259,13 +262,16 @@ const cloudWords: T.CloudWord[] = ([
 ] as [string, number, boolean][]).map(([word, weight, written]) => ({ word, weight, written }));
 
 const fullCloud: T.TopicCloud = { words: cloudWords, gathered_at: ago(2), material_count: 18 };
-// Under five words is not a cloud; the screen says so in one line instead.
-const sparseCloud: T.TopicCloud = { words: cloudWords.slice(0, 3), gathered_at: ago(2), material_count: 2 };
+// Under three words is not a cloud, and nothing stands in its place.
+const sparseCloud: T.TopicCloud = { words: cloudWords.slice(0, 2), gathered_at: ago(2), material_count: 2 };
+const threeCloud: T.TopicCloud = { words: [cloudWords[8], cloudWords[6], cloudWords[0]], gathered_at: ago(2), material_count: 2 };
 
 const cloudView = (): T.CloudView => {
   if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
   if (scene === "topics-cloud-first") return { cloud: null, material_count: 18 };
   if (scene === "topics-cloud-few" || scene === "topics-picked-few") return { cloud: sparseCloud, material_count: 2 };
+  if (scene === "topics-cloud-three") return { cloud: threeCloud, material_count: 2 };
+  if (scene === "topics-cloud-few-more") return { cloud: sparseCloud, material_count: 4 };
   if (scene === "topics-cloud-failed") return { cloud: null, material_count: 18 };
   // More material than the cloud was gathered from: one quiet line offers to
   // gather again, and never says how many more.
