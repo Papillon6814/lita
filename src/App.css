@@ -408,6 +408,19 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .add-why { color: var(--mute); font-size: 0.85rem; margin: 0 0 10px; }
 .add-open .paste-box { margin-top: 0; }
 
+/* A pasted conversation (D-77): the one sentence beside the paste box's
+   heading, the line under the field (where "n pieces" sits, same weight), and
+   the card that asks which name is you. Existing tokens only. */
+.box-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 0 8px; }
+.box-top .box-head { margin: 0; }
+.box-top .src-hint { flex: 1; min-width: 0; }
+.talk-line { font-size: 0.92rem; margin: 10px 0 0; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.talk-line b { font-weight: 500; }
+.who { background: #fff; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 14px 14px 12px; }
+.who p { margin: 0 0 10px; font-size: 0.95rem; }
+.who .names { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.who .names .link { margin-left: 6px; font-size: 0.85rem; }
+
 @media (prefers-reduced-motion: reduce) { .w { transition: none; } }
 .topics { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); }
 .trow { display: flex; gap: 10px; align-items: center; padding: 5px 14px; border-bottom: 1px solid var(--line); font-size: 0.95rem; cursor: pointer; }

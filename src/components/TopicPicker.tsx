@@ -5,7 +5,7 @@ import { asUiError } from "../errors";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n/en";
 import { ErrorNote } from "./ErrorNote";
-import { PasteBox } from "./PasteBox";
+import { PasteBox, talkBodies } from "./PasteBox";
 import { SourceBox } from "./SourceBox";
 import { connectionsOf } from "./VoiceIntake";
 
@@ -375,6 +375,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
                   listed here, since adding closes this and the words take over. */}
               <PasteBox
                 pieces={[]} total={0} busy={addBusy} focus={addFocus}
+                knownTalk={addVoice ? talkBodies(addVoice.voice_sources) : undefined}
                 onAdd={(items) => addWriting(items.map((i) => ({ kind: i.kind, origin: i.origin, account: null, body: i.body })))}
                 onRemove={() => {}}
               />
@@ -514,7 +515,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
 
 const isPickedScene = () => mockScene() === "topics-picked" || mockScene() === "topics-picked-few";
 
-const isAddOpenScene = () => mockScene() === "topics-add-open" || mockScene() === "topics-add-failed";
+const isAddOpenScene = () => mockScene() === "topics-add-open" || mockScene() === "topics-add-failed" || (mockScene()?.startsWith("topics-add-talk") ?? false);
 
 const isBlank = (p: Policy) => !p.audience.trim() && !p.takeaway.trim() && !p.avoid.trim();
 

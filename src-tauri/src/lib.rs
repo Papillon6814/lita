@@ -1326,6 +1326,16 @@ async fn import_x_archive(contents: String, handle: Option<String>, include_repl
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
+/// A pasted conversation, read on this machine only (D-77): who said what,
+/// so the screen keeps the person's own messages. `known` are bodies added
+/// from conversations before. Nothing is stored and nothing goes to Codex.
+#[tauri::command]
+async fn read_talk(text: String, known: Vec<String>) -> Result<lita_sources::talk::Reading, UiError> {
+    tauri::async_runtime::spawn_blocking(move || lita_sources::talk::read(&text, &known))
+        .await
+        .map_err(|e| UiError::unknown(e.to_string()))
+}
+
 // ----- updates (#25) -------------------------------------------------------
 
 /// An update the updater found, kept until the person decides to install it.
@@ -1513,6 +1523,7 @@ pub fn run() {
             import_note,
             import_medium,
             import_x_archive,
+            read_talk,
             fetch_update,
             install_update,
             restart_app,

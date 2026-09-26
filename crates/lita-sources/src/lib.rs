@@ -10,6 +10,7 @@
 pub mod html;
 pub mod medium;
 pub mod note;
+pub mod talk;
 pub mod x;
 
 use serde::{Deserialize, Serialize};
