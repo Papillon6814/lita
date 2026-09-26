@@ -1,0 +1,32 @@
+@import "_cloud.css";
+
+/* 「書く題を決める」を軽くする試作（2026-09-26）。色・角丸・書体は既存のトークンだけ。
+   新しい色も角丸も足していない。 */
+
+/* 任意であることを、主ボタンの隣で一度だけ言う */
+.stack .opt{color:var(--mute);font-size:0.85rem;}
+
+/* 編集方針を一行にしたもの（案 B） */
+.pline{display:flex;align-items:baseline;gap:12px;margin-top:12px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:0.92rem;}
+.pline h4{margin:0;font-size:0.88rem;font-weight:700;flex:none;}
+.pline .v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pline .v .sep{color:#a39f97;margin:0 8px;}
+.pline .v.blank{color:var(--mute);}
+.pline .link{font-size:0.85rem;flex:none;}
+
+/* 開いて直しているときの方針（案 B・C）。いまの 3 行と同じ */
+.policy-open{margin-top:12px;}
+.policy-open .sect-head .grow{flex:1;}
+.pf .v.ph{color:#a39f97;}
+
+/* 文体と出す先を 1 文に（共通） */
+.says{color:var(--mute);font-size:0.88rem;}
+.says b{color:var(--fg);font-weight:500;}
+.says .link{font-size:0.85rem;margin-left:8px;}
+
+/* 見出しの右の薄いリンク（案 C） */
+.head-row{display:flex;align-items:baseline;gap:12px;}
+.head-row h2{margin:0 0 4px;}
+.head-row .grow{flex:1;}
+.head-row .link{font-size:0.88rem;}
+.lead-quiet{color:var(--mute);margin:0 0 14px;font-size:0.95rem;}

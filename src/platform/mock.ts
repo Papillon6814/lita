@@ -25,11 +25,14 @@
 // write, write-generating,
 // write-result, write-over, write-error,
 // topics (picking titles, policy empty, the cloud already gathered),
-// topics-picked (ten titles, three picked, policy filled),
+// topics-picked (two words pressed, ten titles, three picked, policy filled),
+// topics-picked-few (ten titles, three picked, no cloud to press),
+// topics-policy-open (the policy opened, all three lines empty),
+// topics-policy-open-filled (the policy opened, filled),
 // topics-cloud-first (no cloud yet, gathering it on open, never finishing),
 // topics-cloud-picked (three words pressed), topics-cloud-more (more
 // material since the cloud was gathered), topics-cloud-few (too few words
-// to make a cloud), topics-cloud-failed (gathering did not work),
+// to make a cloud: no cloud and no sentence in its place), topics-cloud-failed (gathering did not work),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -238,7 +241,7 @@ const fullPolicy: T.Policy = {
   topics: ["資金繰り", "買収", "採用"],
   avoid: "個別の会社名",
 };
-let policy: T.Policy = scene === "topics-picked" || scene === "topics-cloud-picked" ? fullPolicy : emptyPolicy;
+let policy: T.Policy = ["topics-picked", "topics-cloud-picked", "topics-policy-open-filled"].includes(scene) ? fullPolicy : emptyPolicy;
 
 // The words someone keeps writing about (2026-09-24). `weight` is 1–5 and is
 // folded into three sizes on screen; `written` marks a subject already used
@@ -262,7 +265,7 @@ const sparseCloud: T.TopicCloud = { words: cloudWords.slice(0, 3), gathered_at: 
 const cloudView = (): T.CloudView => {
   if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
   if (scene === "topics-cloud-first") return { cloud: null, material_count: 18 };
-  if (scene === "topics-cloud-few") return { cloud: sparseCloud, material_count: 2 };
+  if (scene === "topics-cloud-few" || scene === "topics-picked-few") return { cloud: sparseCloud, material_count: 2 };
   if (scene === "topics-cloud-failed") return { cloud: null, material_count: 18 };
   // More material than the cloud was gathered from: one quiet line offers to
   // gather again, and never says how many more.
@@ -406,7 +409,7 @@ export const mockHost: T.Host = {
     return { cloud: { ...fullCloud, material_count: cloudView().material_count }, material_count: cloudView().material_count };
   },
   suggestTopics: async (subjects, _direction) => {
-    await wait(scene === "topics-picked" ? 200 : 1200);
+    await wait(scene.startsWith("topics-picked") ? 200 : 1200);
     // Picked words steer the titles, so they are visibly about those subjects.
     const list = subjects.length > 0 ? subjectTitles : topicRounds[topicRound % topicRounds.length];
     if (subjects.length === 0) topicRound += 1;

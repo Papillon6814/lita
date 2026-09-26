@@ -1,19 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { host, type Platform, type Policy, type TopicCloud, type UiError, type VoiceSummary } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
+import type { MessageKey } from "../i18n/en";
 import { ErrorNote } from "./ErrorNote";
 
-// One screen, one job: decide what to write about. The words someone keeps
-// writing sit at the top, pressable; the direction is one line that may stay
-// empty; the editorial policy sits open below (nothing to unfold); and the
-// ten titles are ten pressable lines. Picking some and pressing the one
-// primary button lines up that many drafts and returns to the list.
+// One screen, one job: decide what to write about (D-71). There is nothing to
+// type: the words someone keeps writing sit in a cloud and may be pressed, or
+// not, and one primary button offers ten titles. The editorial policy is the
+// quiet link "編集方針" at the end of the title row; it opens in place and is
+// closed again every time the screen opens. The ten titles are ten pressable
+// lines, and picking some lines up that many drafts.
 const MAX_PICKS = 5;
 /** Words that can be pressed at once. More than three and the titles scatter. */
 const MAX_WORDS = 3;
-/** Fewer than five words is not a cloud; one line stands in for it. */
+/** Fewer than five words is not a cloud, and nothing stands in for it. */
 const MIN_WORDS = 5;
 
 /** 1–5 folded into the three sizes on screen. The number itself is never shown. */
@@ -26,7 +28,6 @@ type Props = { onBack: () => void; onQueued: (n: number) => void; onGoVoices: ()
 export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const [policy, setPolicy] = useState<Policy>(emptyPolicy);
   const [drafting, setDrafting] = useState(false);
-  const [direction, setDirection] = useState("");
   const [topics, setTopics] = useState<string[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
@@ -40,6 +41,15 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const [gathering, setGathering] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
   const [subjects, setSubjects] = useState<string[]>([]);
+  // The policy starts closed every time (D-71); whether it was open is not kept.
+  const [policyOpen, setPolicyOpen] = useState(() => mockScene()?.startsWith("topics-policy-open") ?? false);
+  // Whether all three lines were empty when it was opened: the one sentence
+  // about what the policy is for stays put while someone types.
+  const [policyBlank, setPolicyBlank] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const policyLink = useRef<HTMLButtonElement>(null);
+  const policyFirst = useRef<HTMLInputElement>(null);
+  const voiceSelect = useRef<HTMLSelectElement>(null);
   // Which gather is the current one. Stopping bumps it, so a reply that
   // arrives afterwards is ignored and the previous words stay.
   const gatherRun = useRef(0);
@@ -47,7 +57,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   policyRef.current = policy;
 
   useEffect(() => {
-    void host.getPolicy().then(setPolicy).catch(() => {});
+    void host.getPolicy().then((p) => { setPolicy(p); setPolicyBlank(isBlank(p)); }).catch(() => {});
     void host.platforms().then(setPlatforms).catch(() => {});
     void host.listVoices().then(async (vs) => {
       setVoices(vs);
@@ -119,6 +129,16 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
 
   const savePolicy = () => { void host.setPolicy(policyRef.current).catch(() => {}); };
   const editPolicy = (patch: Partial<Policy>) => setPolicy((p) => ({ ...p, ...patch }));
+  const openPolicy = () => {
+    setPolicyBlank(isBlank(policyRef.current));
+    setPolicyOpen(true);
+    // The link goes away as the lines open; the first line takes the keyboard.
+    requestAnimationFrame(() => policyFirst.current?.focus());
+  };
+  const closePolicy = () => {
+    setPolicyOpen(false);
+    requestAnimationFrame(() => policyLink.current?.focus());
+  };
 
   const draft = async () => {
     setError(null);
@@ -127,6 +147,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       const p = await host.draftPolicy();
       setPolicy(p);
       policyRef.current = p;
+      setPolicyBlank(false);
       await host.setPolicy(p);
     } catch (e) { setError(asUiError(e)); } finally { setDrafting(false); }
   };
@@ -137,8 +158,12 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     setTopics(null);
     setPicked([]);
     try {
-      const list = await host.suggestTopics(subjects, direction.trim());
+      // The Rust command keeps its "direction" argument; nothing is typed any
+      // more, so it goes empty (D-71). Briefs already queued keep theirs.
+      const list = await host.suggestTopics(subjects, "");
       setTopics(list);
+      // The titles take the room the open policy was using.
+      setPolicyOpen(false);
       return list;
     } catch (e) { setError(asUiError(e)); return null; } finally { setWorking(false); }
   };
@@ -147,7 +172,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   // pressing once and choosing three.
   const once = useRef(false);
   useEffect(() => {
-    if (once.current || mockScene() !== "topics-picked") return;
+    if (once.current || (mockScene() !== "topics-picked" && mockScene() !== "topics-picked-few")) return;
     once.current = true;
     void suggest().then((list) => { if (list) setPicked([list[0], list[2], list[7]].filter(Boolean)); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,7 +187,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       await host.setPolicy(policyRef.current);
       // Lined up in the order they were offered, not the order they were ticked.
       const titles = (topics ?? []).filter((x) => picked.includes(x));
-      await host.enqueueArticles(titles, voiceId, platformId, "quality", subjects, direction.trim());
+      await host.enqueueArticles(titles, voiceId, platformId, "quality", subjects, "");
       onQueued(titles.length);
     } catch (e) { setError(asUiError(e)); setWorking(false); }
   };
@@ -173,17 +198,52 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const capped = subjects.length >= MAX_WORDS;
   const moreSince = cloud !== null && materialCount > cloud.material_count;
   // A line in the cloud's place takes over from the "gather again" link.
-  const quietLine = gathering || cloudFailed || moreSince;
-  // No material at all, or too few words: the cloud is not there to be seen.
+  const quietLine = gathering || cloudFailed || (moreSince && !topics);
+  // No material at all, or too few words: the cloud is not there to be seen,
+  // and no sentence promises it either (D-71). The room below stays empty.
   const showCloud = materialCount > 0 && (hasWords || gathering || cloudFailed);
-  const fewWords = materialCount > 0 && cloud !== null && !hasWords && !gathering && !cloudFailed;
+  const voiceName = voices?.find((v) => v.id === voiceId)?.name;
+  const platformName = platforms.find((p) => p.id === platformId)?.name;
+  // One sentence says where the drafts will go; the two choices come out on "change".
+  const showChoices = changing || !voiceName || !platformName;
+  const again = <button className="link" onClick={() => void suggest()} disabled={working}>{t("topics.again")}</button>;
 
   return (
     <div className="topics-page">
       <button className="back" onClick={onBack}>← {t("article.filter.all")}</button>
-      <h2>{t("topics.title")}</h2>
-      {/* What this screen is for, until the titles themselves say it. */}
-      {!noVoice && !topics && <p className="lead-sm sub">{t("topics.lead")}</p>}
+      <div className="topics-head">
+        <h2>{t("topics.title")}</h2>
+        <span className="grow" />
+        {!noVoice && !policyOpen && (
+          <button
+            ref={policyLink} type="button"
+            className={isBlank(policy) ? "link quiet-link" : "link"}
+            onClick={openPolicy}
+          >{t("policy.title")}</button>
+        )}
+      </div>
+
+      {!noVoice && policyOpen && (
+        <section className="policy-open" aria-label={t("policy.title")}>
+          <div className="sect-head">
+            <h4>{t("policy.title")}</h4>
+            <span className="grow" />
+            <button className="link" onClick={() => void draft()} disabled={drafting}>{t("policy.draft")}</button>
+            <button className="link quiet-link" onClick={closePolicy}>{t("action.close")}</button>
+          </div>
+          {policyBlank && <p className="policy-why">{t("policy.why")}</p>}
+          <div className="policy">
+            <PolicyRow inputRef={policyFirst} label={t("policy.audience")} value={policy.audience} placeholder={t("policy.audiencePlaceholder")} onChange={(v) => editPolicy({ audience: v })} onBlur={savePolicy} />
+            <PolicyRow label={t("policy.takeaway")} value={policy.takeaway} placeholder={t("policy.takeawayPlaceholder")} onChange={(v) => editPolicy({ takeaway: v })} onBlur={savePolicy} />
+            <PolicyRow label={t("policy.avoid")} value={policy.avoid} placeholder={t("policy.avoidPlaceholder")} onChange={(v) => editPolicy({ avoid: v })} onBlur={savePolicy} />
+          </div>
+          {drafting && <p className="working" role="status"><span className="spinner" aria-hidden="true" />{t("policy.drafting")}</p>}
+        </section>
+      )}
+
+      {/* What this screen is for, until the titles themselves say it. The only
+          place that says nothing needs pressing (D-71). */}
+      {!noVoice && !topics && <p className="lead-sm sub">{hasWords ? t("topics.leadCloud") : t("topics.lead")}</p>}
 
       {noVoice ? (
         <div className="empty">
@@ -196,9 +256,10 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
             <div className="cloud-box">
               <div className="cloud-head">
                 <h4>{t("cloud.title")}</h4>
-                {hasWords && subjects.length === 0 && !quietLine && <span className="muted">{t("cloud.hint")}</span>}
                 <span className="grow" />
-                {!quietLine && <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>}
+                {/* Before titles: gather the words again. After: offer the titles again,
+                    keeping the pressed words (gathering would swap them out). */}
+                {topics ? again : !quietLine && <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>}
               </div>
               {gathering && (
                 <p className="cloud-note" role="status">
@@ -212,7 +273,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
                   <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>
                 </p>
               )}
-              {!gathering && !cloudFailed && moreSince && (
+              {!gathering && !cloudFailed && moreSince && !topics && (
                 <p className="cloud-note">
                   {t("cloud.more")}
                   <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>
@@ -227,56 +288,26 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
                         <button
                           key={w.word} type="button" aria-pressed={on} disabled={!on && capped}
                           className={`w s${size(w.weight)}${w.written ? " done" : ""}`}
+                          aria-describedby={w.written ? "cloud-written" : undefined}
                           onClick={() => toggleWord(w.word)}
-                        >{w.word}</button>
+                        >{w.word}{w.written && <span className="tip" aria-hidden="true">{t("cloud.written")}</span>}</button>
                       );
                     })}
                   </div>
-                  <p className="cloud-foot">{capped ? t("cloud.limit") : t("cloud.legend")}</p>
+                  {/* What a faded word means, said only on pointing or focusing it. */}
+                  <span id="cloud-written" className="sr-only">{t("cloud.written")}</span>
+                  {capped && <p className="cloud-foot">{t("cloud.limit")}</p>}
                 </>
               )}
             </div>
           )}
-          {/* Too few words to make a cloud: one line, and the screen is otherwise unchanged. */}
-          {fewWords && <p className="cloud-note lone">{t("cloud.few")}</p>}
-
-          <div className="sect">
-            <div className="sect-head"><h4>{t("topics.direction")}</h4></div>
-            <div className="aim">
-              <div className="seedfield">
-                {subjects.map((w) => (
-                  <button key={w} type="button" className="seed" onClick={() => toggleWord(w)} aria-label={t("cloud.drop", { word: w })}>
-                    {w}<span className="x" aria-hidden="true">×</span>
-                  </button>
-                ))}
-                <input
-                  value={direction} onChange={(e) => setDirection(e.target.value)}
-                  placeholder={subjects.length > 0 ? t("cloud.addWord") : t("topics.directionPlaceholder")}
-                  aria-label={t("topics.direction")}
-                />
-              </div>
-              {topics && <button className="link" onClick={() => void suggest()} disabled={working}>{t("topics.again")}</button>}
-            </div>
-          </div>
-
-          <div className="sect">
-            <div className="sect-head">
-              <h4>{t("policy.title")}</h4>
-              <span className="muted">{t("topics.optional")}</span>
-              <button className="link" onClick={() => void draft()} disabled={drafting}>{t("policy.draft")}</button>
-            </div>
-            <div className="policy">
-              <PolicyRow label={t("policy.audience")} value={policy.audience} placeholder={t("policy.audiencePlaceholder")} onChange={(v) => editPolicy({ audience: v })} onBlur={savePolicy} />
-              <PolicyRow label={t("policy.takeaway")} value={policy.takeaway} placeholder={t("policy.takeawayPlaceholder")} onChange={(v) => editPolicy({ takeaway: v })} onBlur={savePolicy} />
-              <PolicyRow label={t("policy.avoid")} value={policy.avoid} placeholder={t("policy.avoidPlaceholder")} onChange={(v) => editPolicy({ avoid: v })} onBlur={savePolicy} />
-            </div>
-            {drafting && <p className="working" role="status"><span className="spinner" aria-hidden="true" />{t("policy.drafting")}</p>}
-          </div>
 
           {working && !topics && <p className="working" role="status"><span className="spinner" aria-hidden="true" />{t("topics.working")}</p>}
 
           {topics && (
             <div className="sect">
+              {/* Without a cloud, "offer again" has no heading to sit beside. */}
+              {!showCloud && <div className="sect-head"><span className="grow" />{again}</div>}
               <ul className="topics" role="status">
                 {topics.map((title) => {
                   const on = picked.includes(title);
@@ -297,25 +328,34 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
 
           {topics ? (
             <div className="stack">
-              <span className="sel">{t("assist.voice")}
-                <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)} aria-label={t("assist.voice")}>
-                  {(voices ?? []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-              </span>
-              <span className="sel">{t("write.platform")}
-                <select value={platformId} onChange={(e) => setPlatformId(e.target.value)} aria-label={t("write.platform")}>
-                  {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </span>
-              <span className="small muted">{picked.length >= MAX_PICKS ? t("topics.limit") : t("topics.sameAsLast")}</span>
+              {showChoices ? (
+                <>
+                  <span className="sel">{t("assist.voice")}
+                    <select ref={voiceSelect} value={voiceId} onChange={(e) => setVoiceId(e.target.value)} aria-label={t("assist.voice")}>
+                      {(voices ?? []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </span>
+                  <span className="sel">{t("write.platform")}
+                    <select value={platformId} onChange={(e) => setPlatformId(e.target.value)} aria-label={t("write.platform")}>
+                      {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </span>
+                </>
+              ) : (
+                <span className="says">
+                  {rich("topics.writesIn", { voice: <b>{voiceName}</b>, platform: <b>{platformName}</b> })}
+                  <button className="link" onClick={() => { setChanging(true); requestAnimationFrame(() => voiceSelect.current?.focus()); }}>{t("topics.change")}</button>
+                </span>
+              )}
+              {picked.length >= MAX_PICKS && <span className="small muted">{t("topics.limit")}</span>}
               <span className="grow" />
               <button className="btn pri" disabled={picked.length === 0 || working} onClick={() => void stack()}>
                 {picked.length === 0 ? t("topics.stackEmpty") : t("topics.stack", { n: String(picked.length) })}
               </button>
             </div>
           ) : (
-            <div className="stack">
-              <span className="grow" />
+            <div className={showCloud ? "stack" : "stack alone"}>
+              {showCloud && <span className="grow" />}
               <button className="btn pri" disabled={working} onClick={() => void suggest()}>{t("topics.suggest")}</button>
             </div>
           )}
@@ -325,19 +365,29 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   );
 }
 
+const isBlank = (p: Policy) => !p.audience.trim() && !p.takeaway.trim() && !p.avoid.trim();
+
+/** A sentence with some of its words set in bold, in whichever order the locale puts them. */
+function rich(key: MessageKey, parts: Record<string, ReactNode>): ReactNode {
+  return t(key).split(/\{(\w+)\}/).map((piece, i) => <Fragment key={i}>{i % 2 === 1 ? parts[piece] : piece}</Fragment>);
+}
+
 // The mock's "three words pressed" scene starts where a person would be
 // after pressing three words. Nothing here runs in a real build.
 function scenePicks(cloud: TopicCloud): string[] {
-  if (mockScene() !== "topics-cloud-picked") return [];
+  const scene = mockScene();
+  // Two words pressed before the titles were offered (D-71's "press, then offer").
+  if (scene === "topics-picked") return ["資金繰り", "撤退基準"].filter((w) => cloud.words.some((x) => x.word === w));
+  if (scene !== "topics-cloud-picked") return [];
   const wanted = ["採用", "定着", "評価"].filter((w) => cloud.words.some((x) => x.word === w));
   return (wanted.length === MAX_WORDS ? wanted : cloud.words.slice(0, MAX_WORDS).map((w) => w.word));
 }
 
-function PolicyRow({ label, value, placeholder, onChange, onBlur }: { label: string; value: string; placeholder: string; onChange: (v: string) => void; onBlur: () => void }) {
+function PolicyRow({ label, value, placeholder, onChange, onBlur, inputRef }: { label: string; value: string; placeholder: string; onChange: (v: string) => void; onBlur: () => void; inputRef?: Ref<HTMLInputElement> }) {
   return (
     <label className="pf">
       <span>{label}</span>
-      <input className="v" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+      <input ref={inputRef} className="v" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
     </label>
   );
 }
