@@ -46,7 +46,8 @@ type Props = {
   pieces: ManualPiece[];
   /** Everything the voice will be built from, so the "four is steadier" line knows when to go quiet. */
   total: number;
-  onAdd: (items: NewPiece[]) => void;
+  /** A promise that rejects keeps what was pasted in the field, to try again. */
+  onAdd: (items: NewPiece[]) => void | Promise<void>;
   onRemove: (id: string) => void;
   /** Editing a piece in place. Absent on the voice page, where a row is only removed. */
   onEdit?: (id: string, body: string) => void;
@@ -73,9 +74,10 @@ export function PasteBox({ pieces, total, onAdd, onRemove, onEdit, onMerge, busy
   // Silent for a single piece: there is nothing to check when nothing was split.
   const showCount = parts.length > 1 || (merged && parts.length > 0);
 
-  const add = () => {
+  const add = async () => {
     if (ready.length === 0) return;
-    onAdd(ready.map((body) => ({ kind: "paste" as const, origin: null, body })));
+    // Whoever adds says what went wrong; the field keeps the text until it is in.
+    try { await onAdd(ready.map((body) => ({ kind: "paste" as const, origin: null, body }))); } catch { return; }
     setText("");
     setMerged(false);
     area.current?.focus();
@@ -170,7 +172,7 @@ export function PasteBox({ pieces, total, onAdd, onRemove, onEdit, onMerge, busy
       {total > 0 && total < 4 && <p className="box-hint">{t("paste.more")}</p>}
 
       <div className="box-foot">
-        <button className="btn sm" disabled={busy || ready.length === 0} onClick={add}>{t("paste.add")}</button>
+        <button className="btn sm" disabled={busy || ready.length === 0} onClick={() => void add()}>{t("paste.add")}</button>
         <span className="grow" />
         <button className="link quiet-link" disabled={busy} onClick={() => filePick.current?.click()}>{t("import.manualFile")}</button>
         <span className="src-hint">{t("paste.dropHint")}</span>

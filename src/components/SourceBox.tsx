@@ -41,7 +41,8 @@ type Props = {
   /** What is connected already; each shows as a ticked row with its count. */
   connected: Connected[];
   onGathered: (pieces: Gathered[], from: { kind: SourceKind; account: string | null }) => void;
-  onRemove: (kind: SourceKind, account: string | null) => void;
+  /** Dropping a connection. Absent where nothing should be taken away (the topics screen). */
+  onRemove?: (kind: SourceKind, account: string | null) => void;
   /** Pull new articles from a connection (voice page). Absent on the intake, where everything is new anyway. */
   onRefresh?: (kind: SourceKind, account: string | null) => void;
   refreshing?: string | null;
@@ -140,7 +141,7 @@ export function SourceBox({ hero, known, connected, onGathered, onRemove, onRefr
               {refreshing === key ? t("import.working") : c.kind === "x" ? t("voice.sources.refreshX") : t("voice.sources.refresh")}
             </button>
           )}
-          <button className="link" onClick={() => onRemove(c.kind, c.account)}>{t("voice.sources.remove")}</button>
+          {onRemove && <button className="link" onClick={() => onRemove(c.kind, c.account)}>{t("voice.sources.remove")}</button>}
         </span>
       </div>
     );

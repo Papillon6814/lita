@@ -32,10 +32,15 @@
 // topics-cloud-first (no cloud yet, gathering it on open, never finishing),
 // topics-cloud-picked (three words pressed), topics-cloud-more (more
 // material since the cloud was gathered), topics-cloud-few (too few words
-// to make a cloud: no cloud and no sentence in its place), topics-cloud-three
+// to make a cloud: one sentence and "add writing" in its place), topics-cloud-three
 // (three words, the fewest that still make a cloud), topics-cloud-few-more
 // (too few words, and writing added since: gathered again on opening),
-// topics-cloud-failed (gathering did not work),
+// topics-cloud-failed (gathering did not work), topics-cloud-stopped (writing,
+// no cloud, the first gather stopped), topics-add-empty (only the voice that
+// comes with Lita: no writing, no articles), topics-add-open (the same, with
+// "add writing" opened; adding gathers the words), topics-add-failed (the
+// same, and adding does not work), topics-add-articles (articles, but no
+// writing of one's own),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -182,7 +187,9 @@ let voice: T.Voice = {
   id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
-if (scene === "voice-preset") voice = presetVoice;
+if (["voice-preset", "topics-add-empty", "topics-add-open", "topics-add-failed"].includes(scene)) voice = presetVoice;
+// Lita wrote the articles; none of the writing is the person's own.
+if (scene === "topics-add-articles") voice = { ...voice, voice_sources: [] };
 
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
   title: ["資本政策は諦める順番を決める作業", "ファイナンスは時間を買う話", "エクイティの重さについて", "投資家との最初の会話で聞くこと", "利益率の議論が空回りする理由"][i],
@@ -213,7 +220,7 @@ const articleBodies = [
   { title: "投資家との最初の会話で聞くこと", body: "投資家との最初の会話で聞くべきことは一つで、彼らが何を恐れているかだ。\n\nリターンの話は後からいくらでもできる。恐れが分かれば、こちらの提案の形はほとんど決まる。\n\n## 恐れは三つに分かれる\n\n一つ目は時間、二つ目は評判、三つ目は次の資金調達だ。", brief: "投資家との初回面談で何を聞くべきか。note 向けに 1,500 字ほど。", platform: "note", status: "draft", at: ago(60 * 26) },
   { title: "ファイナンスは時間を買う話", body: draftBody, brief: "ファイナンスの選択肢の話。", platform: "x", status: "archived", at: ago(60 * 24 * 4) },
 ];
-const articles: T.Article[] = scene === "articles-empty" || scene === "articles-first-run" ? [] : articleBodies.map((a, i) => ({
+const articles: T.Article[] = ["articles-empty", "articles-first-run", "topics-add-empty", "topics-add-open", "topics-add-failed"].includes(scene) ? [] : articleBodies.map((a, i) => ({
   id: `a${i + 1}`, voice_id: "v1", platform_id: a.platform, title: a.title, body: a.body, brief: a.brief,
   status: a.status as T.ArticleStatus, queue: null, created_at: a.at, updated_at: a.at,
 }));
@@ -268,7 +275,9 @@ const threeCloud: T.TopicCloud = { words: [cloudWords[8], cloudWords[6], cloudWo
 
 const cloudView = (): T.CloudView => {
   if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
-  if (scene === "topics-cloud-first") return { cloud: null, material_count: 18 };
+  if (scene === "topics-cloud-first" || scene === "topics-cloud-stopped") return { cloud: null, material_count: 18 };
+  // Nothing of one's own yet: the count is the writing added in this session.
+  if (scene.startsWith("topics-add")) return { cloud: null, material_count: voice.voice_sources.length };
   if (scene === "topics-cloud-few" || scene === "topics-picked-few") return { cloud: sparseCloud, material_count: 2 };
   if (scene === "topics-cloud-three") return { cloud: threeCloud, material_count: 2 };
   if (scene === "topics-cloud-few-more") return { cloud: sparseCloud, material_count: 4 };
@@ -514,7 +523,10 @@ export const mockHost: T.Host = {
   createVoice: () => never(),
   listVoicePresets: async () => [{ id: "pr-polite-ja", name: "広報のです・ます", one_line: PRESET_ONE_LINE }],
   createVoiceFromPreset: async (_id) => { voice = { ...presetVoice }; hasVoice = true; return voice; },
-  addVoiceSources: async (_id, added) => { await wait(300); voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
+  addVoiceSources: async (_id, added) => {
+    await wait(300);
+    if (scene === "topics-add-failed") throw { code: "network", detail: "fetch failed: ENOTFOUND csfvqpqzvcorqlsmfjwb.supabase.co" };
+    voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
   removeVoiceSource: async (_id, sourceId) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => s.id !== sourceId) }; return voice; },
   removeVoiceSources: async (_id, kind, account) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => !(s.kind === kind && s.account === account)) }; return voice; },
   rebuildVoice: () => never(),
