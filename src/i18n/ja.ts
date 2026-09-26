@@ -124,7 +124,7 @@ export const ja: Record<MessageKey, string> = {
   "paste.dropHint": "ここに落としても入ります。",
   "paste.mergePrev": "前とつなげる",
   "paste.list": "手で入れた文章 {n} 本",
-  "paste.talkHint": "チャットの会話も、そのまま貼れます。あなたの発言だけを残します。",
+  "paste.talkHint": "チャットやメールの会話も、そのまま貼れます。あなたの発言だけを残します。",
   "paste.talkWho": "会話を貼りました。あなたはどれですか。",
   "paste.talkUnnamed": "名前の無い発言",
   "paste.talkAllMine": "全部が自分の文章",

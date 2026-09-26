@@ -9,12 +9,17 @@
 //! "… wrote:" line above a quoted mail. Everything the pattern needs is in
 //! the `Cues` below, so a chat that changes its screen is fixed in one place.
 //!
+//! When unsure, it leans away from a conversation, and away from putting
+//! someone else's words under the person's name: a shape that an ordinary
+//! line could also have is a name only if the same name heads another
+//! message, and a mail intro needs a quote or a name to back it.
+//!
 //! Other people's messages are read here and handed back only so that the
 //! person can choose who they are without pasting again; the caller keeps
 //! them in memory and drops them. Nothing is stored and nothing goes to Codex
 //! from this module.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -56,12 +61,18 @@ pub enum Reading {
 pub fn read(text: &str, known: &[String]) -> Reading {
     let lines: Vec<String> = normalise(text).lines().map(|l| l.trim().to_string()).collect();
     let mut kinds = classify(&lines);
+    confirm_weak(&mut kinds);
     resolve_colons(&mut kinds);
 
     let named = kinds.iter().filter(|k| matches!(k, Kind::Header { .. })).count();
-    let stamps = kinds.iter().filter(|k| matches!(k, Kind::Stamp { clock: true, .. })).count();
-    let intros = kinds.iter().filter(|k| matches!(k, Kind::Intro)).count();
-    let talk = named >= 2 || (named >= 1 && named + stamps >= 2) || intros >= 1;
+    let stamps = kinds.iter().filter(|k| matches!(k, Kind::Stamp { clock: true, .. } | Kind::Unknown)).count();
+    // A mail intro alone is not enough: it needs a quote under it, a name
+    // above a message, or a `From:` / `Sent:` pair.
+    let backed_intro = kinds.iter().enumerate().any(|(i, k)| match k {
+        Kind::Intro { firm } => *firm || named >= 1 || kinds[i + 1..].iter().find(|k| !matches!(k, Kind::Blank)).is_some_and(|k| matches!(k, Kind::Quote)),
+        _ => false,
+    });
+    let talk = named >= 2 || (named >= 1 && named + stamps >= 2) || backed_intro;
     if !talk {
         let timed = stamps + named + kinds.iter().filter(|k| matches!(k, Kind::Text(t) if CUES.time_lead.is_match(t))).count();
         return if timed >= 2 { Reading::Unsure } else { Reading::Plain };
@@ -115,8 +126,16 @@ struct Cues {
     tab_pair: Regex,
     /// A line that starts with a clock, for "times recur" alone.
     time_lead: Regex,
-    /// Above a quoted mail: `… wrote:`, `… のメッセージ:`, `… <a@b.c>:`, `-----Original Message-----`.
-    intro: Vec<Regex>,
+    /// Above a quoted mail: `On <date>, Name <a@b.c> wrote:`, `<date> Name のメッセージ:`,
+    /// `… <a@b.c>:`, `-----Original Message-----`. A `wrote:` or `のメッセージ:`
+    /// counts only with a date, a time or an address on it (or on the line it
+    /// wraps from), so "As Drucker wrote:" stays prose.
+    wrote: Regex,
+    wrote_ja: Regex,
+    addr_intro: Regex,
+    separator: Regex,
+    /// A date or a time anywhere in a line, for a mail intro.
+    mail_when: Regex,
     /// `From:` followed by `Sent:` / `Date:`: an unquoted forwarded mail.
     from: Regex,
     sent: Regex,
@@ -165,12 +184,11 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
         colon: re(r"^(?P<name>[^:：\s>][^:：]{0,23}?)\s*[:：]\s*(?P<body>.*)$"),
         tab_pair: re(r"^(?P<name>[^\t]{1,24})\t(?P<body>.+)$"),
         time_lead: re(&format!(r"^\[?{clock}\]?\s+\S")),
-        intro: vec![
-            re(r"(?i)\bwrote\s*:\s*$"),
-            re(r"(?:のメッセージ|が書きました|は書きました|書き込みました)\s*[:：]\s*$"),
-            re(r"<[^<>\s]+@[^<>\s]+>\s*[:：]\s*$"),
-            re(r"(?i)^-{2,}\s*(?:original message|forwarded message|元のメッセージ|転送されたメッセージ)\s*-{2,}$"),
-        ],
+        wrote: re(r"(?i)\bwrote\s*:\s*$"),
+        wrote_ja: re(r"(?:のメッセージ|が書きました|は書きました|書き込みました)\s*[:：]\s*$"),
+        addr_intro: re(r"<[^<>\s]+@[^<>\s]+>\s*[:：]\s*$"),
+        separator: re(r"(?i)^-{2,}\s*(?:original message|forwarded message|元のメッセージ|転送されたメッセージ)\s*-{2,}$"),
+        mail_when: re(&format!(r"{date}|{clock}")),
         from: re(r"^(?:From|差出人)\s*[:：]\s*\S"),
         sent: re(r"^(?:Sent|Date|送信日時|日付)\s*[:：]"),
         intro_head: re(r"(?i)^(?:on\s|\d{4}年|\d{4}/)"),
@@ -220,14 +238,21 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
 #[derive(Debug)]
 enum Kind {
     Blank,
-    /// A name heads what follows. `body` is text on the same line.
-    Header { name: String, body: Option<String> },
+    /// A name heads what follows. `body` is text on the same line. `weak`:
+    /// the shape could also be an ordinary line (`Name, 10:23`, `Name 9/26
+    /// 10:23`, a line above a time alone), so it stays a name only when the
+    /// same name heads another message too.
+    Header { name: String, body: Option<String>, weak: bool },
+    /// A weak header whose name heads nothing else. What follows it is
+    /// nobody's: not the previous person's, and not offered as a name.
+    Unknown,
     /// A time (or a date) alone, or `[10:24]text`: the same person goes on.
     Stamp { clock: bool, body: Option<String> },
     /// `Name: text` that only counts when it recurs; `line` is kept to fall back on.
     Colon { name: String, body: String, line: String },
     /// The line above a quoted mail: what follows is someone else's.
-    Intro,
+    /// `firm`: a `From:` / `Sent:` pair, a conversation by itself.
+    Intro { firm: bool },
     Signature,
     Quote,
     Chrome,
@@ -245,12 +270,13 @@ fn classify(lines: &[String]) -> Vec<Kind> {
     while i < lines.len() {
         let l = lines[i].as_str();
         let next = lines.get(i + 1).map(String::as_str).unwrap_or("");
+        let prev = if i > 0 { lines[i - 1].as_str() } else { "" };
         let kind = if l.is_empty() {
             Kind::Blank
         } else if l.starts_with('>') || l.starts_with('＞') {
             Kind::Quote
-        } else if c.intro.iter().any(|r| r.is_match(l)) || (c.from.is_match(l) && c.sent.is_match(next)) {
-            Kind::Intro
+        } else if let Some(k) = intro(l, prev, next) {
+            k
         } else if c.signature.is_match(l) {
             Kind::Signature
         } else if is_chrome(l) || (after_head && c.head_chrome.is_match(l)) {
@@ -258,10 +284,11 @@ fn classify(lines: &[String]) -> Vec<Kind> {
         } else if let Some(k) = header_on_line(l) {
             k
         } else if !after_head && c.stamp_line.is_match(next) && c.clock.is_match(next) {
-            match name(l) {
+            match name(l).filter(|n| heading_name(n)) {
                 Some(n) => {
                     i += 1;
-                    Kind::Header { name: n, body: None }
+                    // A sender line with an address is a name for sure.
+                    Kind::Header { name: n, body: None, weak: !c.email.is_match(l) }
                 }
                 None => text_or_colon(l),
             }
@@ -284,20 +311,20 @@ fn header_on_line(l: &str) -> Option<Kind> {
     let c = &*CUES;
     if let Some(m) = c.tab_line.captures(l)
         && let Some(n) = name(&m["name"]) {
-            return Some(Kind::Header { name: n, body: Some(m["body"].to_string()) });
+            return Some(Kind::Header { name: n, body: Some(m["body"].to_string()), weak: false });
         }
     if c.stamp_line.is_match(l) {
         return Some(Kind::Stamp { clock: c.clock.is_match(l), body: None });
     }
     if let Some(m) = c.stamp_colon.captures(l)
         && let Some(n) = name(&m["name"]) {
-            return Some(Kind::Header { name: n, body: Some(m["body"].to_string()) });
+            return Some(Kind::Header { name: n, body: Some(m["body"].to_string()), weak: false });
         }
     if let Some(m) = c.stamp_name.captures(l) {
         if !c.strong_stamp.is_match(&m["stamp"]) || !c.clock.is_match(&m["stamp"]) {
             // `[10:24]text` is the same person going on, not a name.
         } else if let Some(n) = name(&m["name"]) {
-            return Some(Kind::Header { name: n, body: None });
+            return Some(Kind::Header { name: n, body: None, weak: false });
         }
     }
     if let Some(m) = c.stamp_text.captures(l) {
@@ -305,16 +332,78 @@ fn header_on_line(l: &str) -> Option<Kind> {
     }
     if let Some(m) = c.name_stamp.captures(l) {
         let sep = &m["sep"];
+        let mark = sep.trim();
         let stamp = &m["stamp"];
-        // "集合は 10:30" is a sentence; a name sits apart from its time by a
-        // mark, a bracket, two spaces, or a time that says more than a clock.
-        let apart = m.name("open").is_some() || !sep.trim().is_empty() || sep.chars().count() >= 2 || sep.contains('\t') || c.strong_stamp.is_match(stamp);
-        if apart && (c.clock.is_match(stamp) || c.strong_stamp.is_match(stamp))
-            && let Some(n) = name(&m["name"]) {
-                return Some(Kind::Header { name: n, body: None });
+        // "集合は 10:30" and "締切は 9/30" are sentences. A name heads a
+        // message only with a clock after it, and sits apart from it by a
+        // bracket, a dash or a bar, or two spaces. A comma, or one space
+        // before a date and a clock, is weak: "OK, 10:30" is a sentence too.
+        let firm = mark != "," && (m.name("open").is_some() || !mark.is_empty() || sep.chars().count() >= 2);
+        let weak = mark == "," || c.strong_stamp.is_match(stamp);
+        if c.clock.is_match(stamp) && (firm || weak)
+            && let Some(n) = name(&m["name"]).filter(|n| heading_name(n)) {
+                return Some(Kind::Header { name: n, body: None, weak: !firm });
             }
     }
     None
+}
+
+/// The line above a quoted or forwarded mail, or `None`.
+fn intro(l: &str, prev: &str, next: &str) -> Option<Kind> {
+    let c = &*CUES;
+    if c.from.is_match(l) && c.sent.is_match(next) {
+        return Some(Kind::Intro { firm: true });
+    }
+    if c.separator.is_match(l) || c.addr_intro.is_match(l) {
+        return Some(Kind::Intro { firm: false });
+    }
+    // "On Thu, Sep 25, 2026 at 6:02 PM Jordan Lee <" may wrap before "wrote:".
+    let dated = |s: &str| c.mail_when.is_match(s) || s.contains('@');
+    let wrote = c.wrote.is_match(l)
+        && (l.contains('@') || (c.intro_head.is_match(l) && dated(l)) || (c.intro_head.is_match(prev) && dated(prev)));
+    let wrote_ja = c.wrote_ja.is_match(l) && (dated(l) || dated(prev));
+    (wrote || wrote_ja).then_some(Kind::Intro { firm: false })
+}
+
+/// Whether a name found above a message could be a person's rather than the
+/// start of a sentence: no particle after a word ("締切は"), no polite verb
+/// ending, no English function word ("The launch is on").
+fn heading_name(n: &str) -> bool {
+    let hiragana = |ch: char| ('\u{3041}'..='\u{309F}').contains(&ch);
+    // A particle right after a kanji, katakana or latin word; a name written
+    // in hiragana ("まこと", "ちから") keeps its ending.
+    for tail in ["から", "まで", "より", "には", "では", "とは", "って", "は", "が", "を", "に", "で", "へ", "も", "と", "の", "や"] {
+        if let Some(head) = n.strip_suffix(tail)
+            && head.chars().last().is_some_and(|ch| !hiragana(ch) && !ch.is_whitespace())
+        {
+            return false;
+        }
+    }
+    if ["です", "ます", "でした", "ました"].iter().any(|w| n.contains(w)) {
+        return false;
+    }
+    const FUNCTION_WORDS: [&str; 19] = [
+        "an", "and", "at", "be", "by", "due", "for", "from", "in", "is", "are", "of", "on", "the", "to", "until", "was", "were", "with",
+    ];
+    !n.split_whitespace().any(|w| FUNCTION_WORDS.contains(&w.to_lowercase().as_str()))
+}
+
+/// A weak header stays a name only when the same name heads another
+/// message in the paste; otherwise it becomes `Unknown`.
+fn confirm_weak(kinds: &mut [Kind]) {
+    let mut count: HashMap<String, usize> = HashMap::new();
+    for k in kinds.iter() {
+        if let Kind::Header { name, .. } = k {
+            *count.entry(name.clone()).or_default() += 1;
+        }
+    }
+    for k in kinds.iter_mut() {
+        if let Kind::Header { name, weak: true, .. } = k
+            && count.get(name.as_str()).copied().unwrap_or(0) < 2
+        {
+            *k = Kind::Unknown;
+        }
+    }
 }
 
 fn text_or_colon(l: &str) -> Kind {
@@ -389,7 +478,7 @@ fn resolve_colons(kinds: &mut [Kind]) {
     for k in kinds.iter_mut() {
         if let Kind::Colon { name, body, line } = k {
             *k = if talk {
-                Kind::Header { name: std::mem::take(name), body: Some(std::mem::take(body)) }
+                Kind::Header { name: std::mem::take(name), body: Some(std::mem::take(body)), weak: false }
             } else {
                 Kind::Text(std::mem::take(line))
             };
@@ -406,7 +495,7 @@ fn gather(kinds: Vec<Kind>) -> Vec<(Option<String>, Vec<String>)> {
     let mut quoting = false;
     for k in kinds {
         match k {
-            Kind::Header { name, body } => {
+            Kind::Header { name, body, .. } => {
                 quoting = false;
                 out.push((Some(name), body.into_iter().collect()));
             }
@@ -416,7 +505,9 @@ fn gather(kinds: Vec<Kind>) -> Vec<(Option<String>, Vec<String>)> {
                     out.push((who, body.into_iter().collect()));
                 }
             }
-            Kind::Intro => {
+            // Nobody's: skipped until the next name.
+            Kind::Unknown => quoting = true,
+            Kind::Intro { .. } => {
                 // A wrapped "On …, Name <\naddr> wrote:" leaves its first half behind.
                 if let Some(last) = out.last_mut() {
                     while last.1.last().is_some_and(|l| l.is_empty()) {
@@ -612,6 +703,9 @@ Nice, cc @Jordan Lee
 Jordan Lee joined #metrics.
 Alex Rivera  [10:15 AM]
 One more thing: let's set the stop rule before we start, not after. :thinking_face:
+Jordan Lee
+10:20 AM
+Thanks, that helps.
 ";
 
     #[test]
@@ -624,17 +718,22 @@ One more thing: let's set the stop rule before we start, not after. :thinking_fa
             saved,
             "I did. The drop is mostly in the annual plans, not the monthly ones.\n\nGoing to write it up before Friday.\n\nOne more thing: let's set the stop rule before we start, not after."
         );
-        assert_clean(&saved, &["Jordan", "Sam", "Alex", "AM", "churn", "Nice", "cc", "joined", "repl", "thread", "edited", "thinking"]);
+        assert_clean(&saved, &["Jordan", "Sam", "Alex", "AM", "churn", "Nice", "cc", "joined", "repl", "thread", "edited", "thinking", "Thanks"]);
     }
 
     // Teams: GUESSED. No source for how Teams copies several messages could
-    // be checked; this is "[date time] Name" above the text.
+    // be checked; this is "[date time] Name" above the text. Each name speaks
+    // twice: a name after one space (the inline spelling) counts only then.
     const TEAMS_GUESSED: &str = "[9/26 10:21] 佐藤 花子
 来週の定例、議題を先に集めませんか
 [9/26 10:23] 森川 陽介
 賛成です。私からは採用の進み具合を出します。
 [9/26 10:25] Mika Tanaka
 I'll add the budget review.
+[9/26 10:26] 佐藤 花子
+お願いします。
+[9/26 10:27] 森川 陽介
+資料は金曜に出します。
 ";
 
     // Teams, the other guessed spelling: "Name date time" on one line.
@@ -642,6 +741,10 @@ I'll add the budget review.
 来週の定例、議題を先に集めませんか
 森川 陽介 9/26 10:23 AM
 賛成です。私からは採用の進み具合を出します。
+佐藤 花子 9/26 10:26 AM
+お願いします。
+森川 陽介 9/26 10:27 AM
+資料は金曜に出します。
 ";
 
     #[test]
@@ -651,8 +754,8 @@ I'll add the budget review.
             let (speakers, _) = talk(&r);
             assert_eq!(speakers[..2], ["佐藤 花子", "森川 陽介"]);
             let saved = kept(&r, Some("森川 陽介"));
-            assert_eq!(saved, "賛成です。私からは採用の進み具合を出します。");
-            assert_clean(&saved, &["佐藤", "9/26", "議題", "budget"]);
+            assert_eq!(saved, "賛成です。私からは採用の進み具合を出します。\n\n資料は金曜に出します。");
+            assert_clean(&saved, &["佐藤", "9/26", "議題", "budget", "お願いします"]);
         }
     }
 
@@ -789,20 +892,22 @@ jordan.lee@example.com> wrote:
     }
 
     // Google Chat: GUESSED. "Name, 10:21" above the text; not checked
-    // against a source.
+    // against a source. A comma is weak, so each name speaks twice.
     const GOOGLE_CHAT_GUESSED: &str = "佐藤 花子, 10:21
 今日の午後、少し話せますか？
 森川 陽介, 10:23
 15時以降なら空いています。
 佐藤 花子, 10:24
 ではその時間で。
+森川 陽介, 10:25
+資料はその前に送ります。
 ";
 
     #[test]
     fn google_chat_guessed_format() {
         let r = read(GOOGLE_CHAT_GUESSED, &[]);
         let saved = kept(&r, Some("森川 陽介"));
-        assert_eq!(saved, "15時以降なら空いています。");
+        assert_eq!(saved, "15時以降なら空いています。\n\n資料はその前に送ります。");
     }
 
     // Chat logs and minutes: "[time] Name: text" and "Name：text".
@@ -928,6 +1033,55 @@ Three days later I said yes.
     fn links_keep_their_words() {
         let r = read("佐藤 花子  10:21\n見ました？\n森川 陽介  10:22\n<https://example.com/a|採用の手引き> と [評価の考え方](https://example.com/b) を読みました\n", &[]);
         assert_eq!(kept(&r, Some("森川 陽介")), "採用の手引き と 評価の考え方 を読みました");
+    }
+
+    // Ordinary lines that end in a date or a time are not names above a
+    // message: a date alone never heads one, a sentence is not a name, and
+    // "OK, 10:30" is a name only if the same name heads another message.
+    #[test]
+    fn lines_ending_in_a_date_or_time_are_not_headers() {
+        for text in [
+            "締切は 9/30\n資料をまとめて送る。\n発表は 10月5日\n練習は前日にする。\n",
+            "Released Sep 30\nThe notes are below.\n砂糖 1/2\n塩 少々\n",
+            "OK, 10:30\n了解です。\n締切は 9/30\n",
+            "締切は 9/30 18:00\n資料を送る。\n発表は 10/5 10:00\n練習する。\n",
+            "The launch is on Sep 30 10:00\nWe meet at 9/29 15:00\n",
+        ] {
+            assert_eq!(read(text, &[]), Reading::Plain, "{text:?}");
+        }
+        let r = read("Deadline 9/30 18:00\nSend the deck.\nKickoff 10/5 10:00\nBook the room.\n", &[]);
+        assert!(!matches!(r, Reading::Talk { .. }), "{r:?}");
+    }
+
+    // A line followed by a time alone is taken for a name only when that
+    // name heads another message too. Otherwise what follows is nobody's:
+    // it is neither the previous person's nor offered as a name.
+    #[test]
+    fn a_line_above_a_time_is_a_name_only_when_it_recurs() {
+        let r = read("森川 陽介  10:21\n了解です\nOK\n10:22\n次の発言です\n佐藤 花子  10:30\nお願いします\n", &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["森川 陽介", "佐藤 花子"]);
+        assert_eq!(kept(&r, Some("森川 陽介")), "了解です");
+
+        let r = read("Alex Rivera\n10:01 AM\nFirst thing.\nJordan Lee\n10:02 AM\nJordan's only words.\nAlex Rivera\n10:05 AM\nMine again.\n", &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["Alex Rivera"]);
+        let saved = kept(&r, Some("Alex Rivera"));
+        assert_eq!(saved, "First thing.\n\nMine again.");
+        assert_clean(&saved, &["Jordan"]);
+    }
+
+    // "… wrote:" in an essay is not the top of a quoted mail, and a mail
+    // intro makes a conversation only with a quote or a name to back it.
+    #[test]
+    fn wrote_in_prose_is_plain() {
+        for text in [
+            "As Drucker wrote:\nThe purpose of a business is to create a customer.\nI agree with this.\n",
+            "On Sep 30, Drucker wrote:\nThe purpose of a business is to create a customer.\n",
+            "山田さんはこう書きました:\n撤退基準は先に決める。\n",
+        ] {
+            assert_eq!(read(text, &[]), Reading::Plain, "{text:?}");
+        }
     }
 
     #[test]

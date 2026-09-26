@@ -122,7 +122,7 @@ export const en = {
   "paste.dropHint": "Drop files here to add them.",
   "paste.mergePrev": "Join with the one above",
   "paste.list": "{n} pieces added by hand",
-  "paste.talkHint": "You can paste a chat as it is. Only your messages are kept.",
+  "paste.talkHint": "You can paste a chat or an email thread as it is. Only your messages are kept.",
   "paste.talkWho": "You pasted a conversation. Which one is you?",
   "paste.talkUnnamed": "Messages with no name",
   "paste.talkAllMine": "All of it is mine",

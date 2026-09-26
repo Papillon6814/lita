@@ -20,17 +20,17 @@ const TITLE_CHARS = 60;
 const TALK = "talk:";
 /** The names this device knows to be you in a pasted conversation. Never sent anywhere. */
 const ME_KEY = "lita.talk.me";
+/** How many names are remembered; the one used longest ago goes first. */
+const ME_MAX = 5;
 
 const rememberedMe = (): string[] => {
   const seeded = mockTalkMe();
   if (seeded) return seeded;
   try { const v = JSON.parse(localStorage.getItem(ME_KEY) ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; }
 };
-const rememberMe = (name: string) => {
-  const names = rememberedMe();
-  if (names.includes(name)) return;
-  try { localStorage.setItem(ME_KEY, JSON.stringify([...names, name])); } catch {}
-};
+const saveMe = (names: string[]) => { try { localStorage.setItem(ME_KEY, JSON.stringify(names)); } catch {} };
+const rememberMe = (name: string) => saveMe([...rememberedMe().filter((n) => n !== name), name].slice(-ME_MAX));
+const forgetMe = (name: string) => saveMe(rememberedMe().filter((n) => n !== name));
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -97,12 +97,13 @@ type Props = {
 };
 
 /**
- * Where a pasted conversation stands. "who": choosing which name is you.
- * "kept": the field holds your messages only (`shown` is that text, so an
- * edit is noticed). "none" / "allIn": nothing of yours is left to add.
+ * Where a pasted conversation stands. "who": choosing which name is you
+ * (`was`: the name chosen before "choose again", forgotten if another is
+ * chosen). "kept": the field holds your messages only (`shown` is that text,
+ * so an edit is noticed). "none" / "allIn": nothing of yours is left to add.
  */
 type Talk =
-  | { step: "who" }
+  | { step: "who"; was?: string | null }
   | { step: "kept"; me: string | null; partial: boolean; shown: string }
   | { step: "none" }
   | { step: "allIn" };
@@ -141,6 +142,8 @@ export function PasteBox({ pieces, total, onAdd, onRemove, onEdit, onMerge, busy
   const keep = (me: string | null) => {
     const reading = pasted.current?.reading;
     if (!reading) return;
+    // Chosen again: the name chosen before was not you, so it is not remembered either.
+    if (talk?.step === "who" && typeof talk.was === "string" && talk.was !== me) forgetMe(talk.was);
     const mine = reading.messages.filter((m) => m.speaker === me);
     const fresh = mine.filter((m) => !m.seen);
     if (fresh.length === 0) {
@@ -191,11 +194,13 @@ export function PasteBox({ pieces, total, onAdd, onRemove, onEdit, onMerge, busy
     const hasUnnamed = reading.messages.some((m) => m.speaker === null);
     // Pasting more onto a conversation keeps the one already chosen. Otherwise
     // a name this device remembers is you; with none, the person is asked,
-    // even when there is one name only (it may be someone else's).
+    // even when there is one name only (it may be someone else's). Two or
+    // more remembered names in one conversation cannot both be you: asked too.
     const before = onTalk && talk?.step === "kept" ? talk.me : undefined;
+    const known = reading.speakers.filter((s) => rememberedMe().includes(s));
     const me = before !== undefined && (before === null ? hasUnnamed : reading.speakers.includes(before))
       ? before
-      : reading.speakers.find((s) => rememberedMe().includes(s));
+      : known.length === 1 ? known[0] : undefined;
     if (me !== undefined) keep(me);
     else { setText(""); setTalk({ step: "who" }); }
   };
@@ -315,7 +320,7 @@ export function PasteBox({ pieces, total, onAdd, onRemove, onEdit, onMerge, busy
       {talk?.step === "kept" && (
         <p className="talk-line">
           <span role="status">{talkKept(talk.me, talk.partial)}</span>
-          <button className="link" onClick={() => setTalk({ step: "who" })}>{t("paste.talkRechoose")}</button>
+          <button className="link" onClick={() => setTalk({ step: "who", was: talk.me })}>{t("paste.talkRechoose")}</button>
         </p>
       )}
       {(talk?.step === "none" || talk?.step === "allIn") && (
