@@ -20,25 +20,32 @@ session and writes back at the end.
 Do not make scope decisions without it. Do not re-litigate anything already
 recorded in `docs/pm/decisions.md`.
 
-## The requirements and UX agents (2026-09-23)
+## The requirements, UX, and dev agents (2026-09-23, dev added 2026-09-26)
 
 The author gives one-line wishes ("make this feel more optional") and does
-not want to spell out requirements one by one. Two agents own that work:
+not want to spell out requirements one by one. Three agents own that work:
 
 - `.claude/agents/lita-requirements.md` — **owns requirements.** Turns a
   wish into `docs/pm/requirements/<date>-<slug>.md`: goal, must / may /
   not-in-scope, acceptance criteria, defaults it chose without asking, and
   at most three open questions. It fills in what was not said.
-- `.claude/agents/lita-ux.md` — **owns UI/UX.** Reads the requirement,
-  designs against `docs/pm/ux/principles.md` (which it maintains), implements
-  the UI part (components, ja/en strings, CSS, mock scenes), takes mock
-  screenshots and checks the acceptance criteria. Records go to
-  `docs/pm/ux/<date>-<slug>.md`.
+- `.claude/agents/lita-ux.md` — **owns UI/UX design and review.** Reads the
+  requirement, designs against `docs/pm/ux/principles.md` (which it
+  maintains), shows options as static mocks (`design/*.html`), and reviews
+  the implemented PR with mock screenshots. It does not write app code.
+  Records go to `docs/pm/ux/<date>-<slug>.md`.
+- `.claude/agents/lita-dev.md` — **the only writer of app code** (Rust,
+  Tauri commands, React/TS, ja/en strings, CSS, mock scenes, migrations —
+  even a one-line copy fix). Implements from the requirement and the UX
+  design, verifies (cargo test/clippy, tsc, build, mock screenshots), commits,
+  and opens the PR. One PR per delegation. Reports go to
+  `docs/pm/dev/<date>-<slug>.md`.
 
-The loop for any UI-facing change: wish → `lita-requirements` → `lita-ux`
-(design + UI implementation + self-review) → coordinator wires non-UI parts,
-commits, opens the PR → `lita-pm` records decisions. A UI change that skipped
-`lita-ux` is not ready for a PR.
+The loop for any change: wish → `lita-requirements` → `lita-ux` (design, if
+UI-facing) → `lita-dev` (implement, verify, commit, PR) → `lita-ux` (review
+the PR's screens, if UI-facing; fixes go back to `lita-dev`) → `lita-pm`
+records decisions. A UI change that skipped `lita-ux` design or review is not
+ready to merge. Releases and merges stay with the coordinator.
 
 ## Non-negotiable constraints
 
