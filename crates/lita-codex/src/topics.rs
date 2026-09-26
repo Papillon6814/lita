@@ -93,7 +93,9 @@ pub struct TopicCloud {
     pub words: Vec<CloudWord>,
     #[serde(default)]
     pub gathered_at: String,
-    /// Sources + articles at gathering time, so the screen can say "more since".
+    /// The person's own writing at gathering time (the sources of every
+    /// voice), so the screen can say "more since". Articles Lita only wrote
+    /// do not count (#129).
     #[serde(default)]
     pub material_count: usize,
 }
@@ -112,7 +114,7 @@ pub fn cloud_schema() -> Value {
         "properties": {
             "words": {
                 "type": "array",
-                "description": "Twenty to forty subjects this person keeps writing about, most central first.",
+                "description": "The subjects this person keeps writing about, as many as the writing supports and at most forty, most central first.",
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
@@ -140,15 +142,16 @@ pub fn cloud_prompt(policy: &Policy, samples: &[&str], existing: &[Existing], la
     let existing_block = if existing_block.is_empty() { "(none yet)".to_string() } else { existing_block };
     format!(
         "Read this person's writing and list the subjects they keep coming back to: the things they think \
-         about, argue about, and return to across pieces. Aim for thirty words, no fewer than twenty and no \
-         more than forty, in {language}, most central first. Each is a short noun phrase a reader would \
+         about, argue about, and return to across pieces. List as many as the writing supports and no more \
+         than forty (thirty when there is plenty), in {language}, most central first. When the writing is thin, \
+         list fewer; never pad the list with generic words. Each is a short noun phrase a reader would \
          recognise as a subject (資金繰り, 撤退の基準, 採用面接), not a generic word, not a name, not a number. \
          Weight each 1 to 5 by how often the person returns to it, not by how often the string appears. Mark \
          `written` true when an article already written is about that subject.\n\n\
          EDITORIAL POLICY:\n{policy_block}\n\n\
          WRITING SAMPLES:\n{samples}\n\n\
          ARTICLES ALREADY WRITTEN:\n{existing_block}",
-        samples = samples_block(samples),
+        samples = cloud_samples_block(samples),
     )
 }
 
@@ -202,6 +205,39 @@ fn samples_block(samples: &[&str]) -> String {
         .map(|(i, s)| {
             let head: String = s.trim().chars().take(SAMPLE_HEAD_CHARS).collect();
             format!("--- {} ---\n{head}", i + 1)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// How much of the writing the cloud reads (#129, D-72). Unlike titles, it
+/// drops no sample: the budget is shared, so the more samples, the shorter
+/// each one gets.
+const CLOUD_TOTAL_CHARS: usize = 40_000;
+const CLOUD_SAMPLE_MAX_CHARS: usize = 2_000;
+
+/// Every non-empty sample, each cut to its share of the budget. A cut sample
+/// keeps its head and its tail (three to one): subjects show up where a piece
+/// opens and where it closes.
+fn cloud_samples_block(samples: &[&str]) -> String {
+    let samples: Vec<&str> = samples.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let Some(share) = CLOUD_TOTAL_CHARS.checked_div(samples.len()) else { return String::new() };
+    let share = share.min(CLOUD_SAMPLE_MAX_CHARS);
+    samples
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let chars: Vec<char> = s.chars().collect();
+            let text: String = if chars.len() <= share {
+                s.to_string()
+            } else {
+                let head = share * 3 / 4;
+                let tail = share - head;
+                let head: String = chars[..head].iter().collect();
+                let tail: String = chars[chars.len() - tail..].iter().collect();
+                format!("{head}\n…\n{tail}")
+            };
+            format!("--- {} ---\n{text}", i + 1)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -468,6 +504,44 @@ mod tests {
         assert_eq!(out[1].weight, 1);
         let sorted = tidy_cloud(vec![CloudWord { word: "a".into(), weight: 1, written: false }, CloudWord { word: "b".into(), weight: 4, written: false }]);
         assert_eq!(sorted[0].word, "b");
+    }
+
+    #[test]
+    fn cloud_reads_every_sample_even_past_the_twenty_fifth() {
+        let samples: Vec<String> = (0..30).map(|i| format!("{i} 番目の文章。題材{i}について書いた。")).collect();
+        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        let p = cloud_prompt(&Policy::default(), &refs, &[], Lang::Ja);
+        assert!(p.contains("題材29について"));
+        assert!(p.contains("--- 30 ---"));
+        // Titles still read the first 24, heads only (the wait there matters).
+        let t = topics_prompt(&Policy::default(), &refs, &[], &[], "", 10, Lang::Ja);
+        assert!(!t.contains("題材29について"));
+    }
+
+    #[test]
+    fn cloud_takes_head_and_tail_within_the_budget() {
+        // One long sample: at most 2,000 characters, head and tail both kept.
+        let long = format!("冒頭の題材{}締めの題材", "あ".repeat(10_000));
+        let block = cloud_samples_block(&[long.as_str()]);
+        assert!(block.contains("冒頭の題材"));
+        assert!(block.contains("締めの題材"));
+        assert!(block.chars().count() < CLOUD_SAMPLE_MAX_CHARS + 50);
+        // Many long samples: none dropped, the whole stays near 40,000.
+        let many: Vec<String> = (0..60).map(|i| format!("頭{i}頭{}尾{i}尾", "い".repeat(5_000))).collect();
+        let refs: Vec<&str> = many.iter().map(String::as_str).collect();
+        let block = cloud_samples_block(&refs);
+        assert!(block.contains("頭59頭") && block.contains("尾59尾") && block.contains("頭0頭"));
+        assert!(block.chars().count() < CLOUD_TOTAL_CHARS + 60 * 20);
+        // A short sample goes in whole, without a gap mark.
+        assert_eq!(cloud_samples_block(&["短い文章", "  "]), "--- 1 ---\n短い文章");
+    }
+
+    #[test]
+    fn cloud_asks_only_for_what_the_writing_supports() {
+        let p = cloud_prompt(&Policy::default(), &["x"], &[], Lang::Ja);
+        assert!(p.contains("as many as the writing supports"));
+        assert!(p.contains("no more than forty"));
+        assert!(!p.contains("no fewer than twenty"));
     }
 
     #[test]

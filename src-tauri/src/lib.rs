@@ -857,14 +857,14 @@ async fn suggest_brief(app: AppHandle, article_id: String) -> Result<String, UiE
 #[derive(Debug, Serialize)]
 pub struct CloudView {
     pub cloud: Option<TopicCloud>,
-    /// Sources + articles now; the screen compares with `cloud.material_count`.
+    /// The person's own writing now; the screen compares with `cloud.material_count`.
     pub material_count: usize,
 }
 
+/// Only the person's own writing counts (#129): an article Lita queued and
+/// wrote is not more of their words.
 fn material_count(store: &lita_store::UserStore<'_>) -> Result<usize, UiError> {
-    let sources: usize = store.voices().map_err(fail)?.iter().map(|v| v.source_count.max(0) as usize).sum();
-    let articles = store.articles(None).map_err(fail)?.len();
-    Ok(sources + articles)
+    Ok(store.voices().map_err(fail)?.iter().map(|v| v.source_count.max(0) as usize).sum())
 }
 
 #[tauri::command]
