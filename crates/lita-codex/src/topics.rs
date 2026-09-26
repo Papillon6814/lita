@@ -98,6 +98,67 @@ pub struct TopicCloud {
     /// do not count (#129).
     #[serde(default)]
     pub material_count: usize,
+    /// How `material_count` was counted: 0 for clouds saved before #129
+    /// (writing and articles together), `CLOUD_COUNTING` since.
+    #[serde(default)]
+    pub counting: u8,
+}
+
+/// The way `material_count` is counted now: the person's own writing only.
+pub const CLOUD_COUNTING: u8 = 1;
+
+/// A cloud saved before #129 counted articles too, so its number cannot be
+/// compared with the writing now. Counts it again as the writing that
+/// already existed when it was gathered, from the `created_at` of every
+/// piece there is now. No Codex call. A time that cannot be read counts as
+/// already there, so nothing is called new by mistake.
+pub fn recount(cloud: &mut TopicCloud, source_times: &[String]) {
+    if cloud.counting >= CLOUD_COUNTING {
+        return;
+    }
+    let gathered = cloud.gathered_at.trim().parse::<i64>().ok();
+    cloud.material_count = source_times
+        .iter()
+        .filter(|t| match (gathered, epoch_seconds(t)) {
+            (Some(g), Some(s)) => s <= g,
+            _ => true,
+        })
+        .count();
+    cloud.counting = CLOUD_COUNTING;
+}
+
+/// Seconds since the epoch from an RFC 3339 time as Postgres returns it
+/// (`2026-09-20T09:00:00.123456+09:00`, `Z`, or a space for `T`).
+/// Fractions of a second are dropped.
+pub fn epoch_seconds(t: &str) -> Option<i64> {
+    let t = t.trim();
+    let num = |r: std::ops::Range<usize>| t.get(r)?.parse::<i64>().ok();
+    let (y, mo, d, h, mi, se) = (num(0..4)?, num(5..7)?, num(8..10)?, num(11..13)?, num(14..16)?, num(17..19)?);
+    let seps = [(4, b'-'), (7, b'-'), (13, b':'), (16, b':')];
+    if seps.iter().any(|&(i, c)| t.as_bytes()[i] != c) || !matches!(t.as_bytes()[10], b'T' | b't' | b' ') {
+        return None;
+    }
+    let rest = t[19..].trim_start_matches(|c: char| c == '.' || c.is_ascii_digit());
+    let offset = match rest {
+        "Z" | "z" => 0,
+        _ if rest.len() == 6 && rest.as_bytes()[3] == b':' => {
+            let sign = match rest.as_bytes()[0] {
+                b'+' => 1,
+                b'-' => -1,
+                _ => return None,
+            };
+            sign * (rest[1..3].parse::<i64>().ok()? * 3600 + rest[4..6].parse::<i64>().ok()? * 60)
+        }
+        _ => return None,
+    };
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y = if mo <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if mo > 2 { mo - 3 } else { mo + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + h * 3600 + mi * 60 + se - offset)
 }
 
 /// What Codex returns when gathering the cloud.
@@ -504,6 +565,49 @@ mod tests {
         assert_eq!(out[1].weight, 1);
         let sorted = tidy_cloud(vec![CloudWord { word: "a".into(), weight: 1, written: false }, CloudWord { word: "b".into(), weight: 4, written: false }]);
         assert_eq!(sorted[0].word, "b");
+    }
+
+    #[test]
+    fn a_cloud_counted_before_129_is_recounted_as_the_writing_it_was_gathered_from() {
+        // 10 pieces of writing and 20 articles: saved as 30 before #129.
+        // 2026-09-20T00:00:00Z is 1_789_862_400.
+        let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 30, counting: 0 };
+        let mut times: Vec<String> = (0..10).map(|i| format!("2026-09-19T12:00:{i:02}.123456+00:00")).collect();
+        // Written the same second as the gathering, in another offset: already there.
+        times.push("2026-09-20T09:00:00+09:00".into());
+        recount(&mut cloud, &times);
+        assert_eq!((cloud.material_count, cloud.counting), (11, CLOUD_COUNTING));
+        // One more piece added after gathering: now 12 against 11, so "more since".
+        let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 30, counting: 0 };
+        times.push("2026-09-25T08:00:00.5Z".into());
+        recount(&mut cloud, &times);
+        assert_eq!(cloud.material_count, 11);
+        assert!(times.len() > cloud.material_count);
+    }
+
+    #[test]
+    fn a_current_cloud_is_left_as_counted() {
+        let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 4, counting: CLOUD_COUNTING };
+        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string()]);
+        assert_eq!(cloud.material_count, 4);
+    }
+
+    #[test]
+    fn a_cloud_whose_time_cannot_be_read_counts_everything_as_already_there() {
+        let mut cloud = TopicCloud { words: vec![], gathered_at: String::new(), material_count: 30, counting: 0 };
+        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string(), "?".to_string()]);
+        assert_eq!(cloud.material_count, 2);
+        let old: TopicCloud = serde_json::from_str(r#"{"words":[],"gathered_at":"1","material_count":3}"#).unwrap();
+        assert_eq!(old.counting, 0);
+    }
+
+    #[test]
+    fn epoch_seconds_reads_what_postgres_returns() {
+        assert_eq!(epoch_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(epoch_seconds("2026-09-20T00:00:00+00:00"), Some(1_789_862_400));
+        assert_eq!(epoch_seconds("2026-09-20 09:00:00.999+09:00"), Some(1_789_862_400));
+        assert_eq!(epoch_seconds("2024-02-29T23:59:59-01:30"), Some(1_709_251_199 + 5_400));
+        assert_eq!(epoch_seconds("yesterday"), None);
     }
 
     #[test]

@@ -92,8 +92,8 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   // The cloud as it was last gathered. With writing but no cloud yet, it is
   // gathered once on opening (requirement 7a). A cloud too thin to show is
   // gathered again once when the writing changed since (#129): nothing on
-  // screen would offer to. Clouds counted before #129 also counted articles,
-  // so "changed", not "more": they are gathered once and counted afresh.
+  // screen would offer to. Clouds saved before #129 come back already counted
+  // again as writing only (`topics::recount`), so the two numbers compare.
   // A cloud that shows is never gathered again on its own.
   useEffect(() => {
     void host.getTopicCloud().then((v) => {

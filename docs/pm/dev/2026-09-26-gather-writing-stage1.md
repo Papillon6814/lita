@@ -70,3 +70,59 @@
 2. **言葉が足りている古い雲では、「新しい文章が増えています」がしばらく出ないことがあります。** 保存された本数に記事が含まれているため、文章の本数がそれを超えるまで出ません。一度「拾い直す」を押せば揃います。誤って出ることはありません。
 3. **文章 0 本・記事だけある人は、雲の箱が出なくなります。** 雲の箱は「材料の数が 0 より大きい」ときだけ出る既存の作りで、材料の数から記事を外したためです。記事の題は Lita が出した題であることが多く、要件の「やらないこと」（Lita が出した題を材料にしない）と同じ向きなので、そのままにしました。段 2 の「その場で足す」が、この人の次の一手になります。
 4. 拾う時間は本人の本物の材料では測れていません（上記）。本人の環境で一度測れると確実です。
+
+## レビュー対応（2026-09-26、/code-review の指摘・重大度 中）
+
+### 指摘
+
+#129 以前に拾った雲は保存値 `material_count` に「本人の文章＋記事」を数えていた。今回から現在値は本人の文章だけなので、言葉が足りている古い雲では `materialCount > cloud.material_count` が長く偽のままになり、「新しい文章が増えています」が出ない（例: 文章 10・記事 20 → 保存 30。文章を 21 本以上足すまで出ない）。上の懸念 2 のことです。
+
+### 選んだ方法と理由
+
+**雲に数え方の版（`counting`）を持たせ、旧版の雲は読むときに「拾った時点で既にあった文章の本数」に数え直す。** Codex は呼ばず、保存もし直しません。
+
+- `TopicCloud.counting`（`#[serde(default)]` で旧い雲は 0）と `CLOUD_COUNTING = 1` を足した。新しく拾う雲は 1 で保存する
+- `get_topic_cloud` は、旧版の雲のときだけ `store.source_times()`（全部の文章の `created_at` だけを取る）を呼び、`topics::recount` で `material_count` を「`created_at` が `gathered_at` 以前の文章の本数」に置き換えて返す。`gathered_at` は #108 からずっと epoch 秒
+- 時刻が読めないものは「既にあった」として数える。誤って「増えています」と出さない側に倒した
+
+ほかに考えた方法と、選ばなかった理由:
+
+| 方法 | 選ばなかった理由 |
+|---|---|
+| 旧版なら保存値から今の記事の本数を引く | 拾った後に記事を積むと基準が下がり、文章を足していないのに「増えています」が出る（誤って出る） |
+| 旧版を初めて読んだときに今の本数で保存し直す | 拾ってから今回の版上げまでに足した文章が「増えた」に数えられない。読むだけの処理で書き込みも起きる |
+| 旧版なら拾い直す | 依頼の「Codex を呼ばずに」に反する |
+
+選んだ方法は、今ある文章のうち拾った後に足したものだけを数えるので、「拾った後に足した文章があるか」という意味にそのまま一致します（その後で消した文章は、両方の数から同じように抜ける）。
+
+### 触ったファイル
+
+- `crates/lita-codex/src/topics.rs`（`TopicCloud::counting`、`CLOUD_COUNTING`、`recount`、`epoch_seconds`、テスト 4 つ）
+- `crates/lita-store/src/lib.rs`（`source_times`）
+- `src-tauri/src/lib.rs`（`get_topic_cloud` で旧版の雲を数え直す、`gather_topic_cloud` で版を保存）
+- `src/components/TopicPicker.tsx`・`src/platform/types.ts`（説明のコメントだけ。動きは変えていない）
+- `docs/pm/ux/2026-09-26-gather-writing-stage1-review.md`・`docs/pm/ux/gather-writing/review/*.png`（lita-ux のレビュー。中身は変えずに含めた）
+
+### 実行したコマンドと結果
+
+- 先に失敗するテストを書いた: `cargo test -p lita-codex topics` → `counting`・`recount`・`CLOUD_COUNTING` が無くてコンパイルエラー → 実装後 16 passed
+  - `a_cloud_counted_before_129_is_recounted_as_the_writing_it_was_gathered_from`: 旧版の雲（文章 10＋記事 20 で保存 30）を 11 に数え直し（同じ秒に別の時差で書かれた 1 本も「既にあった」）、拾った後に文章を 1 本足すと今の 12 が基準 11 を上回る
+  - `a_current_cloud_is_left_as_counted`・`a_cloud_whose_time_cannot_be_read_counts_everything_as_already_there`・`epoch_seconds_reads_what_postgres_returns`
+- `cargo test --workspace` → 66 passed, 0 failed（7 + 47 + 8 + 4。前回 62 から 4 つ増）
+- `cargo clippy --workspace --all-targets` → 既存の警告のみ（`voice/` の 8 件、`src-tauri/src/lib.rs:1055` の 1 件。行がずれただけで前回と同じもの）
+- `npx tsc --noEmit -p tsconfig.json` → エラーなし
+- `npm run build` → 成功
+- 画面の動きは変えていないので、mock の撮り直しはしていない
+
+### 判定
+
+| 条件 | 確かめ方 | 判定 |
+|---|---|---|
+| 旧版の雲＋文章を足したとき「新しい文章が増えています」の条件が真になる | 上の Rust の単体テスト | ◎（数え直しの関数まで。Supabase を通した `source_times` は自動テストなし） |
+| Codex を呼ばずに直す | `get_topic_cloud` は store の読み取りだけ | ◎ |
+
+### 懸念
+
+1. **声を学び直すと、旧版の雲では「増えています」が 1 回出ます。** `replace_voice_profile` は文章を消して入れ直すため `created_at` が新しくなり、拾った後に足したものに数えられます。拾い直せば新しい版で保存され、以後は出ません。誤って出る側ですが、学び直した後に拾い直す案内なので害は小さいと判断しました。
+2. `source_times` は Supabase の実物では試していません（store の他の読み取りと同じ `get_many` で、RLS により本人の行だけが返る前提）。
+3. 上の懸念 2（言葉が足りている古い雲で「増えています」が出ない）は、この対応で解消しました。

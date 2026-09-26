@@ -143,7 +143,7 @@ export type Policy = { audience: string; takeaway: string; topics: string[]; avo
 /** One word the person keeps writing about. `weight` 1–5 is folded into three sizes on screen; never shown as a number. */
 export type CloudWord = { word: string; weight: number; written: boolean };
 export type TopicCloud = { words: CloudWord[]; gathered_at: string; material_count: number };
-/** `material_count` is sources + articles now; more than `cloud.material_count` means "more since". */
+/** `material_count` is the person's own writing now; more than `cloud.material_count` means "more since". */
 export type CloudView = { cloud: TopicCloud | null; material_count: number };
 export type QueueEvent =
   /** A queued article changed state; re-list. */
