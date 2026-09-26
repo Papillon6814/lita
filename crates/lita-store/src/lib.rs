@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, bail};
 use lita_codex::Effort;
 use lita_codex::voice::VoiceProfile;
-pub use lita_codex::topics::{Policy, TopicCloud};
+pub use lita_codex::topics::{ArticleText, Policy, TopicCloud};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -358,9 +358,11 @@ impl UserStore<'_> {
     pub fn source_times(&self) -> Result<Vec<String>> {
         #[derive(Deserialize)]
         struct Row {
+            id: Id,
             created_at: String,
         }
-        let rows: Vec<Row> = self.get_many("voice_sources", &[("select", "created_at")])?;
+        let rows: Vec<Row> =
+            read_pages(|after| self.get_page("voice_sources", &[("select", "id,created_at")], after), |r: &Row| r.id.as_str())?;
         Ok(rows.into_iter().map(|r| r.created_at).collect())
     }
 
@@ -515,6 +517,24 @@ impl UserStore<'_> {
         self.insert_one("article_versions", new)
     }
 
+    /// Every article's text now and the texts Lita wrote for it, newest
+    /// article first: enough to tell which the person edited (#129). Each
+    /// article comes with its own `generated` / `shortened` versions in the
+    /// same row, so an article is never read without them.
+    pub fn article_texts(&self) -> Result<Vec<ArticleText>> {
+        let rows: Vec<ArticleTextRow> = read_pages(
+            |after| {
+                self.get_page(
+                    "articles",
+                    &[("select", "id,body,updated_at,article_versions(body)"), ("article_versions.kind", "in.(generated,shortened)")],
+                    after,
+                )
+            },
+            |r: &ArticleTextRow| r.id.as_str(),
+        )?;
+        Ok(article_texts_from(rows))
+    }
+
     // ----- settings --------------------------------------------------------
 
     pub fn settings(&self) -> Result<UserSettings> {
@@ -566,6 +586,11 @@ impl UserStore<'_> {
 
     fn get_many<T: DeserializeOwned>(&self, table: &str, query: &[(&str, &str)]) -> Result<Vec<T>> {
         self.parse(self.request(self.store.http.get(self.url(table)).query(query))?)
+    }
+
+    /// One page of `get_many` (see `keyset`).
+    fn get_page<T: DeserializeOwned>(&self, table: &str, query: &[(&str, &str)], after: Option<&str>) -> Result<Vec<T>> {
+        self.parse(self.request(self.store.http.get(self.url(table)).query(query).query(&keyset(after)))?)
     }
 
     fn insert_one<T: DeserializeOwned, B: Serialize>(&self, table: &str, body: &B) -> Result<T> {
@@ -624,6 +649,60 @@ impl UserStore<'_> {
     }
 }
 
+/// Rows asked for per read when every row is needed. At or below
+/// PostgREST's `max_rows` (1000 in `supabase/config.toml`); a lower cap on
+/// the server only means more reads, never fewer rows.
+const PAGE: usize = 200;
+
+/// The query for one page of `PAGE` rows, ordered by id, after the id `after`.
+fn keyset(after: Option<&str>) -> Vec<(&'static str, String)> {
+    let mut q: Vec<(&str, String)> = vec![("order", "id".into())];
+    q.push(("limit", PAGE.to_string()));
+    if let Some(after) = after {
+        q.push(("id", format!("gt.{after}")));
+    }
+    q
+}
+
+/// Every row, read a page at a time after the last id seen, until a page
+/// comes back empty. Stopping at a short page would trust the server's cap
+/// to be at least `PAGE`; an empty page does not.
+fn read_pages<T>(mut page: impl FnMut(Option<&str>) -> Result<Vec<T>>, id: impl Fn(&T) -> &str) -> Result<Vec<T>> {
+    let mut all: Vec<T> = Vec::new();
+    loop {
+        let rows = page(all.last().map(&id))?;
+        if rows.is_empty() {
+            return Ok(all);
+        }
+        all.extend(rows);
+    }
+}
+
+/// An article as `article_texts` reads it.
+#[derive(Deserialize)]
+struct ArticleTextRow {
+    id: Id,
+    body: String,
+    updated_at: String,
+    /// Missing when the versions did not come with the row.
+    #[serde(default)]
+    article_versions: Option<Vec<LitaText>>,
+}
+
+#[derive(Deserialize)]
+struct LitaText {
+    body: String,
+}
+
+/// Newest article first; an article whose versions are missing is marked
+/// unread (`None`), so it is not taken as the person's.
+fn article_texts_from(mut rows: Vec<ArticleTextRow>) -> Vec<ArticleText> {
+    rows.sort_by_key(|r| std::cmp::Reverse(lita_codex::topics::epoch_seconds(&r.updated_at)));
+    rows.into_iter()
+        .map(|r| ArticleText { body: r.body, lita_wrote: r.article_versions.map(|v| v.into_iter().map(|l| l.body).collect()) })
+        .collect()
+}
+
 /// The first line or so of a body, for lists.
 fn excerpt_of(body: &str) -> String {
     let first = body.trim().lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
@@ -671,5 +750,47 @@ mod tests {
         assert_eq!(v.sources.len(), 1);
         assert_eq!(v.sources[0].kind, SourceKind::File);
         assert_eq!(v.profile.first_person, "僕");
+    }
+
+    #[test]
+    fn read_pages_reads_every_row_even_under_a_cap_smaller_than_a_page() {
+        // 1234 rows behind a server that returns at most 150 per read.
+        let ids: Vec<String> = (0..1234).map(|i| format!("{i:05}")).collect();
+        let mut reads = 0;
+        let all = read_pages(
+            |after| {
+                reads += 1;
+                Ok(ids.iter().filter(|i| after.is_none_or(|a| i.as_str() > a)).take(150).cloned().collect())
+            },
+            |r: &String| r.as_str(),
+        )
+        .unwrap();
+        assert_eq!(all, ids);
+        assert_eq!(reads, 1234usize.div_ceil(150) + 1);
+    }
+
+    #[test]
+    fn keyset_orders_by_id_and_starts_after_the_last_one() {
+        let q = keyset(Some("u9"));
+        assert!(q.contains(&("order", "id".into())) && q.contains(&("limit", PAGE.to_string())) && q.contains(&("id", "gt.u9".into())));
+        assert!(!keyset(None).iter().any(|(k, _)| *k == "id"));
+    }
+
+    #[test]
+    fn article_texts_come_newest_first_and_an_article_without_its_versions_is_not_the_persons() {
+        let rows: Vec<ArticleTextRow> = serde_json::from_str(
+            r#"[
+              {"id":"a","body":"Lita の本文","updated_at":"2026-09-20T00:00:00+00:00","article_versions":[{"body":"Lita の本文"}]},
+              {"id":"b","body":"直した本文","updated_at":"2026-09-21T00:00:00.5+00:00","article_versions":[{"body":"Lita の本文"}]},
+              {"id":"c","body":"版の読めなかった本文","updated_at":"2026-09-19T00:00:00+00:00"},
+              {"id":"d","body":"自分で書いた本文","updated_at":"2026-09-21 08:59:59+09:00","article_versions":[]}
+            ]"#,
+        )
+        .unwrap();
+        let texts = article_texts_from(rows);
+        let bodies: Vec<&str> = texts.iter().map(|t| t.body.as_str()).collect();
+        assert_eq!(bodies, ["直した本文", "自分で書いた本文", "Lita の本文", "版の読めなかった本文"]);
+        let edited: Vec<bool> = texts.iter().map(ArticleText::edited_by_person).collect();
+        assert_eq!(edited, [true, true, false, false]);
     }
 }
