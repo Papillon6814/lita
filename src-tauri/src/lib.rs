@@ -878,10 +878,13 @@ async fn get_topic_cloud(app: AppHandle) -> Result<CloudView, UiError> {
         let mut cloud = store.settings().map_err(fail)?.topic_cloud;
         let articles = store.article_texts().map_err(fail)?;
         // Saved under an older way of counting: counted again as the writing
-        // it was gathered from, without gathering again.
+        // it was gathered from, without gathering again, and saved so it is
+        // counted once and later edits make "more since".
         if let Some(c) = cloud.as_mut().filter(|c| c.counting < topics::CLOUD_COUNTING) {
             let edited = articles.iter().filter(|a| a.edited_by_person()).count();
-            topics::recount(c, &store.source_times().map_err(fail)?, edited);
+            if topics::recount(c, &store.source_times().map_err(fail)?, edited) {
+                store.set_topic_cloud(c).map_err(fail)?;
+            }
         }
         Ok(CloudView { material_count: material_count(&store, &articles)?, cloud })
     })

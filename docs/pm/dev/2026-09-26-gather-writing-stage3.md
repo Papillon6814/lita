@@ -58,3 +58,44 @@
 3. **数え方の版上げで、段 1 の雲（版 1）は今ある直した記事をすべて「既にあった」として数え直します。** 段 1 で拾ってから今回までに直した記事は「増えています」に数えられません（誤って出ない側）。直した時刻は版の `created_at` から推せますが、`edited` の版は 50 件に間引かれるので確かではありません。段 1 はまだリリースされていない（v0.2.24 に入っていない）ので、影響するのは開発中に拾った雲だけです。
 4. **拾う時間は測り直していません。** 直した記事の本文は元にした文章と同じ全体 40,000 字の予算の中で読むので、指示の長さの上限は段 1 の計測（予算いっぱいで 22.0 秒）と同じです。
 5. `article_texts` は Supabase の実物では試していません（他の読み取りと同じ `get_many` で、RLS により本人の行だけが返る前提。`kind=in.(generated,shortened)` は PostgREST の `in` 演算子）。雲の画面を開くたびに読み取りが 2 回増えます。
+
+## レビュー対応（/code-review、2026-09-26）
+
+### 指摘 1: 版 2 未満の雲が毎回メモリ上でだけ数え直される
+
+- **選んだ直し方: 数え直しを 1 回だけ行い、結果を保存して版を上げる。** `topics::recount` が「数え直したか」を返すようにし、`get_topic_cloud` は数え直したときだけ `set_topic_cloud` で保存します。次に開いたときは版 2 なので数え直さず、その後に直した記事は「増えています」に数えられます。Codex は呼びません。
+- **時刻で比べる案を選ばなかった理由:** 直した時刻の手がかりは `edited` 版の `created_at` だけですが、この版は記事ごとに 50 件へ間引かれ、`edited` 版を作らずに直された記事もあります。時刻が読めない記事を「既にあった」とすれば今回と同じ漏れが残り、「新しい」とすれば誤って出ます。版 2 の雲は時刻ではなく本数で比べているので、比べ方を 2 通りにしないためにも、保存する案にしました。
+- 残る影響: 段 1 で拾ってから初めて開くまでに直した記事は、その 1 回に限り「既にあった」扱いになります（懸念 3 と同じ。誤って出ない側）。
+- テスト: `a_cloud_is_recounted_once_so_a_later_edit_makes_more_since`（1 回目は数え直して `true`、保存後に直した記事が増えると 2 回目は数え直さず「増えています」になる）
+
+### 指摘 2: `article_texts` が `max_rows` で黙って切れる
+
+- 記事と版を別々に読むのをやめ、記事 1 行ごとに、その記事の `generated`・`shortened` 版の本文を埋め込んで読みます（`select=id,body,updated_at,article_versions(body)` と `article_versions.kind=in.(generated,shortened)`）。記事と版が同じ行で届くので、版だけが切れて落ちることがありません。
+- 全件はキーセットのページ送りで読みます（`order=id&limit=200&id=gt.<直前の id>`）。空のページが返るまで読むので、サーバーの上限が 200 より小さくても行は減らず、読む回数が増えるだけです。id で送るので、読んでいる途中に記事が直されて `updated_at` が変わっても、行が抜けたり重なったりしません。「新しい記事から」の並びは、読んだあとに `updated_at` で並べ直します。
+- 安全側の判定: `ArticleText.lita_wrote` を `Option` にし、版が行に付いてこなかった記事は `None` として「直した」に数えず、雲の材料にも入れません。
+- 同じ上限は `source_times()`（`voice_sources` の `created_at`）にもあり、指摘 1 で数え直しの結果を保存するようになったため、1,000 本を超える文章があると少ない数が残ります。同じページ送りに変えました。
+- テスト（`crates/lita-store/src/lib.rs`）:
+  - `read_pages_reads_every_row_even_under_a_cap_smaller_than_a_page`（1,234 行を 1 回 150 行までしか返さない相手から全件を読む。読んだ回数は 9 ページと空のページ 1 回）
+  - `keyset_orders_by_id_and_starts_after_the_last_one`
+  - `article_texts_come_newest_first_and_an_article_without_its_versions_is_not_the_persons`
+- テスト（`crates/lita-codex/src/topics.rs`）: `an_article_whose_versions_were_not_read_is_not_the_persons`
+
+### 触ったファイル
+
+- `crates/lita-codex/src/topics.rs`（`recount` の戻り値、`ArticleText.lita_wrote` を `Option` に、テスト 2 つ追加）
+- `crates/lita-store/src/lib.rs`（`article_texts`・`source_times` をページ送りに、`get_page`・`keyset`・`read_pages`・`article_texts_from` を追加、テスト 3 つ追加）
+- `src-tauri/src/lib.rs`（`get_topic_cloud` が数え直した雲を保存する）
+
+### 実行したコマンドと結果
+
+- `cargo test --workspace` → 75 passed, 0 failed（7 + 53 + 8 + 7。前回 70 から 5 つ増）
+- `cargo clippy --workspace --all-targets` → 既存の警告のみ（`crates/lita-codex/src/voice/` の 8 件、`src-tauri/src/lib.rs:1066` の 1 件。後者は行がずれただけ）
+- `npx tsc --noEmit -p tsconfig.json` → エラーなし
+- `npm run build` → 成功
+- 画面は変えていないので、mock の撮影はしていない
+
+### 懸念（追加）
+
+6. **埋め込みとページ送りは、実物の Supabase では試していません。** 埋め込みの絞り込み（`article_versions.kind=in.(...)`）とページ送りの問い合わせは PostgREST の文書どおりの書き方ですが、ローカルの Supabase は起動していません。
+7. **PostgREST の `max_rows` は埋め込みの配列にもかかります（1 記事あたり 1,000 版）。** 1 記事で Lita が 1,000 回以上書き直すことは考えにくいので、ここはページ送りしていません。
+8. 雲の画面を開くたびの読み取りは、記事 200 本ごとに 1 回と最後の空のページ 1 回、文章 200 本ごとに 1 回と空のページ 1 回です（文章の読み取りは版 2 未満の雲のときだけ）。

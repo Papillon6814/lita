@@ -114,9 +114,14 @@ pub const CLOUD_COUNTING: u8 = 2;
 /// every article the person has edited by now (`edited`; no time says when
 /// the edit was made). No Codex call. Whatever cannot be placed counts as
 /// already there, so nothing is called new by mistake.
-pub fn recount(cloud: &mut TopicCloud, source_times: &[String], edited: usize) {
+///
+/// True when it counted again: the caller saves the cloud then, so this
+/// happens once. Were it only counted in memory, every opening would take
+/// the articles edited by that moment as already there, and an edit would
+/// never make "more since" until the next gathering.
+pub fn recount(cloud: &mut TopicCloud, source_times: &[String], edited: usize) -> bool {
     if cloud.counting >= CLOUD_COUNTING {
-        return;
+        return false;
     }
     let gathered = cloud.gathered_at.trim().parse::<i64>().ok();
     cloud.material_count = source_times
@@ -128,6 +133,7 @@ pub fn recount(cloud: &mut TopicCloud, source_times: &[String], edited: usize) {
         .count()
         + edited;
     cloud.counting = CLOUD_COUNTING;
+    true
 }
 
 /// One article as the cloud sees it (#129, stage 3): its text now, and every
@@ -135,7 +141,9 @@ pub fn recount(cloud: &mut TopicCloud, source_times: &[String], edited: usize) {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ArticleText {
     pub body: String,
-    pub lita_wrote: Vec<String>,
+    /// `None` when its versions could not be read: then it is not taken as
+    /// the person's, since Lita's text would pass for theirs.
+    pub lita_wrote: Option<Vec<String>>,
 }
 
 impl ArticleText {
@@ -143,8 +151,9 @@ impl ArticleText {
     /// text Lita wrote (left as it was, or put back from the history).
     /// Only the ends are trimmed; any other change counts as an edit.
     pub fn edited_by_person(&self) -> bool {
+        let Some(lita_wrote) = &self.lita_wrote else { return false };
         let body = self.body.trim();
-        !body.is_empty() && self.lita_wrote.iter().all(|l| l.trim() != body)
+        !body.is_empty() && lita_wrote.iter().all(|l| l.trim() != body)
     }
 }
 
@@ -635,7 +644,33 @@ mod tests {
     }
 
     fn article(body: &str, lita_wrote: &[&str]) -> ArticleText {
-        ArticleText { body: body.into(), lita_wrote: lita_wrote.iter().map(|s| s.to_string()).collect() }
+        ArticleText { body: body.into(), lita_wrote: Some(lita_wrote.iter().map(|s| s.to_string()).collect()) }
+    }
+
+    #[test]
+    fn an_article_whose_versions_were_not_read_is_not_the_persons() {
+        let unread = ArticleText { body: "Lita が書いたかもしれない本文".into(), lita_wrote: None };
+        assert!(!unread.edited_by_person());
+        assert!(own_bodies(std::slice::from_ref(&unread)).is_empty());
+        assert_eq!(material_count(2, &[unread]), 2);
+    }
+
+    #[test]
+    fn a_cloud_is_recounted_once_so_a_later_edit_makes_more_since() {
+        // Saved by stage 1 (counting 1): two pieces then, one edited article now.
+        let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 2, counting: 1 };
+        let times = vec!["2026-09-19T00:00:00Z".to_string(), "2026-09-19T00:00:01Z".to_string()];
+        let mut articles = vec![article("直した", &["Lita"]), article("Lita の二本目", &["Lita の二本目"])];
+        let edited = articles.iter().filter(|a| a.edited_by_person()).count();
+        assert!(recount(&mut cloud, &times, edited), "counted again, so the caller saves it");
+        assert!(material_count(2, &articles) <= cloud.material_count);
+        // Opened again after the person edits the second article: the saved
+        // cloud is not counted again, and the edit is more since.
+        articles[1].body = "Lita の二本目を自分で直した".into();
+        let edited = articles.iter().filter(|a| a.edited_by_person()).count();
+        assert!(!recount(&mut cloud, &times, edited), "already saved under the current counting");
+        assert_eq!(cloud.material_count, 3);
+        assert!(material_count(2, &articles) > cloud.material_count);
     }
 
     #[test]
