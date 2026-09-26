@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 anyhow = "1"
 html2text = "0.17"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 roxmltree = "0.21"
 serde = { version = "1", features = ["derive"] }

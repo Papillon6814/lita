@@ -43,6 +43,13 @@
 // writing of one's own), topics-add-unlisted (the same as topics-add-empty,
 // but the voices cannot be listed, so there is nowhere to add to),
 // topics-cloud-unread (the saved cloud cannot be read),
+// topics-add-talk (add writing opened, a conversation pasted, the name
+// already remembered: only that person's messages are in the field),
+// topics-add-talk-who (the same conversation, no name remembered: which one
+// is you), topics-add-talk-dup (one of your messages was added before),
+// topics-add-talk-none (you are there, but with nothing left to keep),
+// topics-add-talk-unsure (times recur, names cannot be told apart),
+// voice-sources-talk (the voice page with two rows added from conversations),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -189,7 +196,54 @@ let voice: T.Voice = {
   id: "v1", name: noteName, profile: scene === "voice-template" ? profile : { ...profile, ...strict }, created_at: "2026-09-22T09:00:00Z", updated_at: "2026-09-22T09:00:00Z", voice_sources: scene === "voice-sources" ? mixedSources : sources,
 };
 
-if (["voice-preset", "topics-add-empty", "topics-add-open", "topics-add-failed", "topics-add-unlisted"].includes(scene)) voice = presetVoice;
+if (["voice-preset", "topics-add-empty", "topics-add-open", "topics-add-failed", "topics-add-unlisted"].includes(scene) || scene.startsWith("topics-add-talk")) voice = presetVoice;
+
+// ----- a pasted conversation (D-77). Every name and line is invented. -----
+// The browser has no Rust, so the reading of the one sample below is written
+// out by hand; anything else pasted in the mock is read as ordinary writing.
+const talkMe = "森川 陽介";
+const talkMessages: T.TalkMessage[] = [
+  { speaker: "佐藤 花子", body: "来週の採用面談、評価シートはどこに置いてありますか？", seen: false },
+  { speaker: talkMe, body: "共有ドライブの「採用」フォルダに置きました。見てほしいのは点数ではなく、面談官ごとのばらつきです。", seen: false },
+  { speaker: "Mika Tanaka", body: "I'll join the Tuesday one.", seen: false },
+  { speaker: talkMe, body: "資金繰り表は週次に切り替えました。月末だけ見ていると、遅れている入金に気づくのが遅れます。", seen: false },
+  { speaker: talkMe, body: "撤退基準、始める前に数字で決めておきませんか。始めてからだと、どうしても甘くなります。", seen: false },
+];
+const talkSample = "佐藤 花子  10:21\n来週の採用面談、評価シートはどこに置いてありますか？\n森川 陽介  10:23\n…";
+const unsureSample = "10:21\n来週の採用面談、評価シートを先に共有しておきます。\n\n10:23\n資金繰り表は週次に切り替えました。";
+if (scene === "topics-add-talk-dup") {
+  voice = { ...voice, voice_sources: [{ id: "t0", kind: "paste", origin: "talk:2026-09-24", account: null, body: talkMessages[1].body, created_at: "2026-09-24T03:00:00Z" }] };
+}
+if (scene === "voice-sources-talk") {
+  voice = { ...voice, voice_sources: [
+    ...handBodies.slice(0, 2).map((body, i) => ({ id: `p${i + 1}`, kind: "paste" as const, origin: null, account: null, body, created_at: "2026-09-23T02:30:00Z" })),
+    { id: "t1", kind: "paste", origin: "talk:2026-09-24", account: null, body: talkMessages[1].body, created_at: "2026-09-24T03:00:00Z" },
+    { id: "t2", kind: "paste", origin: "talk:2026-09-26", account: null, body: `${talkMessages[3].body}\n\n${talkMessages[4].body}`, created_at: "2026-09-26T03:00:00Z" },
+    ...sources,
+  ] };
+}
+
+/** What the talk scenes paste as the field opens; null elsewhere and in real builds. */
+export function mockTalkPaste(): string | null {
+  if (!mockScene()?.startsWith("topics-add-talk")) return null;
+  return scene === "topics-add-talk-unsure" ? unsureSample : talkSample;
+}
+
+/** The names this device remembers in the talk scenes; null leaves it to the real store. */
+export function mockTalkMe(): string[] | null {
+  if (!mockScene()?.startsWith("topics-add-talk")) return null;
+  return scene === "topics-add-talk-who" ? [] : [talkMe];
+}
+
+function mockReadTalk(text: string, known: string[]): T.TalkReading {
+  if (text === unsureSample) return { kind: "unsure" };
+  if (!text.startsWith(talkSample)) return { kind: "plain" };
+  const key = (s: string) => s.replace(/\s+/g, "");
+  const seen = new Set(known.flatMap((k) => k.split(/\n\s*\n/)).map(key));
+  // "none": you are in the conversation, but only with a sticker.
+  const messages = scene === "topics-add-talk-none" ? talkMessages.filter((m) => m.speaker !== talkMe) : talkMessages;
+  return { kind: "talk", speakers: ["佐藤 花子", talkMe, "Mika Tanaka"], messages: messages.map((m) => ({ ...m, seen: seen.has(key(m.body)) })) };
+}
 // Lita wrote the articles; none of the writing is the person's own.
 if (scene === "topics-add-articles") voice = { ...voice, voice_sources: [] };
 
@@ -572,6 +626,7 @@ export const mockHost: T.Host = {
     return { pieces, total: 12, skipped_paid: 1, recent_only: false };
   },
   importMedium: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: true }; },
+  readTalk: async (text, known) => mockReadTalk(text, known),
   importXArchive: async () => { await wait(300); return { pieces, total: null, skipped_paid: 0, recent_only: false }; },
   onImportProgress: async (handler) => { importHandlers.add(handler); return () => { importHandlers.delete(handler); }; },
   onVoiceProgress: async (handler) => {

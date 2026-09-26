@@ -4,7 +4,7 @@ import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 import { mockScene } from "../platform/mock";
 import { SourceBox, connectionLabel, type Gathered } from "./SourceBox";
-import { PasteBox, pieceTitle, type ManualKind, type NewPiece } from "./PasteBox";
+import { PasteBox, pieceTitle, talkBodies, type ManualKind, type NewPiece } from "./PasteBox";
 
 type Piece = Gathered & { key: number; selected: boolean; editing: boolean };
 
@@ -152,6 +152,7 @@ export function VoiceIntake({ onBuild, onPreset, error, existing = [] }: Props) 
         pieces={hand.map((p) => ({ id: String(p.key), kind: p.kind === "file" ? "file" : "paste", origin: p.origin, body: p.body }))}
         total={pieces.filter((p) => p.body.trim().length > 0).length}
         focus={focusPaste}
+        knownTalk={talkBodies(pieces)}
         onAdd={addManual}
         onRemove={(id) => remove(Number(id))}
         onEdit={(id, body) => patch(Number(id), { body })}

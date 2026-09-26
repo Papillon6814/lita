@@ -5,7 +5,7 @@ import { t } from "../i18n";
 import { ErrorNote } from "./ErrorNote";
 import { SourceBox, connectionLabel, type Gathered } from "./SourceBox";
 import { connectionsOf } from "./VoiceIntake";
-import { PasteBox, type NewPiece } from "./PasteBox";
+import { PasteBox, talkBodies, type NewPiece } from "./PasteBox";
 
 type Props = { voice: Voice; onChange: (v: Voice) => void; onRebuild: () => void };
 
@@ -102,6 +102,7 @@ export function VoiceSources({ voice, onChange, onRebuild }: Props) {
       <PasteBox
         pieces={hand.map((s) => ({ id: s.id, kind: s.kind === "file" ? "file" : "paste", origin: s.origin, body: s.body }))}
         total={voice.voice_sources.length}
+        knownTalk={talkBodies(voice.voice_sources)}
         busy={busy !== null}
         onAdd={addByHand}
         onRemove={removeOne}

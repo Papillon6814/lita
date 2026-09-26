@@ -163,6 +163,13 @@ export type DownloadEvent =
   | { event: "started"; data: { content_length: number | null } }
   | { event: "progress"; data: { downloaded: number; content_length: number | null } }
   | { event: "finished"; data: null };
+/** A pasted conversation read on this machine (D-77). `speaker: null` is text with no name above it. */
+export type TalkMessage = { speaker: string | null; body: string; seen: boolean };
+export type TalkReading =
+  | { kind: "plain" }
+  /** Times recur but no names could be told apart: pasted as before, with one sentence. */
+  | { kind: "unsure" }
+  | { kind: "talk"; speakers: string[]; messages: TalkMessage[] };
 export type Imported = { pieces: Piece[]; total: number | null; skipped_paid: number; recent_only: boolean };
 
 
@@ -236,6 +243,8 @@ export type Host = {
   importNote: (account: string) => Promise<Imported>;
   importMedium: (handle: string) => Promise<Imported>;
   importXArchive: (contents: string, handle: string | null, includeReplies: boolean) => Promise<Imported>;
+  /** Who said what in a pasted conversation. `known`: bodies added from conversations before. Local only. */
+  readTalk: (text: string, known: string[]) => Promise<TalkReading>;
   onVoiceProgress: (handler: (p: VoiceProgress) => void) => Promise<Unlisten>;
   /** Real progress of a service import: done / total (total unknown until the listing arrived). */
   onImportProgress: (handler: (p: ImportProgress) => void) => Promise<Unlisten>;
