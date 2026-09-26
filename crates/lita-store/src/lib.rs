@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, bail};
 use lita_codex::Effort;
 use lita_codex::voice::VoiceProfile;
-pub use lita_codex::topics::{Policy, TopicCloud};
+pub use lita_codex::topics::{ArticleText, Policy, TopicCloud};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -513,6 +513,32 @@ impl UserStore<'_> {
 
     pub fn create_version(&self, new: &NewVersion) -> Result<ArticleVersion> {
         self.insert_one("article_versions", new)
+    }
+
+    /// Every article's text now and the texts Lita wrote for it, newest
+    /// article first: enough to tell which the person edited (#129).
+    pub fn article_texts(&self) -> Result<Vec<ArticleText>> {
+        #[derive(Deserialize)]
+        struct ArticleRow {
+            id: Id,
+            body: String,
+        }
+        #[derive(Deserialize)]
+        struct VersionRow {
+            article_id: Id,
+            body: String,
+        }
+        let articles: Vec<ArticleRow> = self.get_many("articles", &[("select", "id,body"), ("order", "updated_at.desc")])?;
+        let versions: Vec<VersionRow> =
+            self.get_many("article_versions", &[("select", "article_id,body"), ("kind", "in.(generated,shortened)")])?;
+        let mut lita_wrote: std::collections::HashMap<Id, Vec<String>> = std::collections::HashMap::new();
+        for v in versions {
+            lita_wrote.entry(v.article_id).or_default().push(v.body);
+        }
+        Ok(articles
+            .into_iter()
+            .map(|a| ArticleText { lita_wrote: lita_wrote.remove(&a.id).unwrap_or_default(), body: a.body })
+            .collect())
     }
 
     // ----- settings --------------------------------------------------------

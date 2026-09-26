@@ -14,7 +14,7 @@ use errors::UiError;
 use lita_auth::{Session, SessionStore, SupabaseAuth};
 use lita_codex::post::{PlatformRules, PostDraft, generation_prompt, post_schema};
 use lita_codex::presets;
-use lita_codex::topics::{self, Existing, GatheredCloud, Lang, Policy, SuggestedBrief, TopicCloud, Topics};
+use lita_codex::topics::{self, ArticleText, Existing, GatheredCloud, Lang, Policy, SuggestedBrief, TopicCloud, Topics};
 use lita_codex::voice::{VoiceProfile, pipeline};
 use lita_codex::{CodexCli, Preflight, Request};
 use lita_sources::Piece;
@@ -861,10 +861,12 @@ pub struct CloudView {
     pub material_count: usize,
 }
 
-/// Only the person's own writing counts (#129): an article Lita queued and
-/// wrote is not more of their words.
-fn material_count(store: &lita_store::UserStore<'_>) -> Result<usize, UiError> {
-    Ok(store.voices().map_err(fail)?.iter().map(|v| v.source_count.max(0) as usize).sum())
+/// Only the person's own writing counts (#129): the sources of every voice
+/// and the articles they edited. An article Lita queued and wrote is not
+/// more of their words.
+fn material_count(store: &lita_store::UserStore<'_>, articles: &[ArticleText]) -> Result<usize, UiError> {
+    let sources = store.voices().map_err(fail)?.iter().map(|v| v.source_count.max(0) as usize).sum();
+    Ok(topics::material_count(sources, articles))
 }
 
 #[tauri::command]
@@ -874,12 +876,14 @@ async fn get_topic_cloud(app: AppHandle) -> Result<CloudView, UiError> {
         let state = app.state::<AppState>();
         let store = state.store.as_user(token);
         let mut cloud = store.settings().map_err(fail)?.topic_cloud;
-        // Saved before #129 with the articles counted in: counted again as
-        // the writing it was gathered from, without gathering again.
+        let articles = store.article_texts().map_err(fail)?;
+        // Saved under an older way of counting: counted again as the writing
+        // it was gathered from, without gathering again.
         if let Some(c) = cloud.as_mut().filter(|c| c.counting < topics::CLOUD_COUNTING) {
-            topics::recount(c, &store.source_times().map_err(fail)?);
+            let edited = articles.iter().filter(|a| a.edited_by_person()).count();
+            topics::recount(c, &store.source_times().map_err(fail)?, edited);
         }
-        Ok(CloudView { material_count: material_count(&store)?, cloud })
+        Ok(CloudView { material_count: material_count(&store, &articles)?, cloud })
     })
     .await
     .map_err(|e| UiError::unknown(e.to_string()))?
@@ -900,12 +904,16 @@ async fn gather_topic_cloud(app: AppHandle) -> Result<CloudView, UiError> {
         if samples.is_empty() && existing.is_empty() {
             return Err(UiError::invalid("nothing to read yet"));
         }
-        let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        // The bodies the person edited reach the cloud only (#129), after
+        // the writing behind the voices.
+        let articles = store.article_texts().map_err(fail)?;
+        let mut refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+        refs.extend(topics::own_bodies(&articles));
         let req = Request { prompt: topics::cloud_prompt(&policy, &refs, &existing, lang), schema: topics::cloud_schema(), model: None, effort: lita_codex::Effort::Quality, working_dir };
         state.generate_cancel.store(false, Ordering::Relaxed);
         let cancel = Arc::clone(&state.generate_cancel);
         let run = CodexCli::on_path().run_typed_cancellable::<GatheredCloud>(&req, |_| {}, cancel).map_err(fail)?;
-        let material_count = material_count(&store)?;
+        let material_count = material_count(&store, &articles)?;
         let cloud = TopicCloud {
             words: topics::tidy_cloud(run.value.words),
             gathered_at: chrono_now(),

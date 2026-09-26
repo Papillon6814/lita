@@ -93,26 +93,28 @@ pub struct TopicCloud {
     pub words: Vec<CloudWord>,
     #[serde(default)]
     pub gathered_at: String,
-    /// The person's own writing at gathering time (the sources of every
-    /// voice), so the screen can say "more since". Articles Lita only wrote
-    /// do not count (#129).
+    /// The person's own writing at gathering time, so the screen can say
+    /// "more since": the sources of every voice and the articles the person
+    /// edited (`material_count`). Articles Lita only wrote do not count (#129).
     #[serde(default)]
     pub material_count: usize,
     /// How `material_count` was counted: 0 for clouds saved before #129
-    /// (writing and articles together), `CLOUD_COUNTING` since.
+    /// (writing and articles together), 1 for the writing only, `CLOUD_COUNTING` since.
     #[serde(default)]
     pub counting: u8,
 }
 
-/// The way `material_count` is counted now: the person's own writing only.
-pub const CLOUD_COUNTING: u8 = 1;
+/// The way `material_count` is counted now: the person's own writing and
+/// the articles they edited.
+pub const CLOUD_COUNTING: u8 = 2;
 
-/// A cloud saved before #129 counted articles too, so its number cannot be
-/// compared with the writing now. Counts it again as the writing that
-/// already existed when it was gathered, from the `created_at` of every
-/// piece there is now. No Codex call. A time that cannot be read counts as
+/// A cloud saved under an older way of counting cannot be compared with the
+/// count now. Counts it again as the writing that already existed when it
+/// was gathered, from the `created_at` of every piece there is now, plus
+/// every article the person has edited by now (`edited`; no time says when
+/// the edit was made). No Codex call. Whatever cannot be placed counts as
 /// already there, so nothing is called new by mistake.
-pub fn recount(cloud: &mut TopicCloud, source_times: &[String]) {
+pub fn recount(cloud: &mut TopicCloud, source_times: &[String], edited: usize) {
     if cloud.counting >= CLOUD_COUNTING {
         return;
     }
@@ -123,8 +125,39 @@ pub fn recount(cloud: &mut TopicCloud, source_times: &[String]) {
             (Some(g), Some(s)) => s <= g,
             _ => true,
         })
-        .count();
+        .count()
+        + edited;
     cloud.counting = CLOUD_COUNTING;
+}
+
+/// One article as the cloud sees it (#129, stage 3): its text now, and every
+/// text Lita wrote for it (`generated` and `shortened` versions).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ArticleText {
+    pub body: String,
+    pub lita_wrote: Vec<String>,
+}
+
+impl ArticleText {
+    /// True when the text now is the person's words: not empty, and not a
+    /// text Lita wrote (left as it was, or put back from the history).
+    /// Only the ends are trimmed; any other change counts as an edit.
+    pub fn edited_by_person(&self) -> bool {
+        let body = self.body.trim();
+        !body.is_empty() && self.lita_wrote.iter().all(|l| l.trim() != body)
+    }
+}
+
+/// The bodies of the articles the person edited or wrote themselves. They
+/// reach the cloud only; titles, briefs and the voice never read them.
+pub fn own_bodies(articles: &[ArticleText]) -> Vec<&str> {
+    articles.iter().filter(|a| a.edited_by_person()).map(|a| a.body.as_str()).collect()
+}
+
+/// The person's own writing: the pieces behind every voice (`sources`) and
+/// the articles they edited. What "more since" compares.
+pub fn material_count(sources: usize, articles: &[ArticleText]) -> usize {
+    sources + articles.iter().filter(|a| a.edited_by_person()).count()
 }
 
 /// Seconds since the epoch from an RFC 3339 time as Postgres returns it
@@ -575,12 +608,12 @@ mod tests {
         let mut times: Vec<String> = (0..10).map(|i| format!("2026-09-19T12:00:{i:02}.123456+00:00")).collect();
         // Written the same second as the gathering, in another offset: already there.
         times.push("2026-09-20T09:00:00+09:00".into());
-        recount(&mut cloud, &times);
+        recount(&mut cloud, &times, 0);
         assert_eq!((cloud.material_count, cloud.counting), (11, CLOUD_COUNTING));
         // One more piece added after gathering: now 12 against 11, so "more since".
         let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 30, counting: 0 };
         times.push("2026-09-25T08:00:00.5Z".into());
-        recount(&mut cloud, &times);
+        recount(&mut cloud, &times, 0);
         assert_eq!(cloud.material_count, 11);
         assert!(times.len() > cloud.material_count);
     }
@@ -588,17 +621,72 @@ mod tests {
     #[test]
     fn a_current_cloud_is_left_as_counted() {
         let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 4, counting: CLOUD_COUNTING };
-        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string()]);
+        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string()], 0);
         assert_eq!(cloud.material_count, 4);
     }
 
     #[test]
     fn a_cloud_whose_time_cannot_be_read_counts_everything_as_already_there() {
         let mut cloud = TopicCloud { words: vec![], gathered_at: String::new(), material_count: 30, counting: 0 };
-        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string(), "?".to_string()]);
+        recount(&mut cloud, &["2026-09-25T08:00:00Z".to_string(), "?".to_string()], 0);
         assert_eq!(cloud.material_count, 2);
         let old: TopicCloud = serde_json::from_str(r#"{"words":[],"gathered_at":"1","material_count":3}"#).unwrap();
         assert_eq!(old.counting, 0);
+    }
+
+    fn article(body: &str, lita_wrote: &[&str]) -> ArticleText {
+        ArticleText { body: body.into(), lita_wrote: lita_wrote.iter().map(|s| s.to_string()).collect() }
+    }
+
+    #[test]
+    fn an_article_is_the_persons_only_when_they_changed_what_lita_wrote() {
+        // Written by Lita and left as it is (a trailing newline is not an edit).
+        assert!(!article("Lita の本文", &["Lita の本文"]).edited_by_person());
+        assert!(!article("Lita の本文\n", &["Lita の本文"]).edited_by_person());
+        // Changed after Lita's last text, or never written by Lita.
+        assert!(article("Lita の本文に、自分で足した一文", &["Lita の本文"]).edited_by_person());
+        assert!(article("自分で書いた本文", &[]).edited_by_person());
+        // Put back to an earlier text Lita wrote: still Lita's words.
+        assert!(!article("最初の本文", &["短くした本文", "最初の本文"]).edited_by_person());
+        // Nothing written yet (an empty draft, a queued article).
+        assert!(!article("  ", &[]).edited_by_person());
+    }
+
+    #[test]
+    fn articles_lita_only_wrote_do_not_make_more_since_but_an_edit_does() {
+        // Acceptance 5: gathered from two pieces of writing.
+        let cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: material_count(2, &[]), counting: CLOUD_COUNTING };
+        // Three articles queued and written by Lita: nothing new.
+        let mut written = vec![article("一本目", &["一本目"]), article("二本目", &["二本目"]), article("三本目", &["三本目"])];
+        assert!(material_count(2, &written) <= cloud.material_count);
+        // The person edits one: "more since".
+        written[1].body = "二本目を自分で直した".into();
+        assert!(material_count(2, &written) > cloud.material_count);
+    }
+
+    #[test]
+    fn the_cloud_reads_the_body_the_person_edited_and_not_what_lita_left() {
+        let articles = vec![
+            article("Lita の本文。題材ゼロについて。", &["Lita の本文。題材ゼロについて。"]),
+            article("Lita の本文を直して、題材イチについて書き足した。", &["Lita の本文。"]),
+            article("自分で書いた。題材ニについて。", &[]),
+        ];
+        let mut samples = vec!["元にした文章"];
+        samples.extend(own_bodies(&articles));
+        let p = cloud_prompt(&Policy::default(), &samples, &[], Lang::Ja);
+        assert!(p.contains("題材イチについて") && p.contains("題材ニについて") && p.contains("元にした文章"));
+        assert!(!p.contains("題材ゼロについて"));
+    }
+
+    #[test]
+    fn a_cloud_counted_before_edited_articles_counted_is_recounted_with_them_as_already_there() {
+        // Saved by #129 stage 1 (writing only, counting 1): two pieces then,
+        // one edited article now. Counted again as 3, so nothing is new.
+        let mut cloud = TopicCloud { words: vec![], gathered_at: "1789862400".into(), material_count: 2, counting: 1 };
+        let times = vec!["2026-09-19T00:00:00Z".to_string(), "2026-09-19T00:00:01Z".to_string()];
+        recount(&mut cloud, &times, 1);
+        assert_eq!((cloud.material_count, cloud.counting), (3, CLOUD_COUNTING));
+        assert!(material_count(2, &[article("直した", &["Lita"])]) <= cloud.material_count);
     }
 
     #[test]
