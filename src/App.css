@@ -365,8 +365,6 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .says { color: var(--mute); font-size: 0.88rem; }
 .says b { color: var(--fg); font-weight: 500; }
 .says .link { font-size: 0.85rem; margin-left: 10px; }
-/* No cloud above: the button starts where the eye already is. */
-.stack.alone { justify-content: flex-start; }
 
 /* The words someone keeps writing (2026-09-24). Three sizes, no numbers.
    Already-written subjects are faded and still pressable. */
@@ -398,6 +396,17 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .cloud-note:last-child { margin-bottom: 0; }
 .cloud-note .link { font-size: 0.85rem; }
 .cloud-note .spinner { width: 14px; height: 14px; border-width: 2px; }
+/* With no words below it, the line sits where the words will be. */
+.cloud-note.lone { justify-content: center; padding: 14px 0 8px; }
+/* No words to show: one sentence and the one next step, in the cloud's place (#129). */
+.cloud-invite { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 10px; color: var(--mute); font-size: 0.92rem; padding: 22px 0 18px; margin: 0; }
+.cloud-invite .link { font-size: 0.92rem; }
+/* "Add writing", opened in the cloud's place the way the policy opens. */
+.add-open { margin: 4px 0 0; }
+.add-open .sect-head .grow { flex: 1; }
+.add-open .sect-head .link { margin-left: 0; }
+.add-why { color: var(--mute); font-size: 0.85rem; margin: 0 0 10px; }
+.add-open .paste-box { margin-top: 0; }
 
 @media (prefers-reduced-motion: reduce) { .w { transition: none; } }
 .topics { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); }

@@ -1,10 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { host, type Platform, type Policy, type TopicCloud, type UiError, type VoiceSummary } from "../platform/host";
+import { host, type Platform, type Policy, type SourceInput, type TopicCloud, type UiError, type Voice, type VoiceSummary } from "../platform/host";
 import { mockScene } from "../platform/mock";
 import { asUiError } from "../errors";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n/en";
 import { ErrorNote } from "./ErrorNote";
+import { PasteBox } from "./PasteBox";
+import { SourceBox } from "./SourceBox";
+import { connectionsOf } from "./VoiceIntake";
 
 // One screen, one job: decide what to write about (D-71). There is nothing to
 // type: the words someone keeps writing sit in a cloud and may be pressed, or
@@ -12,6 +15,10 @@ import { ErrorNote } from "./ErrorNote";
 // quiet link "編集方針" at the end of the title row; it opens in place and is
 // closed again every time the screen opens. The ten titles are ten pressable
 // lines, and picking some lines up that many drafts.
+//
+// When there is no cloud to show, its box holds one next step instead: add
+// writing, which opens the two existing boxes (paste, connect) in the box's
+// place, and gathers the words as soon as something went in (#129).
 const MAX_PICKS = 5;
 /** Words that can be pressed at once. More than three and the titles scatter. */
 const MAX_WORDS = 3;
@@ -40,6 +47,15 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const [materialCount, setMaterialCount] = useState(0);
   const [gathering, setGathering] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
+  // Whether the cloud as it was last gathered has been read: until then the
+  // box says nothing, rather than inviting someone who already has writing.
+  const [cloudRead, setCloudRead] = useState(false);
+  // "Add writing", opened in the cloud's place. Like the policy, it starts closed.
+  const [adding, setAdding] = useState(isAddOpenScene);
+  const [addFocus, setAddFocus] = useState(() => (isAddOpenScene() ? 1 : 0));
+  const [addVoice, setAddVoice] = useState<Voice | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<UiError | null>(null);
   const [subjects, setSubjects] = useState<string[]>([]);
   // The words the titles on screen were offered from. Words pressed after
   // that only count once the titles are offered again.
@@ -54,6 +70,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const policyFirst = useRef<HTMLInputElement>(null);
   const policySection = useRef<HTMLElement>(null);
   const voiceSelect = useRef<HTMLSelectElement>(null);
+  const addLink = useRef<HTMLButtonElement>(null);
   // Which gather is the current one. Stopping bumps it, so a reply that
   // arrives afterwards is ignored and the previous words stay.
   const gatherRun = useRef(0);
@@ -99,17 +116,24 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     void host.getTopicCloud().then((v) => {
       setCloud(v.cloud);
       setMaterialCount(v.material_count);
+      setCloudRead(true);
       const picks = v.cloud ? scenePicks(v.cloud) : [];
       if (v.cloud) setSubjects(picks);
       const thin = v.cloud !== null && v.cloud.words.length < MIN_WORDS && v.material_count !== v.cloud.material_count;
-      if (v.material_count > 0 && (!v.cloud || thin)) void gather(false);
+      if (v.material_count > 0 && (!v.cloud || thin)) {
+        void gather(false);
+        // The mock's "stopped" scene starts where "stop" was pressed on that first gather.
+        if (mockScene() === "topics-cloud-stopped") stopGather();
+      }
       // The mock's "three picked" scenes start where a person would be after
       // pressing the words, offering once, and choosing three.
       if (isPickedScene() && !once.current) {
         once.current = true;
         void suggest(picks).then((list) => { if (list) setPicked([list[0], list[2], list[7]].filter(Boolean)); });
       }
-    }).catch(() => {});
+      // Unread, the box would stand empty: it says the words could not be had,
+      // and gathering them again is the way on.
+    }).catch(() => setCloudFailed(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,8 +149,12 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       if (run !== gatherRun.current) return;
       setCloud(v.cloud);
       setMaterialCount(v.material_count);
+      setCloudRead(true);
       // The words themselves changed, so what was pressed no longer holds.
+      // Gathered on its own (after adding writing), the pressed words that
+      // are still there stay pressed.
       if (manual) setSubjects([]);
+      else setSubjects((s) => s.filter((w) => v.cloud?.words.some((x) => x.word === w)));
     } catch {
       if (run !== gatherRun.current) return;
       setCloudFailed(true);
@@ -147,6 +175,8 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const savePolicy = () => { void host.setPolicy(policyRef.current).catch(() => {}); };
   const editPolicy = (patch: Partial<Policy>) => setPolicy((p) => ({ ...p, ...patch }));
   const openPolicy = () => {
+    // One opened section at a time: the policy takes the place of "add writing".
+    setAdding(false);
     setPolicyBlank(isBlank(policyRef.current));
     setPolicyOpen(true);
     // The link goes away as the lines open; the first line takes the keyboard.
@@ -155,6 +185,59 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const closePolicy = () => {
     setPolicyOpen(false);
     requestAnimationFrame(() => policyLink.current?.focus());
+  };
+
+  // What is added joins the voice a new article would be written in (D-55):
+  // the last article's, the only one, or failing both the first.
+  const addTo = voices?.find((v) => v.id === voiceId) ?? voices?.[0] ?? null;
+  const addToId = addTo?.id ?? "";
+  // The connections and origins of that voice, so a connected place shows ticked
+  // and pulling it again adds only what is new.
+  useEffect(() => {
+    if (!adding || !addToId) return;
+    void host.getVoice(addToId).then(setAddVoice).catch(() => {});
+  }, [adding, addToId]);
+
+  const openAdd = () => {
+    // The policy lines save on blur, and closing them removes the focused one without a blur.
+    if (policyOpen) { savePolicy(); setPolicyOpen(false); }
+    setAddError(null);
+    setAdding(true);
+    setAddFocus((n) => n + 1);
+  };
+  const closeAdd = () => {
+    setAdding(false);
+    setAddError(null);
+    requestAnimationFrame(() => addLink.current?.focus());
+  };
+
+  // Added to the voice's own writing without learning it again (D-57), then
+  // the box comes back and gathers the words straight away. A failure keeps
+  // the boxes open with what was pasted, and says so in one sentence.
+  const addWriting = async (items: SourceInput[]) => {
+    if (items.length === 0) return;
+    // No voice to add to (the list could not be read): nothing is saved, and
+    // what was pasted stays in the box.
+    if (!addToId) {
+      const e: UiError = { code: "unknown", detail: "no voice to add the writing to" };
+      setAddError(e);
+      throw e;
+    }
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      await host.addVoiceSources(addToId, items);
+      setAdding(false);
+      // The writing is counted again, so a gather stopped straight away
+      // leaves "gather again", not "add writing" a second time.
+      void host.getTopicCloud().then((v) => setMaterialCount(v.material_count)).catch(() => {});
+      void gather(false);
+    } catch (e) {
+      setAddError(asUiError(e));
+      throw e;
+    } finally {
+      setAddBusy(false);
+    }
   };
 
   const draft = async () => {
@@ -174,6 +257,9 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     setWorking(true);
     setTopics(null);
     setPicked([]);
+    // The titles take the room "add writing" was using; what was half pasted is let go.
+    setAdding(false);
+    setAddError(null);
     try {
       // The Rust command keeps its "direction" argument; nothing is typed any
       // more, so it goes empty (D-71). Briefs already queued keep theirs.
@@ -215,9 +301,15 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const moreSince = cloud !== null && materialCount > cloud.material_count;
   // A line in the cloud's place takes over from the "gather again" link.
   const quietLine = gathering || cloudFailed || (moreSince && !topics);
-  // No material at all, or too few words: the cloud is not there to be seen,
-  // and no sentence promises it either (D-71). The room below stays empty.
-  const showCloud = materialCount > 0 && (hasWords || gathering || cloudFailed);
+  // The box stays where the words will be, so the line gathering them, the one
+  // next step, and the words themselves take turns in one place. Once titles
+  // are out, a box with no words in it goes.
+  const showCloud = hasWords || gathering || cloudFailed || !topics;
+  // With no words to show and nothing going on: one sentence and one next step.
+  // No writing, or too little to make words of: add writing. Writing the words
+  // were not gathered from, because the gather on opening was stopped: gather again.
+  const nextStep = cloudRead && !hasWords && !gathering && !cloudFailed;
+  const needsWriting = materialCount === 0 || (cloud !== null && cloud.material_count === materialCount);
   const voiceName = voices?.find((v) => v.id === voiceId)?.name;
   const platformName = platforms.find((p) => p.id === platformId)?.name;
   // One sentence says where the drafts will go; the two choices come out on "change".
@@ -268,31 +360,70 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
         </div>
       ) : (
         <>
-          {showCloud && (
+          {adding && (
+            <section
+              className="add-open" aria-label={t("cloud.add")}
+              onKeyDown={(e) => { if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); closeAdd(); } }}
+            >
+              <div className="sect-head">
+                <h4>{t("cloud.add")}</h4>
+                <span className="grow" />
+                <button className="link quiet-link" onClick={closeAdd}>{t("action.close")}</button>
+              </div>
+              {addTo && <p className="add-why">{t("add.where", { voice: addTo.name })}</p>}
+              {/* The same two boxes as the voice page; the rows added are not
+                  listed here, since adding closes this and the words take over. */}
+              <PasteBox
+                pieces={[]} total={0} busy={addBusy} focus={addFocus}
+                onAdd={(items) => addWriting(items.map((i) => ({ kind: i.kind, origin: i.origin, account: null, body: i.body })))}
+                onRemove={() => {}}
+              />
+              <p className="both-note">{t("intake.both")}</p>
+              <section className="box connect-box" aria-label={t("intake.box.connect")}>
+                <h3 className="box-head">{t("intake.box.connect")}</h3>
+                <SourceBox
+                  known={new Set((addVoice?.voice_sources ?? []).map((s) => s.origin).filter((o): o is string => !!o))}
+                  connected={connectionsOf((addVoice?.voice_sources ?? []).filter((s) => s.kind !== "paste" && s.kind !== "file"))}
+                  onGathered={(pieces) => void addWriting(pieces.map(({ kind, origin, account, body }) => ({ kind, origin, account, body }))).catch(() => {})}
+                />
+              </section>
+              {addError && <ErrorNote error={addError} />}
+            </section>
+          )}
+
+          {!adding && showCloud && (
             <div className="cloud-box">
               <div className="cloud-head">
                 <h4>{t("cloud.title")}</h4>
                 <span className="grow" />
                 {/* Before titles: gather the words again. After: offer the titles again,
                     keeping the pressed words (gathering would swap them out). */}
-                {topics ? again : !quietLine && <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>}
+                {topics ? again : hasWords && !quietLine && <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>}
               </div>
               {gathering && (
-                <p className="cloud-note" role="status">
+                <p className={hasWords ? "cloud-note" : "cloud-note lone"} role="status">
                   <span className="spinner" aria-hidden="true" />{t("cloud.gathering")}
                   <button className="link" onClick={stopGather}>{t("cloud.cancel")}</button>
                 </p>
               )}
               {!gathering && cloudFailed && (
-                <p className="cloud-note" role="status">
+                <p className={hasWords ? "cloud-note" : "cloud-note lone"} role="status">
                   {t("cloud.failed")}
                   <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>
                 </p>
               )}
-              {!gathering && !cloudFailed && moreSince && !topics && (
+              {!gathering && !cloudFailed && moreSince && !topics && hasWords && (
                 <p className="cloud-note">
                   {t("cloud.more")}
                   <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>
+                </p>
+              )}
+              {nextStep && (
+                <p className="cloud-invite">
+                  {materialCount === 0 ? t("cloud.invite") : needsWriting ? t("cloud.thin") : t("cloud.stopped")}
+                  {needsWriting
+                    ? <button ref={addLink} className="link" onClick={openAdd}>{t("cloud.add")}</button>
+                    : <button className="link" onClick={() => void gather(true)}>{t("cloud.again")}</button>}
                 </p>
               )}
               {hasWords && (
@@ -370,8 +501,8 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
               </button>
             </div>
           ) : (
-            <div className={showCloud ? "stack" : "stack alone"}>
-              {showCloud && <span className="grow" />}
+            <div className="stack">
+              <span className="grow" />
               <button className="btn pri" disabled={working} onClick={() => void suggest()}>{t("topics.suggest")}</button>
             </div>
           )}
@@ -382,6 +513,8 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
 }
 
 const isPickedScene = () => mockScene() === "topics-picked" || mockScene() === "topics-picked-few";
+
+const isAddOpenScene = () => mockScene() === "topics-add-open" || mockScene() === "topics-add-failed";
 
 const isBlank = (p: Policy) => !p.audience.trim() && !p.takeaway.trim() && !p.avoid.trim();
 
