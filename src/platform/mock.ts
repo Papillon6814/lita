@@ -302,7 +302,19 @@ const topicRounds = [
 let topicRound = 0;
 
 // What ten titles look like once words have been pressed: every one of them
-// is about the subjects that were picked.
+// is about the subjects that were picked. Money and exit words get their own ten.
+const cashTitles = [
+  "資金繰りは月ではなく週で見る",
+  "入金が遅れたときに、先に電話する相手",
+  "撤退の基準は、始める前に決める",
+  "支払いを待ってもらう頼み方",
+  "赤字の事業を、いつまで続けるか",
+  "借入の枠は、困る前に作っておく",
+  "やめる判断を、数字だけに任せない",
+  "手元の現金が何か月もつかを、毎週書く",
+  "撤退を決めた後、最初に伝える相手",
+  "資金繰り表は、社長が自分で書く",
+];
 const subjectTitles = [
   "小さな会社の採用は、席ではなく仕事で決める",
   "入社 3 か月で辞める人と、辞めない人の差",
@@ -411,7 +423,8 @@ export const mockHost: T.Host = {
   suggestTopics: async (subjects, _direction) => {
     await wait(scene.startsWith("topics-picked") ? 200 : 1200);
     // Picked words steer the titles, so they are visibly about those subjects.
-    const list = subjects.length > 0 ? subjectTitles : topicRounds[topicRound % topicRounds.length];
+    const cash = subjects.some((w) => w === "資金繰り" || w === "撤退基準");
+    const list = subjects.length > 0 ? (cash ? cashTitles : subjectTitles) : topicRounds[topicRound % topicRounds.length];
     if (subjects.length === 0) topicRound += 1;
     const taken = new Set(articles.map((a) => a.title.trim()));
     return list.filter((t) => !taken.has(t));

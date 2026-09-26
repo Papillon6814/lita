@@ -41,6 +41,9 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const [gathering, setGathering] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
   const [subjects, setSubjects] = useState<string[]>([]);
+  // The words the titles on screen were offered from. Words pressed after
+  // that only count once the titles are offered again.
+  const [offeredWith, setOfferedWith] = useState<string[]>([]);
   // The policy starts closed every time (D-71); whether it was open is not kept.
   const [policyOpen, setPolicyOpen] = useState(() => mockScene()?.startsWith("topics-policy-open") ?? false);
   // Whether all three lines were empty when it was opened: the one sentence
@@ -49,10 +52,12 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
   const [changing, setChanging] = useState(false);
   const policyLink = useRef<HTMLButtonElement>(null);
   const policyFirst = useRef<HTMLInputElement>(null);
+  const policySection = useRef<HTMLElement>(null);
   const voiceSelect = useRef<HTMLSelectElement>(null);
   // Which gather is the current one. Stopping bumps it, so a reply that
   // arrives afterwards is ignored and the previous words stay.
   const gatherRun = useRef(0);
+  const once = useRef(false);
   const policyRef = useRef(policy);
   policyRef.current = policy;
 
@@ -90,8 +95,15 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     void host.getTopicCloud().then((v) => {
       setCloud(v.cloud);
       setMaterialCount(v.material_count);
-      if (v.cloud) setSubjects(scenePicks(v.cloud));
+      const picks = v.cloud ? scenePicks(v.cloud) : [];
+      if (v.cloud) setSubjects(picks);
       if (!v.cloud && v.material_count > 0) void gather(false);
+      // The mock's "three picked" scenes start where a person would be after
+      // pressing the words, offering once, and choosing three.
+      if (isPickedScene() && !once.current) {
+        once.current = true;
+        void suggest(picks).then((list) => { if (list) setPicked([list[0], list[2], list[7]].filter(Boolean)); });
+      }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -152,7 +164,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     } catch (e) { setError(asUiError(e)); } finally { setDrafting(false); }
   };
 
-  const suggest = async () => {
+  const suggest = async (words: string[] = subjects) => {
     setError(null);
     setWorking(true);
     setTopics(null);
@@ -160,23 +172,22 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     try {
       // The Rust command keeps its "direction" argument; nothing is typed any
       // more, so it goes empty (D-71). Briefs already queued keep theirs.
-      const list = await host.suggestTopics(subjects, "");
+      const list = await host.suggestTopics(words, "");
       setTopics(list);
-      // The titles take the room the open policy was using.
-      setPolicyOpen(false);
+      setOfferedWith(words);
+      // The titles take the room the open policy was using. Closing it removes
+      // the focused line without a blur, so what was typed is saved here, and
+      // the keyboard goes back to the link that reopens it.
+      const section = policySection.current;
+      if (section) {
+        const hadFocus = section.contains(document.activeElement);
+        savePolicy();
+        setPolicyOpen(false);
+        if (hadFocus) requestAnimationFrame(() => policyLink.current?.focus());
+      }
       return list;
     } catch (e) { setError(asUiError(e)); return null; } finally { setWorking(false); }
   };
-
-  // The mock's "three picked" scene starts where a person would be after
-  // pressing once and choosing three.
-  const once = useRef(false);
-  useEffect(() => {
-    if (once.current || (mockScene() !== "topics-picked" && mockScene() !== "topics-picked-few")) return;
-    once.current = true;
-    void suggest().then((list) => { if (list) setPicked([list[0], list[2], list[7]].filter(Boolean)); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const toggle = (title: string) => setPicked((p) => (p.includes(title) ? p.filter((x) => x !== title) : p.length >= MAX_PICKS ? p : [...p, title]));
 
@@ -187,7 +198,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       await host.setPolicy(policyRef.current);
       // Lined up in the order they were offered, not the order they were ticked.
       const titles = (topics ?? []).filter((x) => picked.includes(x));
-      await host.enqueueArticles(titles, voiceId, platformId, "quality", subjects, "");
+      await host.enqueueArticles(titles, voiceId, platformId, "quality", offeredWith, "");
       onQueued(titles.length);
     } catch (e) { setError(asUiError(e)); setWorking(false); }
   };
@@ -224,7 +235,7 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
       </div>
 
       {!noVoice && policyOpen && (
-        <section className="policy-open" aria-label={t("policy.title")}>
+        <section ref={policySection} className="policy-open" aria-label={t("policy.title")}>
           <div className="sect-head">
             <h4>{t("policy.title")}</h4>
             <span className="grow" />
@@ -364,6 +375,8 @@ export function TopicPicker({ onBack, onQueued, onGoVoices }: Props) {
     </div>
   );
 }
+
+const isPickedScene = () => mockScene() === "topics-picked" || mockScene() === "topics-picked-few";
 
 const isBlank = (p: Policy) => !p.audience.trim() && !p.takeaway.trim() && !p.avoid.trim();
 
