@@ -25,11 +25,14 @@
 // write, write-generating,
 // write-result, write-over, write-error,
 // topics (picking titles, policy empty, the cloud already gathered),
-// topics-picked (ten titles, three picked, policy filled),
+// topics-picked (two words pressed, ten titles, three picked, policy filled),
+// topics-picked-few (ten titles, three picked, no cloud to press),
+// topics-policy-open (the policy opened, all three lines empty),
+// topics-policy-open-filled (the policy opened, filled),
 // topics-cloud-first (no cloud yet, gathering it on open, never finishing),
 // topics-cloud-picked (three words pressed), topics-cloud-more (more
 // material since the cloud was gathered), topics-cloud-few (too few words
-// to make a cloud), topics-cloud-failed (gathering did not work),
+// to make a cloud: no cloud and no sentence in its place), topics-cloud-failed (gathering did not work),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
 // whole thing stopped). Add `&lang=en` to force English.
@@ -238,7 +241,7 @@ const fullPolicy: T.Policy = {
   topics: ["資金繰り", "買収", "採用"],
   avoid: "個別の会社名",
 };
-let policy: T.Policy = scene === "topics-picked" || scene === "topics-cloud-picked" ? fullPolicy : emptyPolicy;
+let policy: T.Policy = ["topics-picked", "topics-cloud-picked", "topics-policy-open-filled"].includes(scene) ? fullPolicy : emptyPolicy;
 
 // The words someone keeps writing about (2026-09-24). `weight` is 1–5 and is
 // folded into three sizes on screen; `written` marks a subject already used
@@ -262,7 +265,7 @@ const sparseCloud: T.TopicCloud = { words: cloudWords.slice(0, 3), gathered_at: 
 const cloudView = (): T.CloudView => {
   if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
   if (scene === "topics-cloud-first") return { cloud: null, material_count: 18 };
-  if (scene === "topics-cloud-few") return { cloud: sparseCloud, material_count: 2 };
+  if (scene === "topics-cloud-few" || scene === "topics-picked-few") return { cloud: sparseCloud, material_count: 2 };
   if (scene === "topics-cloud-failed") return { cloud: null, material_count: 18 };
   // More material than the cloud was gathered from: one quiet line offers to
   // gather again, and never says how many more.
@@ -299,7 +302,19 @@ const topicRounds = [
 let topicRound = 0;
 
 // What ten titles look like once words have been pressed: every one of them
-// is about the subjects that were picked.
+// is about the subjects that were picked. Money and exit words get their own ten.
+const cashTitles = [
+  "資金繰りは月ではなく週で見る",
+  "入金が遅れたときに、先に電話する相手",
+  "撤退の基準は、始める前に決める",
+  "支払いを待ってもらう頼み方",
+  "赤字の事業を、いつまで続けるか",
+  "借入の枠は、困る前に作っておく",
+  "やめる判断を、数字だけに任せない",
+  "手元の現金が何か月もつかを、毎週書く",
+  "撤退を決めた後、最初に伝える相手",
+  "資金繰り表は、社長が自分で書く",
+];
 const subjectTitles = [
   "小さな会社の採用は、席ではなく仕事で決める",
   "入社 3 か月で辞める人と、辞めない人の差",
@@ -406,9 +421,10 @@ export const mockHost: T.Host = {
     return { cloud: { ...fullCloud, material_count: cloudView().material_count }, material_count: cloudView().material_count };
   },
   suggestTopics: async (subjects, _direction) => {
-    await wait(scene === "topics-picked" ? 200 : 1200);
+    await wait(scene.startsWith("topics-picked") ? 200 : 1200);
     // Picked words steer the titles, so they are visibly about those subjects.
-    const list = subjects.length > 0 ? subjectTitles : topicRounds[topicRound % topicRounds.length];
+    const cash = subjects.some((w) => w === "資金繰り" || w === "撤退基準");
+    const list = subjects.length > 0 ? (cash ? cashTitles : subjectTitles) : topicRounds[topicRound % topicRounds.length];
     if (subjects.length === 0) topicRound += 1;
     const taken = new Set(articles.map((a) => a.title.trim()));
     return list.filter((t) => !taken.has(t));

@@ -352,8 +352,21 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .pf > span { color: var(--mute); font-size: 0.88rem; }
 .pf .v { border: 0; background: none; padding: 4px 0; font: inherit; color: var(--fg); width: 100%; }
 .pf .v:focus { outline: none; box-shadow: none; border-bottom: 1px solid var(--mint); border-radius: 0; }
-.aim { display: flex; gap: 12px; align-items: center; }
-.aim input { flex: 1; }
+/* The title row carries the one quiet link to the policy (D-71). It opens in
+   place below, and "close" is the one way back. */
+.topics-head { display: flex; align-items: baseline; gap: 12px; }
+.topics-head .grow { flex: 1; }
+.topics-head .link { font-size: 0.88rem; }
+.policy-open { margin: 4px 0 var(--gap); }
+.policy-open .sect-head .grow { flex: 1; }
+.policy-open .sect-head .link { margin-left: 0; }
+.policy-why { color: var(--mute); font-size: 0.88rem; margin: 0 0 8px; }
+/* Where the drafts go, in one sentence; the choices come out on "change". */
+.says { color: var(--mute); font-size: 0.88rem; }
+.says b { color: var(--fg); font-weight: 500; }
+.says .link { font-size: 0.85rem; margin-left: 10px; }
+/* No cloud above: the button starts where the eye already is. */
+.stack.alone { justify-content: flex-start; }
 
 /* The words someone keeps writing (2026-09-24). Three sizes, no numbers.
    Already-written subjects are faded and still pressable. */
@@ -364,11 +377,16 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .cloud-head .grow { flex: 1; }
 .cloud-head .link { font-size: 0.85rem; }
 .cloud { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 12px; padding: 4px 2px; }
-.w { font: inherit; background: none; border: 1px solid transparent; border-radius: var(--r-ctl); color: var(--fg); padding: 2px 8px; line-height: 1.5; white-space: nowrap; cursor: pointer; transition: background-color .18s ease, color .18s ease; }
+.w { position: relative; font: inherit; background: none; border: 1px solid transparent; border-radius: var(--r-ctl); color: var(--fg); padding: 2px 8px; line-height: 1.5; white-space: nowrap; cursor: pointer; transition: background-color .18s ease, color .18s ease; }
 .w.s1 { font-size: 0.95rem; font-weight: 400; color: var(--mute); }
 .w.s2 { font-size: 1.2rem; font-weight: 500; }
 .w.s3 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
-.w.done { opacity: 0.4; }
+/* Faded by colour, not opacity, so the sentence that explains it is not faded too. */
+.w.done:not([aria-pressed="true"]) { color: color-mix(in srgb, var(--fg) 40%, transparent); }
+.w.s1.done:not([aria-pressed="true"]) { color: color-mix(in srgb, var(--mute) 40%, transparent); }
+/* What a faded word means: said on pointing or focusing it, never all the time. */
+.w .tip { display: none; position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); z-index: 2; background: var(--fg); color: var(--bg); font-size: 0.78rem; font-weight: 400; letter-spacing: 0; line-height: 1.4; padding: 4px 9px; border-radius: var(--r-ctl); white-space: nowrap; pointer-events: none; }
+.w.done:hover .tip, .w.done:focus-visible .tip { display: block; }
 .w[aria-pressed="true"] { background: var(--mint-ink); color: #fff; opacity: 1; }
 .w:focus-visible { outline: none; border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-soft); }
 /* Three pressed: the rest cannot be pressed, and say so by their colour. */
@@ -378,18 +396,9 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 /* The one line that stands in for the cloud: gathering, failed, more since. */
 .cloud-note { display: flex; align-items: center; gap: 9px; color: var(--mute); font-size: 0.88rem; margin: 0 0 8px; }
 .cloud-note:last-child { margin-bottom: 0; }
-.cloud-note.lone { margin: var(--gap) 0 0; }
 .cloud-note .link { font-size: 0.85rem; }
 .cloud-note .spinner { width: 14px; height: 14px; border-width: 2px; }
 
-/* Pressed words land in "this time" as tags, beside anything typed there. */
-.seedfield { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 5px 10px; }
-.seedfield:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px var(--mint-soft); }
-.seed { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 0.9rem; font-weight: 700; background: var(--mint-soft); color: var(--mint-ink); border: 0; border-radius: var(--r-ctl); padding: 4px 9px; cursor: pointer; }
-.seed .x { font-weight: 400; opacity: 0.65; }
-.seed:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--mint-soft); }
-.seedfield input { border: 0; padding: 4px 0; background: none; flex: 1; min-width: 150px; }
-.seedfield input:focus { outline: none; box-shadow: none; }
 @media (prefers-reduced-motion: reduce) { .w { transition: none; } }
 .topics { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-box); }
 .trow { display: flex; gap: 10px; align-items: center; padding: 5px 14px; border-bottom: 1px solid var(--line); font-size: 0.95rem; cursor: pointer; }
