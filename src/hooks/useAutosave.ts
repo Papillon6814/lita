@@ -27,7 +27,7 @@ export function useAutosave<T>(
   const maxWait = useRef<number | null>(null);
   const retry = useRef<number | null>(null);
   const attempts = useRef(0);
-  const inFlight = useRef(false);
+  const inFlight = useRef<Promise<boolean> | null>(null);
 
   const clearTimers = () => {
     if (debounce.current) window.clearTimeout(debounce.current);
@@ -36,38 +36,44 @@ export function useAutosave<T>(
     debounce.current = maxWait.current = retry.current = null;
   };
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<boolean> => {
     clearTimers();
-    const value = latest.current;
-    if (value === null || inFlight.current) return;
-    if (lastSaved.current !== null && isEqual(value, lastSaved.current)) {
-      setState((s) => (s.kind === "dirty" ? { kind: "clean", at: Date.now() } : s));
-      return;
-    }
-    inFlight.current = true;
-    setState({ kind: "saving" });
-    try {
-      await save(value);
-      lastSaved.current = value;
-      attempts.current = 0;
-      try { localStorage.removeItem(key); } catch {}
-      // Something newer may have arrived while saving.
-      if (latest.current !== null && !isEqual(latest.current, value)) {
-        inFlight.current = false;
-        setState({ kind: "dirty" });
-        debounce.current = window.setTimeout(() => void flush(), DEBOUNCE_MS);
-        return;
+    while (true) {
+      const value = latest.current;
+      if (value === null) return true;
+      if (inFlight.current) {
+        if (!(await inFlight.current)) return false;
+        continue;
       }
-      setState({ kind: "clean", at: Date.now() });
-    } catch (e) {
-      try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), value })); } catch {}
-      const detail = e instanceof Error ? e.message : typeof e === "object" && e && "detail" in e ? String((e as { detail: unknown }).detail) : String(e);
-      setState({ kind: "failed", detail, localOnly: true });
-      const wait = RETRY_MS[Math.min(attempts.current, RETRY_MS.length - 1)];
-      attempts.current += 1;
-      retry.current = window.setTimeout(() => void flush(), wait);
-    } finally {
-      inFlight.current = false;
+      if (lastSaved.current !== null && isEqual(value, lastSaved.current)) {
+        try { localStorage.removeItem(key); } catch { /* Local recovery is best-effort. */ }
+        setState((s) => (s.kind === "clean" ? s : { kind: "clean", at: Date.now() }));
+        return true;
+      }
+      const pending = (async () => {
+        setState({ kind: "saving" });
+        try {
+          await save(value);
+          lastSaved.current = value;
+          attempts.current = 0;
+          try { localStorage.removeItem(key); } catch { /* Local recovery is best-effort. */ }
+          return true;
+        } catch (e) {
+          const failedValue = latest.current ?? value;
+          try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), value: failedValue })); } catch { /* The editor still holds the text in memory. */ }
+          const detail = e instanceof Error ? e.message : typeof e === "object" && e && "detail" in e ? String((e as { detail: unknown }).detail) : String(e);
+          setState({ kind: "failed", detail, localOnly: true });
+          const wait = RETRY_MS[Math.min(attempts.current, RETRY_MS.length - 1)];
+          attempts.current += 1;
+          retry.current = window.setTimeout(() => void flush(), wait);
+          return false;
+        } finally {
+          inFlight.current = null;
+        }
+      })();
+      inFlight.current = pending;
+      if (!(await pending)) return false;
+      if (latest.current !== null && !isEqual(latest.current, value)) setState({ kind: "dirty" });
     }
   }, [key, save, isEqual]);
 

@@ -13,6 +13,13 @@ export type SessionStatus =
   | { status: "signed_out" }
   | { status: "signed_in"; email: string | null };
 
+
+export type PublishingProfile = {
+  id: string;
+  name: string;
+  is_initial: boolean;
+  created_at: string;
+};
 export type SourceKind = "paste" | "file" | "note" | "medium" | "x";
 
 export type SourceInput = { kind: SourceKind; origin: string | null; account: string | null; body: string };
@@ -179,6 +186,11 @@ export type Host = {
   codexStatus: () => Promise<CodexStatus>;
   sessionStatus: () => Promise<SessionStatus>;
   signIn: () => Promise<SessionStatus>;
+  listProfiles: () => Promise<PublishingProfile[]>;
+  selectedProfile: () => Promise<PublishingProfile>;
+  createProfile: (name: string) => Promise<PublishingProfile>;
+  renameProfile: (id: string, name: string) => Promise<void>;
+  selectProfile: (id: string) => Promise<PublishingProfile>;
   cancelSignIn: () => Promise<void>;
   signOut: () => Promise<SessionStatus>;
   listVoices: () => Promise<VoiceSummary[]>;

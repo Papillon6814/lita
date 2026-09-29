@@ -3,10 +3,11 @@ import { host, type ArticleStatus, type ArticleSummary, type Platform, type UiEr
 import { asUiError } from "../errors";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n/en";
-import { useQuietLoad, peek, prime, VOICES_KEY } from "../hooks/useQuietLoad";
+import { useQuietLoad, peek, prime, profileCacheKey, VOICES_KEY } from "../hooks/useQuietLoad";
 import { ErrorNote } from "./ErrorNote";
 
 type Props = {
+  profileId: string;
   filter: ArticleStatus | "all";
   onOpen: (id: string) => void;
   onGoVoices: () => void;
@@ -27,7 +28,7 @@ const STOPPED: Record<string, MessageKey> = {
 
 // The home screen: what has been written, newest first. Nothing on it is a
 // number for its own sake; dates and destinations only.
-export function ArticleList({ filter, onOpen, onGoVoices, onGoTopics, onMainPrimary, onShowCodexSteps }: Props) {
+export function ArticleList({ profileId, filter, onOpen, onGoVoices, onGoTopics, onMainPrimary, onShowCodexSteps }: Props) {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [q, setQ] = useState("");
   const [stopped, setStopped] = useState<UiError | null>(null);
@@ -36,10 +37,10 @@ export function ArticleList({ filter, onOpen, onGoVoices, onGoTopics, onMainPrim
   // Moving between 「すべての記事」 and 下書き must not blank the page either:
   // the wider list already holds those rows, so the narrower one starts from
   // them and the fetch only confirms it.
-  const key = `articles:${filter}`;
+  const key = profileCacheKey(profileId, `articles:${filter}`);
   useMemo(() => {
     if (filter === "all" || peek(key)) return;
-    const all = peek<ArticleSummary[]>("articles:all");
+    const all = peek<ArticleSummary[]>(profileCacheKey(profileId, "articles:all"));
     if (all) prime(key, all.filter((a) => a.status === filter));
   }, [key, filter]);
 
@@ -50,7 +51,7 @@ export function ArticleList({ filter, onOpen, onGoVoices, onGoTopics, onMainPrim
     key,
     useCallback(() => host.listArticles(filter === "all" ? undefined : filter), [filter]),
   );
-  const voices = useQuietLoad<VoiceSummary[]>(VOICES_KEY, useCallback(() => host.listVoices(), []));
+  const voices = useQuietLoad<VoiceSummary[]>(profileCacheKey(profileId, VOICES_KEY), useCallback(() => host.listVoices(), []));
   const reload = list.reload;
 
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); }, []);
