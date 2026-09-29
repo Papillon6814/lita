@@ -586,6 +586,17 @@ impl UserStore<'_> {
     }
 }
 
+/// True when Supabase refused the request for lack of privileges
+/// (Postgres `42501`, e.g. a role with no GRANT on the table).
+/// `request` reports failures as plain `bail!` messages, so this matches the
+/// ` (42501): ` part of the message it formats instead of a typed error.
+pub fn is_permission_denied(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        let message = cause.to_string();
+        message.starts_with("Supabase returned ") && message.contains(" (42501): ")
+    })
+}
+
 fn profile_voice_mutation_query(voice_id: &str, profile_id: &str) -> Vec<(&'static str, String)> {
     vec![
         ("id", format!("eq.{voice_id}")),
@@ -1403,6 +1414,22 @@ fn excerpt_of(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn permission_denied_is_recognised_only_for_42501() {
+        let denied = anyhow::anyhow!(
+            "Supabase returned 401 Unauthorized (42501): permission denied for table publishing_profiles"
+        );
+        assert!(is_permission_denied(&denied));
+        assert!(is_permission_denied(&denied.context("listing Profiles")));
+        assert!(!is_permission_denied(&anyhow::anyhow!(
+            "Supabase returned 401 Unauthorized (PGRST301): JWT expired"
+        )));
+        assert!(!is_permission_denied(&anyhow::anyhow!(
+            "Supabase returned 500 Internal Server Error: boom"
+        )));
+        assert!(!is_permission_denied(&anyhow::anyhow!("reaching Supabase")));
+    }
 
     #[test]
     fn excerpt_is_the_first_non_empty_line_cut_short() {
