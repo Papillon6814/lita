@@ -9,6 +9,7 @@ use lita_auth::SupabaseAuth;
 use lita_codex::voice::{Excerpt, VoiceProfile};
 use lita_store::{
     ArticlePatch, ArticleStatus, NewArticle, NewSource, NewVersion, SourceKind, Store, VersionKind,
+    is_permission_denied,
 };
 
 fn main() -> Result<()> {
@@ -455,9 +456,14 @@ fn main() -> Result<()> {
     );
 
     // Someone else's session must not see or touch these rows. Using the
-    // anon key alone as a stand-in: RLS grants nothing to `anon`.
+    // anon key alone as a stand-in: `anon` has no GRANT on the table, so a
+    // permission error (401, 42501) is expected; an empty list also passes.
     let anon = store.as_user(&key);
-    ensure!(anon.profiles()?.is_empty(), "anon saw Profiles");
+    match anon.profiles() {
+        Ok(profiles) => ensure!(profiles.is_empty(), "anon saw {} Profiles", profiles.len()),
+        Err(error) if is_permission_denied(&error) => {}
+        Err(error) => return Err(error.context("anon Profile list failed unexpectedly")),
+    }
     println!("all good");
     Ok(())
 }
