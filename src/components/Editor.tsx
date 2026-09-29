@@ -26,7 +26,19 @@ const KEEP_LINE = /^長さ|調べ(ず|な)|^length|look(ing)? up|without researc
 // The editor: the text on the left, Lita's help on the right. Everything
 // the person types is saved as they go (D-46); Lita writes only when asked,
 // and always into the same text, so there is one thing to judge.
-export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { id: string; onBack: () => void; onDeleted: () => void; onGoVoices: () => void; onAdjustVoice: (voiceId: string) => void }) {
+type Props = {
+  profileId: string;
+  id: string;
+  onBack: () => void;
+  onDeleted: () => void;
+  onGoVoices: () => void;
+  onAdjustVoice: (voiceId: string) => void;
+  onRegisterFlush: (flush: (() => Promise<boolean>) | null) => void;
+  profileChanging: boolean;
+};
+
+
+export function Editor({ profileId, id, onBack, onDeleted, onGoVoices, onAdjustVoice, onRegisterFlush, profileChanging }: Props) {
   const [article, setArticle] = useState<Article | null>(null);
   const [text, setText] = useState<Text>({ title: "", body: "", brief: "" });
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -43,7 +55,11 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
 
   const save = useCallback(async (v: Text) => { await host.updateArticle(id, v); }, [id]);
   const same = useCallback((a: Text, b: Text) => a.title === b.title && a.body === b.body && a.brief === b.brief, []);
-  const auto = useAutosave<Text>(`lita.unsaved.${id}`, save, same);
+  const auto = useAutosave<Text>(`lita.unsaved.${profileId}.${id}`, save, same);
+  useEffect(() => {
+    onRegisterFlush(auto.flush);
+    return () => onRegisterFlush(null);
+  }, [auto.flush, onRegisterFlush]);
 
   useEffect(() => { void host.platforms().then(setPlatforms).catch(() => {}); void host.listVoices().then(setVoices).catch(() => {}); }, []);
 
@@ -162,7 +178,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   const write = useCallback(async (previous?: string) => {
     if (!article) return;
     setError(null);
-    await auto.flush();
+    if (!(await auto.flush())) return;
     setGen({ kind: "generating" });
     try {
       const w = await host.generateIntoArticle(id, "quality", previous);
@@ -222,8 +238,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
     if (!window.confirm(t("article.deleteConfirm"))) return;
     try { await host.deleteArticle(id); onDeleted(); } catch (e) { setError(asUiError(e)); }
   };
-  const onKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canWrite) { e.preventDefault(); void write(); } };
-
+  const onKey = (e: React.KeyboardEvent) => { if (!profileChanging && (e.metaKey || e.ctrlKey) && e.key === "Enter" && canWrite) { e.preventDefault(); void write(); } };
   // An article that opens quickly shows no sentence at all: the paper just
   // appears. Only a slow read says it is reading.
   if (!article) return <div className="editor">{!error && <Delayed><p className="muted">{t("article.loading")}</p></Delayed>}{error && <ErrorNote error={error} />}</div>;
@@ -237,20 +252,20 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
   return (
     <div className="editor" onKeyDown={onKey}>
       <div className="editor-bar">
-        <button className="back" onClick={onBack}>← {t("nav.articles")}</button>
+        <button className="back" onClick={onBack} disabled={profileChanging}>← {t("nav.articles")}</button>
         <span className="editor-bar-right">
           <span className={auto.state.kind === "failed" ? "save-state warn" : "save-state"} role="status">
             {saveLabel}
             {auto.state.kind === "failed" && <button className="link" onClick={() => void auto.retry()}>{t("save.retry")}</button>}
           </span>
-          <button className={showVersions ? "quiet sm on" : "quiet sm"} aria-pressed={showVersions} onClick={() => setShowVersions((v) => !v)}>{t("versions.title")}</button>
+          <button className={showVersions ? "quiet sm on" : "quiet sm"} disabled={profileChanging} aria-pressed={showVersions} onClick={() => setShowVersions((v) => !v)}>{t("versions.title")}</button>
         </span>
       </div>
 
       <div className="editor-grid">
         <div className="paper">
-          <input className="title" value={text.title} onChange={(e) => edit({ title: e.target.value })} placeholder={t("editor.titlePlaceholder")} aria-label={t("editor.title")} disabled={gen.kind === "generating"} />
-          <textarea ref={bodyRef} className="body" value={text.body} onChange={(e) => edit({ body: e.target.value })} placeholder={t("editor.bodyPlaceholder")} aria-label={t("editor.body")} disabled={gen.kind === "generating"} />
+          <input className="title" value={text.title} onChange={(e) => edit({ title: e.target.value })} placeholder={t("editor.titlePlaceholder")} aria-label={t("editor.title")} disabled={profileChanging || gen.kind === "generating"} />
+          <textarea ref={bodyRef} className="body" value={text.body} onChange={(e) => edit({ body: e.target.value })} placeholder={t("editor.bodyPlaceholder")} aria-label={t("editor.body")} disabled={profileChanging || gen.kind === "generating"} />
           <div className="paper-foot">
             <span className={over ? "count over" : "count"}>
               {platform?.max_chars != null ? t("write.chars", { n: String(count), max: String(platform.max_chars) }) : t("editor.countRead", { n: String(count), min: String(readMinutes) })}
@@ -258,12 +273,12 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
             {over > 0 && <span className="warn small">{t("write.over", { n: String(over) })} <button className="btn sm" onClick={() => void write(text.body)}>{t("write.shorten")}</button></span>}
             <span className="grow" />
             {copied ? <span className="ok small" role="status">✓ {t("write.copied")}</span> : (
-              <button className="btn pri sm" disabled={!text.body.trim()} onClick={() => void copy()}>{t("write.copy")}</button>
+              <button className="btn pri sm" disabled={profileChanging || !text.body.trim()} onClick={() => void copy()}>{t("write.copy")}</button>
             )}
           </div>
         </div>
 
-        {showVersions ? (
+        {showVersions && !profileChanging ? (
           <VersionHistory
             article={article}
             current={{ title: text.title, body: text.body }}
@@ -281,11 +296,11 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
             <div className="field-head">
               <span id="brief-field-label">{t("write.brief")}</span>
               {/* Secondary to the one primary button ("write"): a quiet link. */}
-              <button className="link" disabled={!text.title.trim() || sug.kind === "working" || gen.kind === "generating"} onClick={() => void suggest()}>
+              <button className="link" disabled={profileChanging || !text.title.trim() || sug.kind === "working" || gen.kind === "generating"} onClick={() => void suggest()}>
                 {sug.kind === "done" ? t("write.briefSuggestAgain") : t("write.briefSuggest")}
               </button>
             </div>
-            <textarea aria-labelledby="brief-field-label" value={text.brief} onChange={(e) => edit({ brief: e.target.value })} placeholder={t("write.briefPlaceholder")} rows={4} disabled={gen.kind === "generating" || sug.kind === "working"} />
+            <textarea aria-labelledby="brief-field-label" value={text.brief} onChange={(e) => edit({ brief: e.target.value })} placeholder={t("write.briefPlaceholder")} rows={4} disabled={profileChanging || gen.kind === "generating" || sug.kind === "working"} />
             {sug.kind === "working" ? (
               <div className="generating" role="status">
                 <span className="spinner" aria-hidden="true" />
@@ -302,16 +317,16 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
             <div className="field-head">
               <span id="voice-field-label">{t("assist.voice")}</span>
               {/* Straight to the voice this article is written in, and straight back (scene c). */}
-              {article.voice_id && <button className="link" onClick={() => onAdjustVoice(article.voice_id!)}>{t("assist.voiceFix")}</button>}
+              {article.voice_id && <button className="link" disabled={profileChanging} onClick={() => onAdjustVoice(article.voice_id!)}>{t("assist.voiceFix")}</button>}
             </div>
-            <select aria-labelledby="voice-field-label" value={article.voice_id ?? ""} onChange={(e) => void setField({ voice_id: e.target.value || null })} disabled={gen.kind === "generating"}>
+            <select aria-labelledby="voice-field-label" value={article.voice_id ?? ""} onChange={(e) => void setField({ voice_id: e.target.value || null })} disabled={profileChanging || gen.kind === "generating"}>
               {!article.voice_id && <option value="">{t("assist.noVoice")}</option>}
               {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </div>
           <label className="field">
             <span>{t("write.platform")}</span>
-            <select value={article.platform_id} onChange={(e) => void setField({ platform_id: e.target.value })} disabled={gen.kind === "generating"}>
+            <select value={article.platform_id} onChange={(e) => void setField({ platform_id: e.target.value })} disabled={profileChanging || gen.kind === "generating"}>
               {platforms.map((p) => <option key={p.id} value={p.id}>{p.max_chars != null ? t("write.platformStatic", { name: p.name, max: String(p.max_chars) }) : p.name}</option>)}
             </select>
           </label>
@@ -325,7 +340,7 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
             </div>
           ) : (
             <div className="assist-actions">
-              <button className="btn pri" disabled={!canWrite} onClick={() => void write()}>{text.body.trim() ? t("write.again") : t("write.generate")}</button>
+              <button className="btn pri" disabled={profileChanging || !canWrite} onClick={() => void write()}>{text.body.trim() ? t("write.again") : t("write.generate")}</button>
               <span className="hint inline muted">{t("write.shortcut")}</span>
             </div>
           )}
@@ -341,11 +356,11 @@ export function Editor({ id, onBack, onDeleted, onGoVoices, onAdjustVoice }: { i
 
           <div className="assist-foot">
             {article.status !== "archived" ? (
-              <button className="quiet sm" onClick={() => void setField({ status: "archived" })}>{t("article.archive")}</button>
+              <button className="quiet sm" disabled={profileChanging} onClick={() => void setField({ status: "archived" })}>{t("article.archive")}</button>
             ) : (
-              <button className="quiet sm" onClick={() => void setField({ status: "draft" })}>{t("article.unarchive")}</button>
+              <button className="quiet sm" disabled={profileChanging} onClick={() => void setField({ status: "draft" })}>{t("article.unarchive")}</button>
             )}
-            <button className="quiet sm" onClick={() => void remove()}>{t("article.delete")}</button>
+            <button className="quiet sm" disabled={profileChanging} onClick={() => void remove()}>{t("article.delete")}</button>
           </div>
         </aside>
         )}

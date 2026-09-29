@@ -13,13 +13,22 @@ pub struct UiError {
 
 impl UiError {
     pub fn not_signed_in() -> Self {
-        Self { code: "not_signed_in", detail: String::new() }
+        Self {
+            code: "not_signed_in",
+            detail: String::new(),
+        }
     }
     pub fn invalid(detail: impl Into<String>) -> Self {
-        Self { code: "invalid_input", detail: detail.into() }
+        Self {
+            code: "invalid_input",
+            detail: detail.into(),
+        }
     }
     pub fn unknown(detail: impl Into<String>) -> Self {
-        Self { code: "unknown", detail: detail.into() }
+        Self {
+            code: "unknown",
+            detail: detail.into(),
+        }
     }
 }
 
@@ -43,12 +52,18 @@ impl From<anyhow::Error> for UiError {
             "sign_in_timeout"
         } else if lower.contains("no note creator") || lower.contains("no medium account") {
             "account_not_found"
-        } else if lower.contains("does not look like") || lower.contains("does not contain a json array") || lower.contains("has no posts") {
+        } else if lower.contains("does not look like")
+            || lower.contains("does not contain a json array")
+            || lower.contains("has no posts")
+        {
             "invalid_input"
-        } else if lower.contains("jwt") || lower.contains("401") || lower.contains("not signed in") {
+        } else if lower.contains("jwt") || lower.contains("401") || lower.contains("not signed in")
+        {
             "session_expired"
-        } else if e.chain().any(|c| c.downcast_ref::<reqwest::Error>().is_some_and(|r| r.is_connect() || r.is_timeout()))
-            || lower.contains("reaching ")
+        } else if e.chain().any(|c| {
+            c.downcast_ref::<reqwest::Error>()
+                .is_some_and(|r| r.is_connect() || r.is_timeout())
+        }) || lower.contains("reaching ")
             || lower.contains("dns")
         {
             "network"

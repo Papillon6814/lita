@@ -34,6 +34,16 @@ export const en = {
   "action.signIn": "Sign in with Google",
   "action.signOut": "Sign out",
   "account.menu": "Account",
+  "profile.label": "Profile",
+  "profile.loading": "Loading profiles…",
+  "profile.rename": "Rename…",
+  "profile.create": "New profile",
+  "profile.createLabel": "Name this publishing profile",
+  "profile.renameLabel": "Profile name",
+  "profile.namePlaceholder": "e.g. Company news",
+  "profile.createHint": "Enter to create, Escape to cancel",
+  "profile.renameHint": "Enter to save, Escape to cancel",
+  "profile.save": "Save",
   "error.not_signed_in": "You are signed out. Sign in and try again.",
   "error.session_expired": "Your session has expired. Sign in again.",
   "error.cancelled": "Cancelled.",
@@ -338,4 +348,4 @@ export const en = {
   "queue.stopped.network": "Once you are back online it goes on from here.",
 } as const;
 
-export type MessageKey = keyof typeof en;
+export type MessageKey = keyof typeof en | "profile.label" | "profile.loading" | "profile.rename" | "profile.create" | "profile.createLabel" | "profile.renameLabel" | "profile.namePlaceholder" | "profile.createHint" | "profile.renameHint" | "profile.save";

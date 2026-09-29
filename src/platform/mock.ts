@@ -246,6 +246,7 @@ function mockReadTalk(text: string, known: string[]): T.TalkReading {
 }
 // Lita wrote the articles; none of the writing is the person's own.
 if (scene === "topics-add-articles") voice = { ...voice, voice_sources: [] };
+let personalVoice: T.Voice = { ...voice, id: "bv1", name: "個人発信の文体", profile: { ...voice.profile, one_line: "自分の経験から考えを組み立てる、個人発信の文体。" }, voice_sources: sources.slice(0, 2) };
 
 const pieces: T.Piece[] = Array.from({ length: 5 }, (_, i) => ({
   title: ["資本政策は諦める順番を決める作業", "ファイナンスは時間を買う話", "エクイティの重さについて", "投資家との最初の会話で聞くこと", "利益率の議論が空回りする理由"][i],
@@ -264,7 +265,32 @@ const codex: T.CodexStatus =
 const session: T.SessionStatus =
   scene === "signed-out" ? { status: "signed_out" } : { status: "signed_in", email: "kuno@muumoo.online" };
 
+const initialProfile: T.PublishingProfile = { id: "profile-initial", name: "プロフィール 1", is_initial: true, created_at: "2026-09-23T00:00:00Z" };
+const secondProfile: T.PublishingProfile = { id: "profile-personal", name: "個人発信", is_initial: false, created_at: "2026-09-27T00:00:00Z" };
+const hasSecondProfile = scene.includes("profiles");
+let mockProfiles: T.PublishingProfile[] = [initialProfile, ...(hasSecondProfile ? [secondProfile] : [])];
+let selectedProfileId = initialProfile.id;
+let nextProfileId = 1;
 let hasVoice = !["intake", "intake-preset", "intake-open", "intake-connecting", "intake-loaded", "intake-manual", "intake-both", "building", "articles-first-run", "articles-no-voice", "topics-no-voice"].includes(scene);
+const cloneVoice = (value: T.Voice): T.Voice => ({
+  ...value,
+  profile: { ...value.profile },
+  voice_sources: value.voice_sources.map((source) => ({ ...source })),
+});
+const profileVoices = new Map<string, T.Voice[]>([
+  [initialProfile.id, hasVoice ? [cloneVoice(voice), ...(scene.startsWith("voices") ? [cloneVoice(voice2)] : [])] : []],
+  [secondProfile.id, hasSecondProfile && hasVoice ? [cloneVoice(personalVoice)] : []],
+ ]);
+const currentVoices = (profileId = selectedProfileId) => profileVoices.get(profileId) ?? [];
+const findCurrentVoice = (id: string) => currentVoices().find((item) => item.id === id) ?? null;
+const updateCurrentVoice = (id: string, update: (value: T.Voice) => T.Voice) => {
+  const voices = currentVoices();
+  const index = voices.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const updated = update(voices[index]);
+  profileVoices.set(selectedProfileId, voices.map((item, currentIndex) => currentIndex === index ? updated : item));
+  return updated;
+};
 
 // ----- articles (in-memory) -------------------------------------------------
 
@@ -299,6 +325,19 @@ if (frozen) {
     queue: states[i], created_at: ago(i), updated_at: ago(i),
   })));
 }
+if (hasSecondProfile) {
+  articles.unshift(
+    { id: "aq1", voice_id: "v1", platform_id: "note", title: "会社広報の順番待ち", body: "", brief: "会社向けの話を書く。", status: "draft", queue: "waiting", created_at: ago(1), updated_at: ago(1) },
+    { id: "aq0", voice_id: "v1", platform_id: "note", title: "会社広報が書いています", body: "", brief: "会社向けの話を書く。", status: "draft", queue: "writing", created_at: ago(2), updated_at: ago(2) },
+  );
+}
+const personalArticles: T.Article[] = hasSecondProfile ? [
+  { id: "bp1", voice_id: "bv1", platform_id: "x", title: "個人発信の下書き", body: "自分の視点で書いた別プロフィールの記事です。", brief: "個人の発信について。", status: "draft", queue: "writing", created_at: ago(2), updated_at: ago(2) },
+  { id: "bp2", voice_id: "bv1", platform_id: "note", title: "個人発信の順番待ち", body: "", brief: "個人の話を書く。", status: "draft", queue: "waiting", created_at: ago(1), updated_at: ago(1) },
+ ] : [];
+const articlesByProfile = new Map<string, T.Article[]>([[initialProfile.id, articles]]);
+if (hasSecondProfile) articlesByProfile.set(secondProfile.id, personalArticles);
+const currentArticles = () => articlesByProfile.get(selectedProfileId) ?? [];
 
 const emptyPolicy: T.Policy = { audience: "", takeaway: "", topics: [], avoid: "" };
 const fullPolicy: T.Policy = {
@@ -308,6 +347,11 @@ const fullPolicy: T.Policy = {
   avoid: "個別の会社名",
 };
 let policy: T.Policy = ["topics-picked", "topics-cloud-picked", "topics-policy-open-filled"].includes(scene) ? fullPolicy : emptyPolicy;
+const profilePolicies = new Map<string, T.Policy>([
+  [initialProfile.id, policy],
+  [secondProfile.id, { audience: "個人の読者", takeaway: "自分の経験から考える", topics: [], avoid: "会社の内部情報" }],
+ ]);
+const currentPolicy = () => profilePolicies.get(selectedProfileId) ?? emptyPolicy;
 
 // The words someone keeps writing about (2026-09-24). `weight` is 1–5 and is
 // folded into three sizes on screen; `written` marks a subject already used
@@ -333,7 +377,7 @@ const cloudView = (): T.CloudView => {
   if (!scene.startsWith("topics")) return { cloud: null, material_count: 0 };
   if (scene === "topics-cloud-first" || scene === "topics-cloud-stopped") return { cloud: null, material_count: 18 };
   // Nothing of one's own yet: the count is the writing added in this session.
-  if (scene.startsWith("topics-add")) return { cloud: null, material_count: voice.voice_sources.length };
+  if (scene.startsWith("topics-add")) return { cloud: null, material_count: currentVoices(initialProfile.id).reduce((count, item) => count + item.voice_sources.length, 0) };
   if (scene === "topics-cloud-few" || scene === "topics-picked-few") return { cloud: sparseCloud, material_count: 2 };
   if (scene === "topics-cloud-three") return { cloud: threeCloud, material_count: 2 };
   if (scene === "topics-cloud-few-more") return { cloud: sparseCloud, material_count: 4 };
@@ -342,6 +386,38 @@ const cloudView = (): T.CloudView => {
   // gather again, and never says how many more.
   if (scene === "topics-cloud-more") return { cloud: fullCloud, material_count: 24 };
   return { cloud: fullCloud, material_count: 18 };
+};
+const personalCloud: T.TopicCloud = {
+  words: [
+    { word: "働き方", weight: 4, written: false },
+    { word: "独立", weight: 3, written: false },
+    { word: "学び", weight: 2, written: false },
+  ],
+  gathered_at: ago(2),
+  material_count: 2,
+};
+const gatheredCloudsByProfile = new Map<string, T.TopicCloud>();
+const emptyCloudView: T.CloudView = { cloud: null, material_count: 0 };
+const sourceCount = (profileId: string) => currentVoices(profileId).reduce((count, item) => count + item.voice_sources.length, 0);
+const currentCloudView = (profileId = selectedProfileId): T.CloudView => {
+  const gathered = gatheredCloudsByProfile.get(profileId);
+  if (gathered) {
+    const currentCount = profileId === initialProfile.id && !scene.startsWith("topics-add") ? cloudView().material_count : sourceCount(profileId);
+    return { cloud: { ...gathered, words: gathered.words.map((word) => ({ ...word })) }, material_count: currentCount };
+  }
+  if (profileId === initialProfile.id) {
+    const view = cloudView();
+    return { ...view, material_count: scene.startsWith("topics-add") ? sourceCount(profileId) : view.material_count };
+  }
+  if (profileId === secondProfile.id && hasSecondProfile) {
+    return { cloud: { ...personalCloud, words: personalCloud.words.map((word) => ({ ...word })) }, material_count: sourceCount(profileId) };
+  }
+  return emptyCloudView;
+};
+const cloudForProfile = (profileId: string): T.TopicCloud | null => {
+  if (profileId === initialProfile.id) return cloudView().cloud ?? fullCloud;
+  if (profileId === secondProfile.id && hasSecondProfile) return personalCloud;
+  return null;
 };
 
 const topicRounds = [
@@ -370,7 +446,7 @@ const topicRounds = [
     "辞めた人の穴を、採用で埋めない",
   ],
 ];
-let topicRound = 0;
+const topicRoundsByProfile = new Map<string, number>();
 
 // What ten titles look like once words have been pressed: every one of them
 // is about the subjects that were picked. Money and exit words get their own ten.
@@ -401,24 +477,24 @@ const subjectTitles = [
 
 const queueHandlers = new Set<(e: T.QueueEvent) => void>();
 const emitQueue = (e: T.QueueEvent) => queueHandlers.forEach((h) => h(e));
-let queueTimer: number | undefined;
+const queueTimers = new Map<string, number>();
 
-// One at a time, in the order they were lined up (which is the order they
-// sit in the list).
-function stepQueue() {
-  if (frozen || queueTimer !== undefined) return;
-  const target = articles.find((a) => a.queue === "writing") ?? articles.find((a) => a.queue === "waiting");
+function stepQueue(profileId: string = selectedProfileId) {
+  if (frozen || queueTimers.has(profileId)) return;
+  const rows = articlesByProfile.get(profileId) ?? [];
+  const target = rows.find((article) => article.queue === "writing") ?? rows.find((article) => article.queue === "waiting");
   if (!target) return;
   target.queue = "writing";
   emitQueue({ kind: "changed" });
-  queueTimer = window.setTimeout(() => {
-    queueTimer = undefined;
+  const timer = window.setTimeout(() => {
+    queueTimers.delete(profileId);
     target.body = longBody;
     target.queue = null;
     target.updated_at = new Date().toISOString();
     emitQueue({ kind: "changed" });
-    stepQueue();
+    stepQueue(profileId);
   }, 3000);
+  queueTimers.set(profileId, timer);
 }
 
 const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
@@ -426,6 +502,9 @@ const versions: T.ArticleVersion[] = scene === "editor-versions" ? [
   { id: "v2", article_id: "a1", kind: "shortened", title: "", body: draftBody, prompt_sent: "…", elapsed_ms: 6000, created_at: ago(25) },
   { id: "v1", article_id: "a1", kind: "generated", title: "", body: draftBody + "資本政策の話は、結局のところ何を諦めるかの順番を決める作業でしかないのだろうか。", prompt_sent: "…", elapsed_ms: 6600, created_at: ago(40) },
 ] : [];
+const versionsByProfile = new Map<string, T.ArticleVersion[]>([[initialProfile.id, versions]]);
+if (hasSecondProfile) versionsByProfile.set(secondProfile.id, []);
+const currentVersions = () => versionsByProfile.get(selectedProfileId) ?? [];
 let nextId = 100;
 const excerpt = (b: string) => (b.trim().split("\n").find((l) => l.trim()) ?? "").slice(0, 80);
 
@@ -434,38 +513,38 @@ const importHandlers = new Set<(p: T.ImportProgress) => void>();
 const emitImport = (p: T.ImportProgress) => importHandlers.forEach((h) => h(p));
 
 export const mockHost: T.Host = {
-  listArticles: async (status) => { await wait(readDelay); return articles.filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })); },
-  getArticle: async (id) => { await wait(readDelay); return articles.find((a) => a.id === id) ?? null; },
+  listArticles: async (status) => { await wait(readDelay); return currentArticles().filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })); },
+  getArticle: async (id) => { await wait(readDelay); return currentArticles().find((a) => a.id === id) ?? null; },
   createArticle: async (platformId, voiceId) => {
-    // An empty draft is handed back instead of a second one (#93).
-    const empty = articles.filter((x) => x.status === "draft" && !x.title && !x.body && !x.brief && !x.queue);
-    if (empty.length > 0) { for (const e of empty.slice(1)) articles.splice(articles.indexOf(e), 1); return empty[0]; }
-    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? "v1", platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    articles.unshift(a); return a;
+    const rows = currentArticles();
+    const empty = rows.filter((x) => x.status === "draft" && !x.title && !x.body && !x.brief && !x.queue);
+    if (empty.length > 0) { for (const e of empty.slice(1)) rows.splice(rows.indexOf(e), 1); return empty[0]; }
+    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? currentVoices()[0]?.id ?? null, platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    rows.unshift(a); return a;
   },
   updateArticle: async (id, patch) => {
-    if (scene === "editor-save-failed") throw { code: "network", detail: "fetch failed: ENOTFOUND csfvqpqzvcorqlsmfjwb.supabase.co" };
-    const a = articles.find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: new Date().toISOString() });
+    if (scene.includes("save-failed")) throw { code: "network", detail: "fetch failed: network unavailable" };
+    const a = currentArticles().find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: new Date().toISOString() });
   },
-  deleteArticle: async (id) => { const i = articles.findIndex((a) => a.id === id); if (i >= 0) articles.splice(i, 1); return i >= 0; },
-  listVersions: async (articleId) => versions.filter((v) => v.article_id === articleId),
+  deleteArticle: async (id) => { const rows = currentArticles(); const i = rows.findIndex((a) => a.id === id); if (i >= 0) rows.splice(i, 1); return i >= 0; },
+  listVersions: async (articleId) => currentVersions().filter((version) => version.article_id === articleId),
   snapshotArticle: async (articleId, manual) => {
-    const a = articles.find((x) => x.id === articleId); if (!a) return null;
+    const a = currentArticles().find((x) => x.id === articleId); if (!a) return null;
     const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: manual ? "manual" : "edited", title: a.title, body: a.body, prompt_sent: null, elapsed_ms: null, created_at: new Date().toISOString() };
-    versions.unshift(v); return v;
+    currentVersions().unshift(v); return v;
   },
   restoreVersion: async (versionId) => {
-    const v = versions.find((x) => x.id === versionId)!; const a = articles.find((x) => x.id === v.article_id)!;
+    const v = currentVersions().find((x) => x.id === versionId)!; const a = currentArticles().find((x) => x.id === v.article_id)!;
     Object.assign(a, { title: v.title, body: v.body }); return a;
   },
   generateIntoArticle: async (articleId, _effort, previous) => {
     if (scene === "editor-generating" || scene === "editor-generating-long") return never();
     await wait(400);
-    const a = articles.find((x) => x.id === articleId)!;
+    const a = currentArticles().find((x) => x.id === articleId)!;
     a.body = previous ? draftBody : (a.platform_id === "x" ? draftBody : longBody);
     if (a.platform_id !== "x" && !a.title) a.title = "資本政策は諦める順番を決める作業";
     const v: T.ArticleVersion = { id: `v${nextId++}`, article_id: articleId, kind: previous ? "shortened" : "generated", title: a.title, body: a.body, prompt_sent: "…", elapsed_ms: 6600, created_at: new Date().toISOString() };
-    versions.unshift(v);
+    currentVersions().unshift(v);
     return { article: { ...a }, version: v, voice_notes: "常体で、問いで締める癖と「エクイティ」「ファイナンス」を使った。" };
   },
   // A brief written from the title (never saved). The native side takes ten
@@ -473,41 +552,50 @@ export const mockHost: T.Host = {
   suggestBrief: async (articleId) => {
     if (scene === "editor-brief-suggesting") return never();
     await wait(readDelay || 1000);
-    const a = articles.find((x) => x.id === articleId);
+    const a = currentArticles().find((x) => x.id === articleId);
     const title = a?.title.trim() || "この題";
     return `「${title}」について、数字の話に入る前に前提を揃える一本です。自分で売上や利益を見ている経営者に向けて書きます。同じ利益率でも分母の取り方で意味が変わること、そして自分の会社では何を分母にすべきかを、手元の例で示します。読み終えたあとに、自社の数字を一度だけ計算し直したくなる形にします。`;
   },
-  getPolicy: async () => policy,
-  setPolicy: async (p) => { policy = p; },
+  getPolicy: async () => ({ ...currentPolicy(), topics: [...currentPolicy().topics] }),
+  setPolicy: async (value) => { profilePolicies.set(selectedProfileId, { ...value, topics: [...value.topics] }); },
   // The editorial policy no longer carries what you often write about; the
   // cloud does (D-66), so the draft leaves that field empty.
   draftPolicy: async () => { await wait(1200); return { ...fullPolicy, topics: [] }; },
   getTopicCloud: async () => {
+    const profileId = selectedProfileId;
     await wait(readDelay);
     // The saved cloud cannot be read: the box says so, and gathering again is the way on.
     if (scene === "topics-cloud-unread") throw { code: "unknown", detail: "database is locked" };
-    return cloudView();
+    return currentCloudView(profileId);
   },
   gatherTopicCloud: async () => {
+    const profileId = selectedProfileId;
     // The first-run scene stays on the gathering line, so the quiet wait and
     // the way out of it can be seen.
     if (scene === "topics-cloud-first") return never();
     if (scene === "topics-cloud-failed") { await wait(readDelay || 800); throw { code: "codex_failed", detail: "topic cloud: empty response" }; }
     await wait(readDelay || 1500);
-    return { cloud: { ...fullCloud, material_count: cloudView().material_count }, material_count: cloudView().material_count };
+    const view = currentCloudView(profileId);
+    const cloud = cloudForProfile(profileId);
+    if (!cloud) return view;
+    const gathered = { ...cloud, words: cloud.words.map((word) => ({ ...word })), material_count: view.material_count };
+    gatheredCloudsByProfile.set(profileId, gathered);
+    return { cloud: gathered, material_count: view.material_count };
   },
   suggestTopics: async (subjects, _direction) => {
     await wait(scene.startsWith("topics-picked") ? 200 : 1200);
     // Picked words steer the titles, so they are visibly about those subjects.
     const cash = subjects.some((w) => w === "資金繰り" || w === "撤退基準");
-    const list = subjects.length > 0 ? (cash ? cashTitles : subjectTitles) : topicRounds[topicRound % topicRounds.length];
-    if (subjects.length === 0) topicRound += 1;
-    const taken = new Set(articles.map((a) => a.title.trim()));
+    const round = topicRoundsByProfile.get(selectedProfileId) ?? 0;
+    const list = subjects.length > 0 ? (cash ? cashTitles : subjectTitles) : topicRounds[round % topicRounds.length];
+    if (subjects.length === 0) topicRoundsByProfile.set(selectedProfileId, round + 1);
+    const taken = new Set(currentArticles().map((a) => a.title.trim()));
     return list.filter((t) => !taken.has(t));
   },
   enqueueArticles: async (titles, voiceId, platformId, _effort, subjects, direction) => {
     // The subject and the angle stay on separate lines, so neither reads as
     // the other (requirement 12–13).
+    const policy = currentPolicy();
     const brief = [
       policy.audience && `誰に向けて: ${policy.audience}`,
       policy.takeaway && `持ち帰ってほしいこと: ${policy.takeaway}`,
@@ -522,28 +610,32 @@ export const mockHost: T.Host = {
       status: "draft" as T.ArticleStatus, queue: "waiting" as T.QueueState,
       created_at: new Date(Date.now() - i).toISOString(), updated_at: new Date(Date.now() - i).toISOString(),
     }));
-    [...made].reverse().forEach((a) => articles.unshift(a));
-    stepQueue();
+    [...made].reverse().forEach((article) => currentArticles().unshift(article));
+    stepQueue(selectedProfileId);
     return made.map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) }));
   },
-  startQueue: async () => { stepQueue(); },
+  startQueue: async () => { for (const profile of mockProfiles) stepQueue(profile.id); },
   dequeueArticle: async (id) => {
-    const i = articles.findIndex((a) => a.id === id);
+    const rows = currentArticles();
+    const timer = queueTimers.get(selectedProfileId);
+    const i = rows.findIndex((article) => article.id === id);
     if (i < 0) return;
-    if (articles[i].queue === "writing") {
-      if (queueTimer !== undefined) { window.clearTimeout(queueTimer); queueTimer = undefined; }
-      articles[i].queue = null;
+    if (rows[i].queue === "writing") {
+      if (timer !== undefined) { window.clearTimeout(timer); queueTimers.delete(selectedProfileId); }
+      rows[i].queue = null;
     } else {
-      articles.splice(i, 1);
+      rows.splice(i, 1);
     }
     emitQueue({ kind: "changed" });
-    stepQueue();
+    stepQueue(selectedProfileId);
   },
   clearQueue: async () => {
-    if (queueTimer !== undefined) { window.clearTimeout(queueTimer); queueTimer = undefined; }
-    for (let i = articles.length - 1; i >= 0; i--) {
-      if (articles[i].queue === "waiting") articles.splice(i, 1);
-      else if (articles[i].queue === "writing") articles[i].queue = null;
+    const rows = currentArticles();
+    const timer = queueTimers.get(selectedProfileId);
+    if (timer !== undefined) { window.clearTimeout(timer); queueTimers.delete(selectedProfileId); }
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].queue === "waiting") rows.splice(i, 1);
+      else if (rows[i].queue === "writing") rows[i].queue = null;
     }
     emitQueue({ kind: "changed" });
   },
@@ -576,24 +668,66 @@ export const mockHost: T.Host = {
   signIn: () => (scene === "signing-in" ? never() : Promise.resolve<T.SessionStatus>({ status: "signed_in", email: "kuno@muumoo.online" })),
   cancelSignIn: async () => {},
   signOut: async () => ({ status: "signed_out" }),
+  listProfiles: async () => mockProfiles.map((profile) => ({ ...profile })),
+  selectedProfile: async () => {
+    const profile = mockProfiles.find((item) => item.id === selectedProfileId);
+    if (!profile) throw { code: "unknown", detail: "No selected mock Profile." };
+    return { ...profile };
+  },
+  createProfile: async (name) => {
+    const profile: T.PublishingProfile = { id: `profile-${nextProfileId++}`, name, is_initial: false, created_at: new Date().toISOString() };
+    mockProfiles = [...mockProfiles, profile];
+    profileVoices.set(profile.id, []);
+    articlesByProfile.set(profile.id, []);
+    versionsByProfile.set(profile.id, []);
+    profilePolicies.set(profile.id, { ...emptyPolicy, topics: [] });
+    topicRoundsByProfile.set(profile.id, 0);
+    selectedProfileId = profile.id;
+    return { ...profile };
+  },
+  renameProfile: async (id, name) => {
+    const profile = mockProfiles.find((item) => item.id === id);
+    if (!profile) throw { code: "invalid_input", detail: "No such mock Profile." };
+    profile.name = name;
+  },
+  selectProfile: async (id) => {
+    const profile = mockProfiles.find((item) => item.id === id);
+    if (!profile) throw { code: "invalid_input", detail: "No such mock Profile." };
+    selectedProfileId = id;
+    return { ...profile };
+  },
   listVoices: async () => {
     await wait(readDelay);
     // The voices cannot be listed, so there is no voice to add writing to.
     if (scene === "topics-add-unlisted") throw { code: "unknown", detail: "database is locked" };
-    return (hasVoice ? [{ id: voice.id, name: voice.name, created_at: voice.created_at, updated_at: voice.updated_at, source_count: voice.voice_sources.length }, ...(scene.startsWith("voices") ? [{ id: voice2.id, name: voice2.name, created_at: voice2.created_at, updated_at: voice2.updated_at, source_count: 2 }] : [])] : []); },
-  getVoice: async (id) => { await wait(readDelay); return id === "v2" ? voice2 : voice; },
-  deleteVoice: async () => true,
-  renameVoice: async (_id, name) => { voice = { ...voice, name }; },
-  updateVoiceProfile: async (_id, profile) => (voice = { ...voice, profile }),
+    return currentVoices().map((item) => ({ id: item.id, name: item.name, created_at: item.created_at, updated_at: item.updated_at, source_count: item.voice_sources.length }));
+  },
+  getVoice: async (id) => { await wait(readDelay); const found = findCurrentVoice(id); return found ? cloneVoice(found) : null; },
+  deleteVoice: async (id) => {
+    const voices = currentVoices();
+    if (!voices.some((item) => item.id === id)) return false;
+    profileVoices.set(selectedProfileId, voices.filter((item) => item.id !== id));
+    return true;
+  },
+  renameVoice: async (id, name) => { updateCurrentVoice(id, (value) => ({ ...value, name })); },
+  updateVoiceProfile: async (id, profile) => updateCurrentVoice(id, (value) => ({ ...value, profile })),
   createVoice: () => never(),
   listVoicePresets: async () => [{ id: "pr-polite-ja", name: "広報のです・ます", one_line: PRESET_ONE_LINE }],
-  createVoiceFromPreset: async (_id) => { voice = { ...presetVoice }; hasVoice = true; return voice; },
-  addVoiceSources: async (_id, added) => {
+  createVoiceFromPreset: async (_id) => {
+    const created = { ...presetVoice, id: selectedProfileId === initialProfile.id ? presetVoice.id : `${selectedProfileId}:${presetVoice.id}` };
+    profileVoices.set(selectedProfileId, [cloneVoice(created)]);
+    return cloneVoice(created);
+  },
+  addVoiceSources: async (id, added) => {
     await wait(300);
     if (scene === "topics-add-failed") throw { code: "network", detail: "fetch failed: ENOTFOUND csfvqpqzvcorqlsmfjwb.supabase.co" };
-    voice = { ...voice, voice_sources: [...voice.voice_sources, ...added.map((a, i) => ({ id: `n${i}`, kind: a.kind, origin: a.origin, account: a.account, body: a.body, created_at: new Date().toISOString() }))] }; return voice; },
-  removeVoiceSource: async (_id, sourceId) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => s.id !== sourceId) }; return voice; },
-  removeVoiceSources: async (_id, kind, account) => { voice = { ...voice, voice_sources: voice.voice_sources.filter((s) => !(s.kind === kind && s.account === account)) }; return voice; },
+    return updateCurrentVoice(id, (value) => ({
+      ...value,
+      voice_sources: [...value.voice_sources, ...added.map((source, index) => ({ id: `n${index}`, kind: source.kind, origin: source.origin, account: source.account, body: source.body, created_at: new Date().toISOString() }))],
+    }));
+  },
+  removeVoiceSource: async (id, sourceId) => updateCurrentVoice(id, (value) => ({ ...value, voice_sources: value.voice_sources.filter((source) => source.id !== sourceId) })),
+  removeVoiceSources: async (id, kind, account) => updateCurrentVoice(id, (value) => ({ ...value, voice_sources: value.voice_sources.filter((source) => !(source.kind === kind && source.account === account)) })),
   rebuildVoice: () => never(),
   cancelVoiceBuild: async () => {},
   materialBudget: async () => ({ per_piece_chars: 1500, total_chars: 20000 }),

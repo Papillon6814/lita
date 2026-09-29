@@ -285,6 +285,26 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .sidebar { display: flex; flex-direction: column; gap: 18px; padding: 16px 14px; border-right: 1px solid var(--line); background: #fff; position: sticky; top: 0; height: 100vh; }
 .side-top { display: flex; flex-direction: column; gap: 7px; padding: 2px 6px 4px; }
 .side-top .wordmark { padding-bottom: 6px; }
+.profile-picker { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 0 6px 4px; }
+.profile-label { color: var(--mute); font-size: .82rem; }
+.profile-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.profile-trigger:hover, .profile-trigger[aria-expanded="true"] { border-color: var(--mint); background: var(--mint-soft); }
+.profile-trigger:disabled { opacity: .55; cursor: default; }
+.profile-menu { position: absolute; z-index: 10; top: calc(100% + 2px); left: 6px; width: min(270px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / .12); }
+.profile-menu-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.profile-menu-item:hover, .profile-menu-item:focus-visible { background: var(--soft); }
+.profile-menu-item.selected { background: var(--mint-soft); color: var(--mint-ink); }
+.profile-menu-item:disabled { opacity: .55; cursor: default; }
+.profile-action { color: var(--mint-ink); }
+.profile-check { font-weight: 700; }
+.profile-separator { height: 1px; margin: 5px 3px; background: var(--line); }
+.profile-form { display: flex; flex-direction: column; gap: 7px; }
+.profile-input-label { font-size: .84rem; }
+.profile-form input { padding: 8px 10px; }
+.profile-hint { margin: 0; color: var(--mute); font-size: .78rem; line-height: 1.5; }
+.profile-form-actions { display: flex; align-items: center; gap: 14px; margin-top: 2px; }
+.profile-error { padding: 2px 7px; font-size: .82rem; }
+.profile-error .error { margin: 2px 0; }
 /* Two ways to start, stacked: from a title, then from a blank page (D-68). */
 .side-top .new { width: 100%; text-align: center; padding: 6px 12px; transition: none; }
 /* Stepping back happens the moment the list is known, not as a fade: a

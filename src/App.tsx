@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { forgetAll } from "./hooks/useQuietLoad";
 import { SIGN_IN_AGAIN } from "./components/ErrorNote";
 import { host, type CodexStatus, type SessionStatus, type UiError } from "./platform/host";
+import type { PublishingProfile } from "./platform/types";
 import { asUiError } from "./errors";
 import { t } from "./i18n";
 import { ErrorNote } from "./components/ErrorNote";
@@ -17,9 +18,22 @@ const CODEX_INSTALL_URL = "https://developers.openai.com/codex/cli";
 type View = { kind: "checking" } | { kind: "done"; status: CodexStatus };
 type Auth = { kind: "checking" } | { kind: "waiting" } | { kind: "done"; status: SessionStatus; error?: UiError };
 
+type ProfileState = { kind: "loading" } | { kind: "error"; error: UiError } | { kind: "ready"; profiles: PublishingProfile[]; selected: PublishingProfile };
 export default function App() {
   const [view, setView] = useState<View>({ kind: "checking" });
   const [auth, setAuth] = useState<Auth>({ kind: "checking" });
+  const [profileState, setProfileState] = useState<ProfileState>({ kind: "loading" });
+  const profileLoadVersion = useRef(0);
+  const loadProfiles = useCallback(async () => {
+    const request = ++profileLoadVersion.current;
+    setProfileState({ kind: "loading" });
+    try {
+      const [profiles, selected] = await Promise.all([host.listProfiles(), host.selectedProfile()]);
+      if (request === profileLoadVersion.current) setProfileState({ kind: "ready", profiles, selected });
+    } catch (e) {
+      if (request === profileLoadVersion.current) setProfileState({ kind: "error", error: asUiError(e) });
+    }
+  }, []);
   // Once both checks have answered, the app is up: a later re-check of Codex
   // shows its own steps, not the launch screen again.
   const [booted, setBooted] = useState(false);
@@ -55,6 +69,8 @@ export default function App() {
 
   const signOut = useCallback(async () => {
     forgetAll();
+    profileLoadVersion.current += 1;
+    setProfileState({ kind: "loading" });
     try { setAuth({ kind: "done", status: await host.signOut() }); }
     catch (e) { setAuth({ kind: "done", status: { status: "signed_out" }, error: asUiError(e) }); }
   }, []);
@@ -80,6 +96,17 @@ export default function App() {
   const session = auth.kind === "done" ? auth.status : null;
   const signedIn = session?.status === "signed_in";
   const codex = view.kind === "done" ? view.status : null;
+  useEffect(() => {
+    if (!signedIn) {
+      profileLoadVersion.current += 1;
+      setProfileState({ kind: "loading" });
+      return;
+    }
+    void loadProfiles();
+  }, [signedIn, loadProfiles]);
+  const onProfilesChanged = useCallback((profiles: PublishingProfile[], selected: PublishingProfile) => {
+    setProfileState({ kind: "ready", profiles, selected });
+  }, []);
   const codexReady = codex?.status === "ready";
 
   if (!booted && auth.kind === "done" && view.kind === "done") setBooted(true);
@@ -91,6 +118,24 @@ export default function App() {
   }
 
   if (signedIn && codexReady) {
+    if (profileState.kind !== "ready") {
+      return (
+        <>
+          <TopBar session={session} codex={codex} codexChecking={view.kind === "checking"} onSignOut={() => void signOut()} onShowCodexSteps={() => stepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+          <main className="shell">
+            {profileState.kind === "loading" ? (
+              <p className="muted" role="status">{t("profile.loading")}</p>
+            ) : (
+              <section className="panel">
+                <ErrorNote error={profileState.error} />
+                <button className="btn pri" onClick={() => void loadProfiles()}>{t("action.retry")}</button>
+              </section>
+            )}
+          </main>
+          {updateDialog}
+        </>
+      );
+    }
     return (
       <>
         <Shell
@@ -101,6 +146,9 @@ export default function App() {
           onShowCodexSteps={() => void check()}
           updateAvailable={updates.available}
           onUpdate={() => void updates.checkUpdate(true)}
+          profiles={profileState.profiles}
+          selectedProfile={profileState.selected}
+          onProfilesChanged={onProfilesChanged}
         />
         {updateDialog}
       </>

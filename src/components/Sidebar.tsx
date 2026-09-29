@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { ArticleStatus, CodexStatus, SessionStatus } from "../platform/host";
+import type { ArticleStatus, CodexStatus, PublishingProfile, SessionStatus, UiError } from "../platform/host";
 import { t } from "../i18n";
 import type { Route } from "./Shell";
+import { ErrorNote } from "./ErrorNote";
 
-type Props = {
+ type Props = {
   route: Route;
-  onRoute: (r: Route) => void;
+  onRoute: (route: Route) => void;
   onGoTopics: () => void;
-  // The main pane already has a mint button, so the top one steps back to a
-  // plain one; it stays in the same place with the same words (D-68).
   quietNew: boolean;
   session: SessionStatus | null;
   codex: CodexStatus | null;
@@ -17,24 +16,66 @@ type Props = {
   onShowCodexSteps: () => void;
   updateAvailable: string | null;
   onUpdate: () => void;
+  profiles: PublishingProfile[];
+  selectedProfile: PublishingProfile;
+  onSelectProfile: (id: string) => Promise<boolean>;
+  onCreateProfile: (name: string) => Promise<boolean>;
+  onRenameProfile: (id: string, name: string) => Promise<boolean>;
+  profileBusy: boolean;
+  profileError: UiError | null;
 };
 
-// Only "all" and "draft" are worth a sidebar entry: approved and archived
-// articles stay visible in the list, told apart by their badge (2026-09-23).
 export const FILTERS: (ArticleStatus | "all")[] = ["all", "draft"];
+type ProfileMenuMode = "closed" | "menu" | "create" | "rename";
 
-// Quiet when everything is fine; the Codex pill appears only when it is not.
-export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate }: Props) {
+export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate, profiles, selectedProfile, onSelectProfile, onCreateProfile, onRenameProfile, profileBusy, profileError }: Props) {
   const [open, setOpen] = useState(false);
+  const [profileMode, setProfileMode] = useState<ProfileMenuMode>("closed");
+  const [profileName, setProfileName] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const profileInputRef = useRef<HTMLInputElement>(null);
+  const profileItems = useRef<Array<HTMLButtonElement | null>>([]);
+
   useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
-  }, [open]);
+    if (profileMode === "create" || profileMode === "rename") {
+      requestAnimationFrame(() => {
+        profileInputRef.current?.focus();
+        if (profileMode === "rename") profileInputRef.current?.select();
+      });
+    } else if (profileMode === "menu") {
+      requestAnimationFrame(() => {
+        const index = profiles.findIndex((profile) => profile.id === selectedProfile.id);
+        profileItems.current[index < 0 ? 0 : index]?.focus();
+      });
+    }
+  }, [profileMode, profiles, selectedProfile.id]);
+
+  useEffect(() => {
+    const closeOutside = (event: MouseEvent) => {
+      if (!profileRef.current?.contains(event.target as Node)) setProfileMode("closed");
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (profileMode === "create" || profileMode === "rename") {
+        event.preventDefault();
+        setProfileName("");
+        setProfileMode("menu");
+        return;
+      }
+      if (profileMode === "menu") {
+        event.preventDefault();
+        setProfileMode("closed");
+        profileButtonRef.current?.focus();
+      }
+      if (open) setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOutside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", closeOutside); document.removeEventListener("keydown", escape); };
+  }, [profileMode, open]);
 
   const email = session?.status === "signed_in" ? session.email ?? "" : "";
   const codexOk = codex?.status === "ready";
@@ -47,55 +88,104 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
     : null;
   const inArticles = route.kind === "articles" || route.kind === "article" || route.kind === "topics";
   const filter = route.kind === "articles" ? route.filter : null;
+  const itemKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const count = profiles.length + 2;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      profileItems.current[(index + delta + count) % count]?.focus();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setProfileMode("closed");
+      profileButtonRef.current?.focus();
+    }
+  };
+  const chooseProfile = async (id: string) => {
+    if (profileBusy) return;
+    if (await onSelectProfile(id)) {
+      setProfileMode("closed");
+      profileButtonRef.current?.focus();
+    }
+  };
+  const submitProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = profileName.trim();
+    if (!name || profileBusy) return;
+    const saved = profileMode === "create"
+      ? await onCreateProfile(name)
+      : await onRenameProfile(selectedProfile.id, name);
+    if (saved) {
+      setProfileName("");
+      setProfileMode("menu");
+    }
+  };
+  const openRename = () => {
+    setProfileName(selectedProfile.name);
+    setProfileMode("rename");
+  };
+  const closeForm = () => { setProfileName(""); setProfileMode("menu"); };
 
   return (
     <nav className="sidebar" aria-label={t("nav.label")}>
       <div className="side-top">
         <b className="wordmark">Lita</b>
-        {/* One way to start an article: from a title (D-69). The blank page
-            is gone; a title is what the writer is actually missing. */}
-        <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onGoTopics}>{t("topics.entry")}</button>
+        <div className="profile-picker" ref={profileRef}>
+          <span className="profile-label">{t("profile.label")}</span>
+          <button ref={profileButtonRef} type="button" className="profile-trigger" aria-haspopup="menu" aria-expanded={profileMode !== "closed"} disabled={profileBusy} onClick={() => { setProfileMode(profileMode === "closed" ? "menu" : "closed"); }}>
+            <span>{selectedProfile.name}</span><span aria-hidden="true">⌄</span>
+          </button>
+          {profileMode === "menu" && (
+            <div className="profile-menu" role="menu" aria-label={t("profile.label")}>
+              {profiles.map((profile, index) => (
+                <button key={profile.id} ref={(element) => { profileItems.current[index] = element; }} type="button" role="menuitemradio" aria-checked={profile.id === selectedProfile.id} className={profile.id === selectedProfile.id ? "profile-menu-item selected" : "profile-menu-item"} disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, index)} onClick={() => void chooseProfile(profile.id)}>
+                  <span>{profile.name}</span>{profile.id === selectedProfile.id && <span className="profile-check" aria-hidden="true">✓</span>}
+                </button>
+              ))}
+              <div className="profile-separator" />
+              <button ref={(element) => { profileItems.current[profiles.length] = element; }} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length)} onClick={openRename}>{t("profile.rename")}</button>
+              <button ref={(element) => { profileItems.current[profiles.length + 1] = element; }} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length + 1)} onClick={() => { setProfileName(""); setProfileMode("create"); }}>{t("profile.create")}</button>
+              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
+            </div>
+          )}
+          {(profileMode === "create" || profileMode === "rename") && (
+            <form className="profile-menu profile-form" onSubmit={(event) => void submitProfile(event)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeForm(); } }}>
+              <label className="profile-input-label" htmlFor="profile-name">{t(profileMode === "create" ? "profile.createLabel" : "profile.renameLabel")}</label>
+              <input ref={profileInputRef} id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder={t("profile.namePlaceholder")} required disabled={profileBusy} />
+              <p className="profile-hint">{t(profileMode === "create" ? "profile.createHint" : "profile.renameHint")}</p>
+              <div className="profile-form-actions">
+                <button type="submit" className="btn pri sm" disabled={profileBusy || !profileName.trim()}>{t(profileMode === "create" ? "profile.create" : "profile.save")}</button>
+                <button type="button" className="link" disabled={profileBusy} onClick={closeForm}>{t("action.cancel")}</button>
+              </div>
+              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
+            </form>
+          )}
+        </div>
+        <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onGoTopics} disabled={profileBusy}>{t("topics.entry")}</button>
       </div>
 
       <div className="side-group">
-        <button className={inArticles ? "side-head on" : "side-head"} onClick={() => onRoute({ kind: "articles", filter: "all" })}>{t("nav.articles")}</button>
+        <button className={inArticles ? "side-head on" : "side-head"} disabled={profileBusy} onClick={() => onRoute({ kind: "articles", filter: "all" })}>{t("nav.articles")}</button>
         <ul className="side-list">
           {FILTERS.map((f) => (
             <li key={f}>
-              <button className={filter === f ? "side-item on" : "side-item"} aria-current={filter === f ? "page" : undefined} onClick={() => onRoute({ kind: "articles", filter: f })}>
-                {t(`article.filter.${f}` as const)}
-              </button>
+              <button className={filter === f ? "side-item on" : "side-item"} aria-current={filter === f ? "page" : undefined} disabled={profileBusy} onClick={() => onRoute({ kind: "articles", filter: f })}>{t(`article.filter.${f}` as const)}</button>
             </li>
           ))}
         </ul>
       </div>
-
       <div className="side-group">
-        <button className={route.kind === "voices" ? "side-head on" : "side-head"} aria-current={route.kind === "voices" ? "page" : undefined} onClick={() => onRoute({ kind: "voices" })}>{t("nav.voices")}</button>
+        <button className={route.kind === "voices" ? "side-head on" : "side-head"} aria-current={route.kind === "voices" ? "page" : undefined} disabled={profileBusy} onClick={() => onRoute({ kind: "voices" })}>{t("nav.voices")}</button>
       </div>
 
       <div className="side-bottom">
-        {updateAvailable && (
-          <button className="pill quiet side-pill update-pill" onClick={onUpdate}>{t("update.pill", { v: updateAvailable })}</button>
-        )}
-        {pill && (
-          <div className="pill warn side-pill">
-            <span>{pill}</span>
-            <button className="link" onClick={onShowCodexSteps}>{t("action.seeSteps")}</button>
-          </div>
-        )}
+        {updateAvailable && <button className="pill quiet side-pill update-pill" onClick={onUpdate}>{t("update.pill", { v: updateAvailable })}</button>}
+        {pill && <div className="pill warn side-pill"><span>{pill}</span><button className="link" onClick={onShowCodexSteps}>{t("action.seeSteps")}</button></div>}
         <div className="acct-wrap" ref={ref}>
-          <button className="acct" aria-haspopup="menu" aria-expanded={open} aria-label={t("account.menu")} onClick={() => setOpen((o) => !o)}>
-            <span className="avatar" aria-hidden="true">{(email[0] ?? "?").toUpperCase()}</span>
-            <span className="acct-email">{email}</span>
+          <button className="acct" aria-haspopup="menu" aria-expanded={open} aria-label={t("account.menu")} disabled={profileBusy} onClick={() => setOpen((value) => !value)}>
+            <span className="avatar" aria-hidden="true">{(email[0] ?? "?").toUpperCase()}</span><span className="acct-email">{email}</span>
           </button>
-          {open && (
-            <div className="menu up" role="menu">
-              <div className="menu-meta">{email}</div>
-              <div className="menu-meta">{codexOk ? t("status.codexOk") : t("status.codexNotOk")}</div>
-              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut(); }}>{t("action.signOut")}</button>
-            </div>
-          )}
+          {open && <div className="menu up" role="menu"><div className="menu-meta">{email}</div><div className="menu-meta">{codexOk ? t("status.codexOk") : t("status.codexNotOk")}</div><button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut(); }}>{t("action.signOut")}</button></div>}
         </div>
       </div>
     </nav>

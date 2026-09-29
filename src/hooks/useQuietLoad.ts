@@ -20,7 +20,8 @@ const cache = new Map<string, unknown>();
 
 /** One key for the voices, so every screen shares the same remembered list. */
 export const VOICES_KEY = "voices";
-export const voiceKey = (id: string) => `voice:${id}`;
+export const profileCacheKey = (profileId: string, key: string) => `profile:${profileId}:${key}`;
+export const voiceKey = (profileId: string, id: string) => profileCacheKey(profileId, `voice:${id}`);
 
 /** What was last fetched under this key, if anything. */
 export function peek<T>(key: string): T | undefined {
