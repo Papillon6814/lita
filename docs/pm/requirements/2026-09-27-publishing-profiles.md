@@ -2,7 +2,7 @@
 
 - 出所: 本人の依頼（2026-09-27）。Google ログイン 1 つのまま、発信先ごとの独立したプロフィールを持ちたい
 - 関係する決定: D-36〜D-40（サーバが正・Google ログイン・Supabase）、D-44（3 柱）、D-45（記事・版・Voice 参照）、D-46（自動保存）、D-51（本人用）、D-55（文体選択）、D-57（文体と元にした文章）、D-61（編集方針とキュー）、D-66（言葉の雲）、D-71〜D-78（2026-09-27 時点で有効）
-- Notion 仕様本体: https://ordinary-slouch-fe1.notion.site/Lita-3e29cda8bea1809e9077d080a350d218 は D-70 までの古い写し。D-71〜D-78 より古く、今回の正はリポジトリの `docs/pm/decisions.md`。Notion への同期は保留。
+- Notion 仕様本体: https://ordinary-slouch-fe1.notion.site/Lita-3e29cda8bea1809e9077d080a350d218 は ~~D-70 までの古い写し。D-71〜D-78 より古く、今回の正はリポジトリの `docs/pm/decisions.md`。Notion への同期は保留。~~ →2026-09-30 に D-79 まで同期済み（この要件書を書いた 2026-09-27 時点では D-70 までの古い写しで、正はリポジトリの `docs/pm/decisions.md` だった）。
 - 前提にした現物: `src/components/Shell.tsx`・`Sidebar.tsx`、`src/components/Editor.tsx`、`src/hooks/useAutosave.ts`、`src-tauri/src/lib.rs`、`crates/lita-store`、`supabase/migrations/20260923000000_articles.sql` と後続 migration。現行は単一の `user_settings` に編集方針・雲、ユーザー所有の Voice・記事・版を保存し、記事は `voice_id` で文体を参照。キューは記事の `queue` 状態に基づきログイン時に再開する。自動保存は失敗時にローカル保持・再試行する。
 
 ## 目的
