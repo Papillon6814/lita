@@ -60,6 +60,7 @@ pub enum Reading {
 /// one message per paragraph), so the same message is marked `seen`.
 pub fn read(text: &str, known: &[String]) -> Reading {
     let lines: Vec<String> = normalise(text).lines().map(|l| l.trim().to_string()).collect();
+    let lines = split_glued(lines);
     let mut kinds = classify(&lines);
     confirm_weak(&mut kinds);
     resolve_colons(&mut kinds);
@@ -126,6 +127,10 @@ struct Cues {
     stamp_colon: Regex,
     /// `10:23<TAB>Name<TAB>text` (a saved LINE history).
     tab_line: Regex,
+    /// `…textName  [10:04 PM]`: a header glued to the end of the line before
+    /// it, as a copy from Slack on the web can do. `head` is the whole
+    /// `Name  [time]` shape, `text` what comes before it.
+    glued: Regex,
     /// `[10:24]text`: the same person again.
     stamp_text: Regex,
     /// `Name: text` / `Name<TAB>text`, a conversation only when it recurs.
@@ -196,6 +201,7 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
         stamp_name: re(&format!(r"^\[(?P<stamp>{stamp})\]\s*(?P<name>[^:：\t\[\]]+?)$")),
         stamp_colon: re(&format!(r"^\[?(?P<stamp>{stamp})\]?\s+(?P<name>[^:：\t\[\]]{{1,30}}?)\s*[:：]\s*(?P<body>.*)$")),
         tab_line: re(&format!(r"^(?P<stamp>{clock})\t(?P<name>[^\t]{{1,40}})\t(?P<body>.*)$")),
+        glued: re(&format!(r"^(?P<text>.+?)\s{{2,}}\[(?P<stamp>{clock})\]$")),
         stamp_text: re(&format!(r"^\[(?P<stamp>{clock})\]\s*(?P<body>.+)$")),
         colon: re(r"^(?P<name>[^:：\s>][^:：]{0,23}?)\s*[:：]\s*(?P<body>.*)$"),
         tab_pair: re(r"^(?P<name>[^\t]{1,24})\t(?P<body>.+)$"),
@@ -322,6 +328,11 @@ fn classify(lines: &[String]) -> Vec<Kind> {
             Kind::Chrome
         } else if let Some(k) = header_on_line(l) {
             k
+        } else if c.glued.is_match(l) {
+            // A header's shape whose name could not be read, glued to other
+            // text (see `split_glued`). Where the previous message ends and
+            // who speaks next cannot be told, so what follows is nobody's.
+            Kind::Unknown
         } else if !after_head && c.stamp_line.is_match(next) && c.clock.is_match(next) {
             match name(l).filter(|n| heading_name(n)) {
                 Some(n) => {
@@ -341,6 +352,42 @@ fn classify(lines: &[String]) -> Vec<Kind> {
         };
         out.push(kind);
         i += 1;
+    }
+    out
+}
+
+/// Splits `…textName  [10:04 PM]` into `…text` and `Name  [10:04 PM]` when
+/// `Name` heads a message on a line of its own elsewhere in the paste and
+/// the text runs straight into it (no space between). Anything else is left
+/// as it is; `classify` then treats a glued line it cannot read as `Unknown`.
+fn split_glued(lines: Vec<String>) -> Vec<String> {
+    let c = &*CUES;
+    let mut known: Vec<String> = lines
+        .iter()
+        .filter_map(|l| match header_on_line(l) {
+            Some(Kind::Header { name, body: None, weak: false }) => Some(name),
+            _ => None,
+        })
+        .collect();
+    known.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+    known.dedup();
+    let mut out = Vec::with_capacity(lines.len());
+    for l in lines {
+        let split = c.glued.captures(&l).and_then(|m| {
+            let text = &m["text"];
+            known.iter().find_map(|n| {
+                let before = text.strip_suffix(n.as_str())?;
+                (!before.is_empty() && !before.ends_with(char::is_whitespace))
+                    .then(|| (before.to_string(), format!("{n}  [{}]", &m["stamp"])))
+            })
+        });
+        match split {
+            Some((before, head)) => {
+                out.push(before);
+                out.push(head);
+            }
+            None => out.push(l),
+        }
     }
     out
 }
@@ -1385,6 +1432,50 @@ I will write it up before Friday.
         let saved = kept(&r, Some("Rivera, Alex"));
         assert_eq!(saved, "The drop is mostly in annual plans.\n\nI will write it up before Friday.");
         assert_clean(&saved, &["James", "angry", "Rivera", "Thanks", "PM", "15:12"]);
+    }
+
+    // Slack on the web, English screen, checked with a real copy on
+    // 2026-09-30 (the shape only; names and words invented): `Name  [9:12 PM]`
+    // with two no-break spaces, and a header sometimes glued to the end of
+    // the previous message's last line. The first line has no header.
+    const SLACK_WEB_GLUED: &str = "来週の定例は火曜で大丈夫ですか
+森川 陽介\u{a0}\u{a0}[9:12 PM]
+火曜で大丈夫です。
+Mika Tanaka\u{a0}\u{a0}[9:12 PM]
+ありがとうございます
+森川 陽介\u{a0}\u{a0}[9:27 PM]
+議題は二つにします。\u{3000}採用と予算です。
+
+資料は前日までに共有します。
+Mika Tanaka\u{a0}\u{a0}[9:57 PM]
+了解です。
+予算の数字は私が用意します森川 陽介\u{a0}\u{a0}[10:04 PM]
+助かります。数字は月次でお願いします。Mika Tanaka\u{a0}\u{a0}[10:15 PM]
+承知しました。
+";
+
+    #[test]
+    fn slack_web_glued_headers() {
+        let r = read(SLACK_WEB_GLUED, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["森川 陽介", "Mika Tanaka"]);
+        let mika = kept(&r, Some("Mika Tanaka"));
+        assert_eq!(mika, "ありがとうございます\n\n了解です。\n予算の数字は私が用意します\n\n承知しました。");
+        assert_clean(&mika, &["森川", "助かります", "PM", "["]);
+        let me = kept(&r, Some("森川 陽介"));
+        assert_eq!(me, "火曜で大丈夫です。\n\n議題は二つにします。 採用と予算です。\n資料は前日までに共有します。\n\n助かります。数字は月次でお願いします。");
+        assert_clean(&me, &["Mika", "承知", "了解", "予算の数字は私", "PM"]);
+    }
+
+    // A header glued to a line whose name heads nothing else cannot be split
+    // safely: what follows is nobody's rather than the previous person's.
+    #[test]
+    fn a_glued_header_with_an_unknown_name_is_nobodys() {
+        let text = "森川 陽介  [9:12 PM]\n火曜で大丈夫です。\nMika Tanaka  [9:13 PM]\n了解です。数字は私が用意します。Sam Patel  [9:20 PM]\nSam の発言です。\n森川 陽介  [9:30 PM]\n助かります。\n";
+        let r = read(text, &[]);
+        let (_, messages) = talk(&r);
+        assert!(messages.iter().all(|m| !m.body.contains("Sam")), "{messages:?}");
+        assert_eq!(kept(&r, Some("森川 陽介")), "火曜で大丈夫です。\n\n助かります。");
     }
 
     // With only 24-hour times and no name heading a message anywhere, a
