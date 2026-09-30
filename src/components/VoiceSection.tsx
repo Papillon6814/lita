@@ -25,14 +25,13 @@ type State =
 
 type SectionProps = {
   profileId: string;
-  onWrite: (voiceId: string) => void;
   /** Open this voice straight away (the editor's 調整する link). */
   voiceId?: string;
   /** Where 調整する came from, so there is one way back to the same article. */
   onBackToArticle?: () => void;
 };
 
-export function VoiceSection({ profileId, onWrite, voiceId, onBackToArticle }: SectionProps) {
+export function VoiceSection({ profileId, voiceId, onBackToArticle }: SectionProps) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   // Opening a voice paints the remembered one first, then swaps in the
@@ -157,7 +156,6 @@ export function VoiceSection({ profileId, onWrite, voiceId, onBackToArticle }: S
             voice={state.voice}
             onChange={(voice) => { prime(voiceKey(profileId, voice.id), voice); setState({ ...state, voice }); }}
             onDelete={() => void remove(state.voice)}
-            onWrite={() => onWrite(state.voice.id)}
           />
           <VoiceSources voice={state.voice} onChange={(voice) => { prime(voiceKey(profileId, voice.id), voice); setState({ ...state, voice }); }} onRebuild={() => void rebuild(state)} />
           <p className="voice-foot">

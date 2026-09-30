@@ -2776,54 +2776,6 @@ async fn get_article(app: AppHandle, id: String) -> Result<Option<Article>, UiEr
     .map_err(|e| UiError::unknown(e.to_string()))?
 }
 
-/// A new, empty article. The voice defaults to the person's default voice,
-/// then to the newest voice, so "新しく書く" never asks first.
-///
-/// Pressing "新しく書く" twice must not leave two empty drafts (#93): an
-/// article with nothing in it yet is handed back instead of a new row, and
-/// any other empty ones are cleared away at the same time.
-#[tauri::command]
-async fn create_article(
-    app: AppHandle,
-    platform_id: Option<String>,
-    voice_id: Option<String>,
-) -> Result<Article, UiError> {
-    let (token, profile_id) = app.state::<AppState>().command_snapshot()?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let user = state.store.as_user(token);
-        let store = user.for_profile(&profile_id).map_err(fail)?;
-        let mut empties = store.empty_drafts().map_err(fail)?.into_iter();
-        if let Some(keep) = empties.next() {
-            for extra in empties {
-                let _ = store.delete_article(&extra.id);
-            }
-            return Ok(keep);
-        }
-        let voice_id = match voice_id {
-            Some(v) => Some(v),
-            None => match store.settings().map_err(fail)?.default_voice_id {
-                Some(v) => Some(v),
-                None => store
-                    .voices()
-                    .map_err(fail)?
-                    .into_iter()
-                    .next()
-                    .map(|v| v.id),
-            },
-        };
-        store
-            .create_article(&NewArticle {
-                voice_id,
-                platform_id: platform_id.unwrap_or_else(|| "x".into()),
-                ..Default::default()
-            })
-            .map_err(fail)
-    })
-    .await
-    .map_err(|e| UiError::unknown(e.to_string()))?
-}
-
 #[tauri::command]
 async fn update_article(app: AppHandle, id: String, patch: ArticlePatch) -> Result<(), UiError> {
     let (token, profile_id) = app.state::<AppState>().command_snapshot()?;
@@ -3336,7 +3288,6 @@ pub fn run() {
             generate_into_article,
             list_articles,
             get_article,
-            create_article,
             update_article,
             delete_article,
             list_versions,

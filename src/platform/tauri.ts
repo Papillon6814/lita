@@ -41,7 +41,6 @@ export const tauriHost: T.Host = {
   setDraftStatus: (id: string, status: T.DraftStatus) => invoke<void>("set_draft_status", { id, status }),
   listArticles: (status) => invoke<T.ArticleSummary[]>("list_articles", { status: status ?? null }),
   getArticle: (id) => invoke<T.Article | null>("get_article", { id }),
-  createArticle: (platformId, voiceId) => invoke<T.Article>("create_article", { platformId: platformId ?? null, voiceId: voiceId ?? null }),
   updateArticle: (id, patch) => invoke<void>("update_article", { id, patch }),
   deleteArticle: (id) => invoke<boolean>("delete_article", { id }),
   listVersions: (articleId) => invoke<T.ArticleVersion[]>("list_versions", { articleId }),

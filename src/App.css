@@ -94,8 +94,6 @@ button:focus-visible, summary:focus-visible, .tile-body:focus-visible { outline:
 .lead .link { font-size: 0.85rem; font-weight: 500; margin-left: 10px; vertical-align: middle; }
 .saved { color: var(--mint-ink); font-size: 0.85rem; margin: var(--gap) 0 0; display: flex; align-items: center; gap: 7px; }
 .saved::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--mint); flex: none; }
-.cta { display: flex; gap: 10px; align-items: center; }
-.cta .btn.pri { padding: 11px 20px; }
 details.more { margin-top: 16px; }
 details.more > summary { color: var(--mute); font-size: 0.9rem; cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 0; }
 details.more > summary::-webkit-details-marker { display: none; }

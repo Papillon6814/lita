@@ -106,11 +106,6 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
     }
   }, [profiles, selectedProfile, onProfilesChanged]);
 
-  const newArticle = useCallback(async (voiceId: string) => {
-    const article = await host.createArticle(undefined, voiceId);
-    setRoute({ kind: "article", id: article.id });
-  }, []);
-
   return (
     <div className="frame">
       <Sidebar
@@ -137,7 +132,7 @@ export function Shell({ session, codex, codexChecking, onSignOut, onShowCodexSte
         {route.kind === "articles" && <ArticleList profileId={selectedProfile.id} filter={route.filter} onOpen={(id) => setRoute({ kind: "article", id })} onGoVoices={() => setRoute({ kind: "voices" })} onGoTopics={() => setRoute({ kind: "topics" })} onMainPrimary={setMainPrimary} onShowCodexSteps={onShowCodexSteps} />}
         {route.kind === "topics" && <TopicPicker onBack={() => setRoute({ kind: "articles", filter: "all" })} onQueued={() => setRoute({ kind: "articles", filter: "all" })} onGoVoices={() => setRoute({ kind: "voices" })} />}
         {route.kind === "article" && <Editor key={`${selectedProfile.id}:${route.id}`} profileId={selectedProfile.id} id={route.id} onBack={() => setRoute({ kind: "articles", filter: "all" })} onDeleted={() => setRoute({ kind: "articles", filter: "all" })} onGoVoices={() => setRoute({ kind: "voices" })} onAdjustVoice={(voiceId) => setRoute({ kind: "voices", voiceId, backTo: { kind: "article", id: route.id } })} onRegisterFlush={registerEditorFlush} profileChanging={profileChanging} />}
-        {route.kind === "voices" && <VoiceSection profileId={selectedProfile.id} onWrite={(voiceId) => void newArticle(voiceId)} voiceId={route.voiceId} onBackToArticle={route.backTo ? () => setRoute(route.backTo!) : undefined} />}
+        {route.kind === "voices" && <VoiceSection profileId={selectedProfile.id} voiceId={route.voiceId} onBackToArticle={route.backTo ? () => setRoute(route.backTo!) : undefined} />}
       </main>
     </div>
   );

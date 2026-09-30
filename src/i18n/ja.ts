@@ -63,7 +63,6 @@ export const ja: Record<MessageKey, string> = {
   "voice.menu": "その他の操作",
   "voice.another": "別の文体を作る",
   "voice.renamePlaceholder": "文体の名前",
-  "voice.write": "この文体で書く",
   "voice.how": "Lita はこう書きます",
   "voice.savedNote": "いま書いてある記事はそのままで、次に書くときから反映されます。",
   "voice.card.none": "特になし",
