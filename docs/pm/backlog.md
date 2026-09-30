@@ -53,3 +53,4 @@
 - [x] **B-01 Codex 呼び出しの PoC** — 2026-09-22 完了。型付き JSON の受け取り、非リポジトリでの実行、プリフライトすべて確認。制約を3つ発見（検証記録参照）
 - [x] **B-09 GitHub への push と公開** — 2026-09-22 完了。https://github.com/Papillon6814/lita を public + MIT で公開
 - [ ] 文体ページに「Lita がこの文体で書いた見本文」を出す（D-58 で保留。`trial_write` 相当の生成が要る。D-54 で試し書きは廃止済みなので、復活は本人の判断）
+- [ ] 会話の貼り付けで未確認のコピー形式を確かめる（#129 の残り、2026-09-30 時点）: Slack 日本語 UI の行の並び、Google Chat、Chatwork、LINE デスクトップ。本人が普段のチャットから貼れるときに `talk::read` で確かめる。記録は `docs/pm/dev/2026-09-30-talk-real-formats.md`
