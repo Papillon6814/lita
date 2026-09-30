@@ -61,7 +61,6 @@ export const en = {
   "voice.menu": "More",
   "voice.another": "Build another voice",
   "voice.renamePlaceholder": "Voice name",
-  "voice.write": "Write with this Voice",
   "voice.how": "Lita writes like this",
   "voice.savedNote": "Articles you already wrote stay as they are; this applies the next time Lita writes.",
   "voice.card.none": "none in particular",

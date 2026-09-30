@@ -11,14 +11,15 @@ import type { UiError } from "../platform/host";
 const LANGUAGES: Record<string, string> = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", fr: "Français", de: "Deutsch", es: "Español" };
 const languageName = (tag: string) => LANGUAGES[tag.toLowerCase().split("-")[0]] ?? tag;
 
-type Props = { voice: Voice; onChange: (v: Voice) => void; onDelete: () => void; onWrite?: () => void };
+type Props = { voice: Voice; onChange: (v: Voice) => void; onDelete: () => void };
 
 // The page where Lita's writing is adjusted (2026-09-23): the name, the one
-// sentence Lita goes by, one main action, and then the eight things that can
-// be changed, in three short groups, open from the start (requirement 2 of
-// the voice feature; this revises D-56's "fold the details"). Rename and
-// delete hide behind "…"; every row is edited in place.
-export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
+// sentence Lita goes by, and then the eight things that can be changed, in
+// three short groups, open from the start (requirement 2 of the voice
+// feature; this revises D-56's "fold the details"). Writing starts from the
+// sidebar only (D-79). Rename and delete hide behind "…"; every row is edited
+// in place.
+export function VoicePortrait({ voice, onChange, onDelete }: Props) {
   const [menu, setMenu] = useState(false);
   // Said once, quietly, after a change is saved: what it does and does not touch.
   const [saved, setSaved] = useState(false);
@@ -128,9 +129,6 @@ export function VoicePortrait({ voice, onChange, onDelete, onWrite }: Props) {
               but a voice that came with Lita has no writing behind it, so the
               line goes as soon as any of your own is added. */}
           {voice.voice_sources.length === 0 && <p className="preset-note">{t("voice.preset.note")}</p>}
-          <div className="cta">
-            <button className="btn pri" onClick={onWrite} disabled={!onWrite}>{t("voice.write")}</button>
-          </div>
         </div>
       </section>
 

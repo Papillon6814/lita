@@ -515,13 +515,6 @@ const emitImport = (p: T.ImportProgress) => importHandlers.forEach((h) => h(p));
 export const mockHost: T.Host = {
   listArticles: async (status) => { await wait(readDelay); return currentArticles().filter((a) => !status || a.status === status).map(({ body, ...a }) => ({ ...a, excerpt: excerpt(body) })); },
   getArticle: async (id) => { await wait(readDelay); return currentArticles().find((a) => a.id === id) ?? null; },
-  createArticle: async (platformId, voiceId) => {
-    const rows = currentArticles();
-    const empty = rows.filter((x) => x.status === "draft" && !x.title && !x.body && !x.brief && !x.queue);
-    if (empty.length > 0) { for (const e of empty.slice(1)) rows.splice(rows.indexOf(e), 1); return empty[0]; }
-    const a: T.Article = { id: `a${nextId++}`, voice_id: voiceId ?? currentVoices()[0]?.id ?? null, platform_id: platformId ?? "x", title: "", body: "", brief: "", status: "draft", queue: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    rows.unshift(a); return a;
-  },
   updateArticle: async (id, patch) => {
     if (scene.includes("save-failed")) throw { code: "network", detail: "fetch failed: network unavailable" };
     const a = currentArticles().find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: new Date().toISOString() });

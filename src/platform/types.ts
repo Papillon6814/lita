@@ -217,7 +217,6 @@ export type Host = {
   setDraftStatus: (id: string, status: DraftStatus) => Promise<void>;
   listArticles: (status?: ArticleStatus) => Promise<ArticleSummary[]>;
   getArticle: (id: string) => Promise<Article | null>;
-  createArticle: (platformId?: string, voiceId?: string) => Promise<Article>;
   updateArticle: (id: string, patch: ArticlePatch) => Promise<void>;
   deleteArticle: (id: string) => Promise<boolean>;
   listVersions: (articleId: string) => Promise<ArticleVersion[]>;
