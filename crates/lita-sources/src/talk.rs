@@ -60,6 +60,7 @@ pub enum Reading {
 /// one message per paragraph), so the same message is marked `seen`.
 pub fn read(text: &str, known: &[String]) -> Reading {
     let lines: Vec<String> = normalise(text).lines().map(|l| l.trim().to_string()).collect();
+    let lines = split_glued(lines);
     let mut kinds = classify(&lines);
     confirm_weak(&mut kinds);
     resolve_colons(&mut kinds);
@@ -106,12 +107,19 @@ pub fn read(text: &str, known: &[String]) -> Reading {
 struct Cues {
     /// A line that is only a time and/or date: `10:23`, `午前 10:23`,
     /// `Today at 10:23 AM`, `2026/09/26(土)`, `[9/26 10:23]`, `10:23 (2 時間前)`.
+    /// A bot's mark or a status emoji may come first (`APP  9:12 PM`,
+    /// `アプリ  10:25`, `:palm_tree:  9:15 PM`): the name is on the line above.
     stamp_line: Regex,
     /// Whether a stamp says more than a bare clock (a date, a day, AM/PM).
     strong_stamp: Regex,
     /// Whether a stamp has a clock in it (a date divider does not).
     clock: Regex,
     /// `Name  10:23`, `Name [10:23 AM]`, `Name — Today 10:23`, `Name, 10:23`.
+    /// A bot's mark after the name (`Jira Bot アプリ  10:25`) is not part of it.
+    /// A bot is read like a person, by the same rules, under its name without
+    /// the mark: nobody picks a bot as themselves, so its words stay apart
+    /// from the person's either way, and one rule for everyone is easier to
+    /// keep than a second one for bots.
     name_stamp: Regex,
     /// `[9/26 10:23] Name` (the stamp must carry a date or a day).
     stamp_name: Regex,
@@ -119,6 +127,10 @@ struct Cues {
     stamp_colon: Regex,
     /// `10:23<TAB>Name<TAB>text` (a saved LINE history).
     tab_line: Regex,
+    /// `…textName  [10:04 PM]`: a header glued to the end of the line before
+    /// it, as a copy from Slack on the web can do. `head` is the whole
+    /// `Name  [time]` shape, `text` what comes before it.
+    glued: Regex,
     /// `[10:24]text`: the same person again.
     stamp_text: Regex,
     /// `Name: text` / `Name<TAB>text`, a conversation only when it recurs.
@@ -136,7 +148,10 @@ struct Cues {
     separator: Regex,
     /// A date or a time anywhere in a line, for a mail intro.
     mail_when: Regex,
+    /// `Name wrote on 2023/06/15 17:34:`: counts only with a date or a time.
+    wrote_on: Regex,
     /// `From:` followed by `Sent:` / `Date:`: an unquoted forwarded mail.
+    /// Also `*From:*` / `*Sent:*`, an Outlook header that Gmail turned into text.
     from: Regex,
     sent: Regex,
     /// The line before a wrapped `… <\naddr> wrote:`.
@@ -144,6 +159,8 @@ struct Cues {
     signature: Regex,
     /// Screen text, reactions, attachments, system lines, in Japanese and English.
     chrome: Vec<Regex>,
+    /// A link preview: this line and the title under it (Discord's `Website`).
+    preview: Regex,
     /// Lines under a mail header: `To 佐藤`, `宛先: …`, `to me`.
     head_chrome: Regex,
     /// Inline removals inside a kept message.
@@ -154,6 +171,8 @@ struct Cues {
     slack_mention: Regex,
     mention: Regex,
     emoji_code: Regex,
+    /// `(emoji)`, what a saved LINE history writes for an emoji.
+    line_emoji: Regex,
     edited: Regex,
     code_block: Regex,
     email: Regex,
@@ -171,31 +190,38 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
     let part = format!(r"(?:{day}|{date}|{clock}|{weekday})");
     let stamp = format!(r"{part}(?:\s*,?\s*(?:(?:at|の)\s*)?{part})*");
     let after = r"(?:\s*[(（][^)）]{1,24}[)）])?";
+    let bot = r"(?:APP|アプリ)";
+    let mark = format!(r"(?:{bot}|:[a-z0-9_+\-]+:)");
     let re = |s: &str| Regex::new(s).expect("talk cue");
     Cues {
-        stamp_line: re(&format!(r"^\[?\s*{stamp}\s*\]?{after}$")),
+        stamp_line: re(&format!(r"^(?:{mark}\s+)?\[?\s*{stamp}\s*\]?{after}$")),
         strong_stamp: re(&format!(r"{day}|{date}|[AaPp]\.?[Mm]\.?$|午前|午後|{weekday}")),
         clock: re(r"\d{1,2}[:：]\d{2}"),
-        name_stamp: re(&format!(r"^(?P<name>.+?)(?P<sep>\s*[—–|・,]\s*|\s+)(?P<open>\[)?(?P<stamp>{stamp})\]?{after}$")),
+        name_stamp: re(&format!(r"^(?P<name>.+?)(?:\s+{bot})?(?P<sep>\s*[—–|・,]\s*|\s+)(?P<open>\[)?(?P<stamp>{stamp})\]?{after}$")),
         stamp_name: re(&format!(r"^\[(?P<stamp>{stamp})\]\s*(?P<name>[^:：\t\[\]]+?)$")),
         stamp_colon: re(&format!(r"^\[?(?P<stamp>{stamp})\]?\s+(?P<name>[^:：\t\[\]]{{1,30}}?)\s*[:：]\s*(?P<body>.*)$")),
         tab_line: re(&format!(r"^(?P<stamp>{clock})\t(?P<name>[^\t]{{1,40}})\t(?P<body>.*)$")),
+        glued: re(&format!(r"^(?P<text>.+?)\s{{2,}}\[(?P<stamp>{clock})\]$")),
         stamp_text: re(&format!(r"^\[(?P<stamp>{clock})\]\s*(?P<body>.+)$")),
         colon: re(r"^(?P<name>[^:：\s>][^:：]{0,23}?)\s*[:：]\s*(?P<body>.*)$"),
         tab_pair: re(r"^(?P<name>[^\t]{1,24})\t(?P<body>.+)$"),
         time_lead: re(&format!(r"^\[?{clock}\]?\s+\S")),
         wrote: re(r"(?i)\bwrote\s*:\s*$"),
-        wrote_ja: re(r"(?:のメッセージ|が書きました|は書きました|書き込みました)\s*[:：]\s*$"),
+        wrote_on: re(r"(?i)\bwrote\s+on\s.+[:：]\s*$"),
+        wrote_ja: re(r"(?:のメッセージ|のメール|が書きました|は書きました|書き込みました)\s*[:：]\s*$"),
         addr_intro: re(r"<[^<>\s]+@[^<>\s]+>\s*[:：]\s*$"),
         separator: re(r"(?i)^-{2,}\s*(?:original message|forwarded message|元のメッセージ|転送されたメッセージ)\s*-{2,}$"),
         mail_when: re(&format!(r"{date}|{clock}")),
-        from: re(r"^(?:From|差出人)\s*[:：]\s*\S"),
-        sent: re(r"^(?:Sent|Date|送信日時|日付)\s*[:：]"),
+        from: re(r"^\*?(?:From|差出人)\s*[:：]\*?\s*\S"),
+        sent: re(r"^\*?(?:Sent|Date|送信日時|日付)\s*[:：]"),
         intro_head: re(r"(?i)^(?:on\s|\d{4}年|\d{4}/)"),
         signature: re(r"^--\s*$"),
         chrome: [
-            r"^\d+\s*件の返信$",
-            r"(?i)^\d+\s+repl(?:y|ies)$",
+            // The reply count and the last reply may share a line.
+            r"^\d+\s*件の返信(?:\s+最終返信.*)?$",
+            r"(?i)^\d+\s+repl(?:y|ies)(?:\s+last reply.*)?$",
+            // More faces in a thread than shown.
+            r"^\+\d{1,3}$",
             r"(?i)^(?:最終返信|last reply)\b.*$",
             r"(?i)^(?:view thread|スレッドを表示|スレッドに返信|スレッドで返信|reply in thread|reply|返信|返信する)$",
             r"(?i)^(?:also sent to the channel|チャンネルにも投稿済み|チャンネルにも送信済み|チャンネルにも投稿されました)$",
@@ -206,10 +232,21 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
             r"^.*(?:さん)?が(?:チャンネル|グループ)に参加しました。?$",
             r"(?i)^(?:posted in|投稿先)\s.*$",
             r"(?i)^(?:pinned by|ピン留め).*$",
-            r"(?i)^(?:\(edited\)|（編集済み）|\(編集済み\)|edited|編集済み)$",
+            r"(?i)^(?:\(edited\)|[(（]編集済み?[)）]|edited|編集済み?)$",
             r"(?i)^(?:seen by|既読).*$",
             r"^\d+$",
-            r"(?i)^\[(?:スタンプ|写真|動画|ファイル|アルバム|ボイスメッセージ|通話|位置情報|連絡先|sticker|photo|video|file|album|voice message|call|location|contact)[^\]]{0,20}\]$",
+            r"^\.$",
+            // An old Teams reaction: its name and a count.
+            r"(?i)^(?:like|heart|laugh|surprised|sad|angry)\s+\d+$",
+            // A LINE item in brackets, alone or with what it is (`[位置情報] 住所`).
+            r"(?i)^\[(?:スタンプ|写真|動画|ファイル|アルバム|ボイスメッセージ|通話|位置情報|連絡先|ノート|投票|プレゼント|sticker|photo|video|file|album|voice message|call|location|contact|note|poll|gift)[^\]]{0,20}\](?:\s.*)?$",
+            // A LINE call line.
+            r"^☎.*$",
+            // A LINE system line: the name column is empty.
+            r"^\d{1,2}:\d{2}\t\t.*$",
+            // An attachment and its size.
+            r"(?i)^(?:image|expand)$",
+            r"(?i)^\d+(?:\.\d+)?\s*(?:bytes|kb|mb|gb)$",
             r"(?i)^\[LINE\]\s.*$",
             r"(?i)^(?:保存日時|saved on)\s*[:：].*$",
             r"(?i)^[^\s/]+\.(?:pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|heic|zip|csv|txt|key|numbers|pages|mp4|mov)$",
@@ -218,6 +255,7 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
         .iter()
         .map(|s| re(s))
         .collect(),
+        preview: re(r"^Website$"),
         head_chrome: re(r"(?i)^(?:(?:to|cc|bcc|宛先|cc)\s*[:：]?\s+\S.{0,60}|to me|自分宛て?)$"),
         slack_link: re(r"<https?://[^|>\s]+\|([^>]+)>"),
         md_link: re(r"\[([^\]]+)\]\(https?://[^)\s]+\)"),
@@ -226,6 +264,7 @@ static CUES: LazyLock<Cues> = LazyLock::new(|| {
         slack_mention: re(r"<[@#!][A-Za-z0-9^]+(?:\|[^>]*)?>"),
         mention: re(r"[@＠][^\s@＠、。,.!?！？()（）]+"),
         emoji_code: re(r":(?:[a-z0-9_+\-]*[a-z][a-z0-9_+\-]*|[+\-]1):"),
+        line_emoji: re(r"\(emoji\)"),
         edited: re(r"\s*[(（](?:edited|編集済み|編集済)[)）]"),
         code_block: re(r"(?s)```.*?```"),
         email: re(r"\s*<[^<>\s]+@[^<>\s]+>"),
@@ -279,10 +318,21 @@ fn classify(lines: &[String]) -> Vec<Kind> {
             k
         } else if c.signature.is_match(l) {
             Kind::Signature
+        } else if c.preview.is_match(l) {
+            if !next.is_empty() {
+                out.push(Kind::Chrome);
+                i += 1;
+            }
+            Kind::Chrome
         } else if is_chrome(l) || (after_head && c.head_chrome.is_match(l)) {
             Kind::Chrome
         } else if let Some(k) = header_on_line(l) {
             k
+        } else if c.glued.is_match(l) {
+            // A header's shape whose name could not be read, glued to other
+            // text (see `split_glued`). Where the previous message ends and
+            // who speaks next cannot be told, so what follows is nobody's.
+            Kind::Unknown
         } else if !after_head && c.stamp_line.is_match(next) && c.clock.is_match(next) {
             match name(l).filter(|n| heading_name(n)) {
                 Some(n) => {
@@ -302,6 +352,42 @@ fn classify(lines: &[String]) -> Vec<Kind> {
         };
         out.push(kind);
         i += 1;
+    }
+    out
+}
+
+/// Splits `…textName  [10:04 PM]` into `…text` and `Name  [10:04 PM]` when
+/// `Name` heads a message on a line of its own elsewhere in the paste and
+/// the text runs straight into it (no space between). Anything else is left
+/// as it is; `classify` then treats a glued line it cannot read as `Unknown`.
+fn split_glued(lines: Vec<String>) -> Vec<String> {
+    let c = &*CUES;
+    let mut known: Vec<String> = lines
+        .iter()
+        .filter_map(|l| match header_on_line(l) {
+            Some(Kind::Header { name, body: None, weak: false }) => Some(name),
+            _ => None,
+        })
+        .collect();
+    known.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+    known.dedup();
+    let mut out = Vec::with_capacity(lines.len());
+    for l in lines {
+        let split = c.glued.captures(&l).and_then(|m| {
+            let text = &m["text"];
+            known.iter().find_map(|n| {
+                let before = text.strip_suffix(n.as_str())?;
+                (!before.is_empty() && !before.ends_with(char::is_whitespace))
+                    .then(|| (before.to_string(), format!("{n}  [{}]", &m["stamp"])))
+            })
+        });
+        match split {
+            Some((before, head)) => {
+                out.push(before);
+                out.push(head);
+            }
+            None => out.push(l),
+        }
     }
     out
 }
@@ -361,8 +447,9 @@ fn intro(l: &str, prev: &str, next: &str) -> Option<Kind> {
     let dated = |s: &str| c.mail_when.is_match(s) || s.contains('@');
     let wrote = c.wrote.is_match(l)
         && (l.contains('@') || (c.intro_head.is_match(l) && dated(l)) || (c.intro_head.is_match(prev) && dated(prev)));
+    let wrote_on = c.wrote_on.is_match(l) && c.mail_when.is_match(l);
     let wrote_ja = c.wrote_ja.is_match(l) && (dated(l) || dated(prev));
-    (wrote || wrote_ja).then_some(Kind::Intro { firm: false })
+    (wrote || wrote_on || wrote_ja).then_some(Kind::Intro { firm: false })
 }
 
 /// Whether a name found above a message could be a person's rather than the
@@ -390,11 +477,27 @@ fn heading_name(n: &str) -> bool {
 
 /// A weak header stays a name only when the same name heads another
 /// message in the paste; otherwise it becomes `Unknown`.
+///
+/// `[15:12] Name` (a clock with no date, then a name) looks the same as
+/// `[10:24]text`, the same person going on. When that text is a name that
+/// heads another message for sure, it is that person, not the previous one's words.
 fn confirm_weak(kinds: &mut [Kind]) {
     let mut count: HashMap<String, usize> = HashMap::new();
     for k in kinds.iter() {
         if let Kind::Header { name, .. } = k {
             *count.entry(name.clone()).or_default() += 1;
+        }
+    }
+    let firm: HashSet<String> = kinds
+        .iter()
+        .filter_map(|k| if let Kind::Header { name, weak: false, .. } = k { Some(name.clone()) } else { None })
+        .collect();
+    for k in kinds.iter_mut() {
+        if let Kind::Stamp { body: Some(b), .. } = k
+            && let Some(n) = name(b).filter(|n| firm.contains(n))
+        {
+            *count.entry(n.clone()).or_default() += 1;
+            *k = Kind::Header { name: n, body: None, weak: false };
         }
     }
     for k in kinds.iter_mut() {
@@ -576,6 +679,7 @@ fn clean(lines: &[String], speakers: &[String]) -> String {
         }
         s = c.mention.replace_all(&s, "").to_string();
         s = c.emoji_code.replace_all(&s, "").to_string();
+        s = c.line_emoji.replace_all(&s, "").to_string();
         s = c.edited.replace_all(&s, "").to_string();
         s = c.spaces.replace_all(&s, " ").to_string();
         let s = s.trim();
@@ -721,9 +825,11 @@ Thanks, that helps.
         assert_clean(&saved, &["Jordan", "Sam", "Alex", "AM", "churn", "Nice", "cc", "joined", "repl", "thread", "edited", "thinking", "Thanks"]);
     }
 
-    // Teams: GUESSED. No source for how Teams copies several messages could
-    // be checked; this is "[date time] Name" above the text. Each name speaks
-    // twice: a name after one space (the inline spelling) counts only then.
+    // Teams: GUESSED, close to the old Teams (1.x, until mid 2024), which put
+    // "[time] Name" above the text (see `TEAMS_OLD` for its checked shape).
+    // The new Teams copies the text only, with no name and no time (Microsoft
+    // Q&A, 2024-08 to 2026-08), so neither spelling here comes from it now.
+    // Each name speaks twice: a name after one space counts only then.
     const TEAMS_GUESSED: &str = "[9/26 10:21] 佐藤 花子
 来週の定例、議題を先に集めませんか
 [9/26 10:23] 森川 陽介
@@ -736,7 +842,8 @@ I'll add the budget review.
 資料は金曜に出します。
 ";
 
-    // Teams, the other guessed spelling: "Name date time" on one line.
+    // Teams, the other guessed spelling: "Name date time" on one line. No
+    // source was found for it in any Teams version; kept as a generic shape.
     const TEAMS_INLINE_GUESSED: &str = "佐藤 花子 9/26 10:21 AM
 来週の定例、議題を先に集めませんか
 森川 陽介 9/26 10:23 AM
@@ -1079,9 +1186,304 @@ Three days later I said yes.
             "As Drucker wrote:\nThe purpose of a business is to create a customer.\nI agree with this.\n",
             "On Sep 30, Drucker wrote:\nThe purpose of a business is to create a customer.\n",
             "山田さんはこう書きました:\n撤退基準は先に決める。\n",
+            "As Drucker wrote on Sep 30:\nThe purpose of a business is to create a customer.\n",
         ] {
             assert_eq!(read(text, &[]), Reading::Plain, "{text:?}");
         }
+    }
+
+    // ----- shapes checked against sources (2026-09-30) --------------------
+    // The shapes below follow copies found in public sources; the names and
+    // words are still invented. Sources: docs/pm/dev/2026-09-30-talk-real-formats.md.
+
+    // Slack, English screen, as pasted from the app in 2023 (blog.danielna.com):
+    // a name line, an indented time line, a time without AM/PM for the same
+    // person again, a bot's `APP  9:12 PM`, a status emoji before the time,
+    // `+2` for the thread's faces and the thread line run together.
+    const SLACK_EN_REAL: &str = "
+Dan Na
+  9:08 PM
+Hello this is a test!
+:tada:
+1
+
+Alex Rivera
+  9:10 PM
+The drop is mostly in annual plans.
+9:11
+I will write it up before Friday.
++2
+2 replies
+Last reply 9 days agoView thread
+
+GitHub
+APP  9:12 PM
+Pull request #12 opened by Dan Na
+
+Dan Na
+:palm_tree:  9:15 PM
+Thanks, that helps.
+
+Alex Rivera
+  11:22 AM
+One more thing: set the stop rule first. (edited)
+";
+
+    #[test]
+    fn slack_en_real_copy() {
+        let r = read(SLACK_EN_REAL, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["Dan Na", "Alex Rivera"]);
+        let saved = kept(&r, Some("Alex Rivera"));
+        assert_eq!(saved, "The drop is mostly in annual plans.\n\nI will write it up before Friday.\n\nOne more thing: set the stop rule first.");
+        assert_clean(&saved, &["Dan", "GitHub", "APP", "palm", "+2", "repl", "thread", "PM", "9:", "Hello", "Thanks", "Pull request", "tada", "edited"]);
+        // A bot heard once is nobody's, not a person's.
+        let (_, messages) = talk(&r);
+        assert!(messages.iter().all(|m| !m.body.contains("Pull request")), "{messages:?}");
+    }
+
+    // Slack, Japanese screen, with the name and the time on two lines as in
+    // English. Screen words from a 2022 Japanese Slack (docswell): `N件の返信
+    // 最終返信: 12日前` on one line, a bot marked `アプリ`. Confidence low: the
+    // line order is carried over from English.
+    const SLACK_JA_TWO_LINES: &str = "9月26日(金)
+佐藤 花子
+  10:21
+来週の採用面談、評価シートはどこですか？
+森川 陽介
+  10:23
+共有ドライブの「採用」フォルダに置きました。
+10:24
+火曜までにコメントをもらえると助かります。
+2件の返信 最終返信: 12日前
+Jira Bot アプリ  10:25
+Task を作成しました
+佐藤 花子
+  10:30
+承知しました。
+森川 陽介
+  10:32
+資金繰り表は週次に切り替えました。
+";
+
+    #[test]
+    fn slack_ja_two_lines() {
+        let r = read(SLACK_JA_TWO_LINES, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["佐藤 花子", "森川 陽介", "Jira Bot"]);
+        let saved = kept(&r, Some("森川 陽介"));
+        assert_eq!(saved, "共有ドライブの「採用」フォルダに置きました。\n\n火曜までにコメントをもらえると助かります。\n\n資金繰り表は週次に切り替えました。");
+        assert_clean(&saved, &["佐藤", "森川", "10:", "件の返信", "最終返信", "日前", "Jira", "アプリ", "Task", "評価シート", "承知"]);
+    }
+
+    // The bot's mark on a line of its own, under the bot's name.
+    #[test]
+    fn a_bot_mark_is_not_a_name() {
+        let r = read("佐藤 花子\n10:21\n確認お願いします\nJira Bot\nアプリ  10:22\nTask を作成しました\n佐藤 花子\n10:23\nありがとう\n", &[]);
+        let (speakers, messages) = talk(&r);
+        assert_eq!(speakers, ["佐藤 花子"]);
+        assert!(messages.iter().all(|m| !m.body.contains("Task") && !m.body.contains("アプリ")), "{messages:?}");
+    }
+
+    // A saved LINE history (.txt) as in real files (nakasyou/Patchouli,
+    // linelog2py): a system line with the name column empty, a message in
+    // quotes over lines with the closing quote alone, `(emoji)`, a location,
+    // a call line, and an unsent message with no name.
+    const LINE_REAL: &str = "[LINE] 広報チームのトーク
+保存日時：2026/09/30 10:00
+
+2026/09/26(金)
+00:10\t\t田中さんが参加しました。
+10:21\t佐藤 花子\t来週の定例どうしますか
+10:23\t森川 陽介\t\"議題は二つです。
+採用と予算です。
+\"
+10:24\t森川 陽介\t[スタンプ]
+10:25\t佐藤 花子\t了解です(emoji)
+10:26\t森川 陽介\t[位置情報] 東京都千代田区丸の内1-1
+10:27\t佐藤 花子\t☎ 通話時間 0:07
+10:28\t森川 陽介\t資料は金曜に出します。(emoji)
+10:29\t\tメッセージの送信を取り消しました
+";
+
+    #[test]
+    fn line_history_real() {
+        let r = read(LINE_REAL, &[]);
+        let (speakers, messages) = talk(&r);
+        assert_eq!(speakers, ["佐藤 花子", "森川 陽介"]);
+        assert!(messages.iter().all(|m| m.speaker.is_some()), "{messages:?}");
+        let saved = kept(&r, Some("森川 陽介"));
+        assert_eq!(saved, "議題は二つです。\n採用と予算です。\n\n資料は金曜に出します。");
+        assert_clean(&saved, &["田中", "参加", "取り消し", "emoji", "位置情報", "東京都", "通話", "☎", "\"", "スタンプ"]);
+        assert_clean(&kept(&r, Some("佐藤 花子")), &["emoji", "通話", "☎"]);
+    }
+
+    #[test]
+    fn line_history_en_saved_on_with_dots() {
+        let text = "[LINE] Chat history with Jordan Lee\nSaved on: 11/04/2018 17.55\n\nMon, 01/01/2018\n21:03\tJordan Lee\tWhat time works?\n21:05\tAlex Rivera\tTwo works.\n";
+        let saved = kept(&read(text, &[]), Some("Alex Rivera"));
+        assert_eq!(saved, "Two works.");
+    }
+
+    // The older LINE file, space-separated: where the name ends cannot be
+    // told, so it is not read as a conversation with names.
+    #[test]
+    fn line_history_old_spaces_is_not_split() {
+        let text = "2019.12.23 月曜日\n15:16 佐藤 花子 来週の定例どうしますか\n15:18 森川 陽介 議題は二つです\n15:20 佐藤 花子 了解です\n";
+        assert_eq!(read(text, &[]), Reading::Unsure);
+    }
+
+    // Discord, English, copied from the app (LangChain's Discord loader docs,
+    // 2023): a link preview (`Website` and its title) and an attached `Image`.
+    const DISCORD_REAL: &str = "talkingtower — 08/15/2023 11:10 AM
+Love music! Do you like jazz?
+reporterbob — 08/15/2023 9:27 PM
+Yes! Jazz is fantastic. Ever heard this one?
+Website
+Listen to classic jazz track...
+
+talkingtower — Yesterday at 5:03 AM
+Indeed! Great choice.
+reporterbob — Today at 2:38 PM
+I keep coming back to it.
+[2:40 PM]
+Image
+Also this one.
+";
+
+    #[test]
+    fn discord_real_copy() {
+        let r = read(DISCORD_REAL, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["talkingtower", "reporterbob"]);
+        let saved = kept(&r, Some("reporterbob"));
+        assert_eq!(saved, "Yes! Jazz is fantastic. Ever heard this one?\n\nI keep coming back to it.\n\nAlso this one.");
+        assert_clean(&saved, &["Website", "Listen to", "Image", "talkingtower", "Today", "PM", "jazz?", "Great choice"]);
+    }
+
+    // Discord, Japanese screen (2018 wiki): `(編集済)` on a line of its own.
+    #[test]
+    fn discord_ja_edited_line() {
+        let r = read("佐藤 花子 — 今日 10:21\nビルドが落ちてます\n森川 陽介 — 今日 10:23\n見ます。\n(編集済)\n", &[]);
+        assert_eq!(kept(&r, Some("森川 陽介")), "見ます。");
+    }
+
+    // Apple Mail, Japanese: `<date>、Name <addr>のメール:` above the quote
+    // (a real mail in the W3C list archive).
+    const MAIL_APPLE_JA: &str = "ありがとうございます。金曜までに直します。
+
+2026/09/26 12:35、山口 拓 <taku@example.com>のメール:
+
+> 資料の3ページ目、数字が古いようです。
+> 確認をお願いします。
+";
+
+    #[test]
+    fn mail_apple_ja() {
+        let r = read(MAIL_APPLE_JA, &[]);
+        let (speakers, _) = talk(&r);
+        assert!(speakers.is_empty());
+        let saved = kept(&r, None);
+        assert_eq!(saved, "ありがとうございます。金曜までに直します。");
+        assert_clean(&saved, &["山口", "taku", "のメール", "3ページ目", "確認をお願い", "12:35"]);
+    }
+
+    // Outlook's header as Gmail turns it into text (`*From:*`), and the
+    // `Name wrote on <date>:` line; both real mails in list archives.
+    #[test]
+    fn mail_other_intros() {
+        let text = "Thanks, I will fix the numbers by Friday.\n\n*From:* Jordan Lee <jordan.lee@example.com>\n*Sent:* Thursday, September 25, 2026 7:38:47 PM\n*To:* Alex Rivera\n*Subject:* RE: Deck\n\nAlex, page three still has last year's numbers.\n";
+        let saved = kept(&read(text, &[]), None);
+        assert_eq!(saved, "Thanks, I will fix the numbers by Friday.");
+
+        let text = "了解しました。明日までに送ります。\n\n中村 誠 wrote on 2026/09/25 17:34:\n> 資料の件、いかがでしょうか。\n";
+        let saved = kept(&read(text, &[]), None);
+        assert_eq!(saved, "了解しました。明日までに送ります。");
+    }
+
+    // The new Teams (since mid 2024) copies only the text: nothing to tell
+    // speakers apart by, so it is plain writing.
+    #[test]
+    fn teams_new_copies_text_only() {
+        assert_eq!(read("Good morning!\n\nRight back at you!\n\nCan we move the review to Friday?\n", &[]), Reading::Plain);
+    }
+
+    // The old Teams (1.x, until mid 2024; superuser.com, Microsoft Tech
+    // Community): `[time] Name` above the text, a name with a comma, a
+    // reaction line ` angry 1`, and a 24-hour time with no date.
+    const TEAMS_OLD: &str = "[Yesterday 8:15 AM] James Smith
+Can you send the numbers before lunch?
+[1:41 PM] Rivera, Alex
+The drop is mostly in annual plans.
+ angry 1
+
+
+[1:45 PM] James Smith
+Thanks, that helps.
+[15:12] Rivera, Alex
+I will write it up before Friday.
+";
+
+    #[test]
+    fn teams_old_format() {
+        let r = read(TEAMS_OLD, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["James Smith", "Rivera, Alex"]);
+        let saved = kept(&r, Some("Rivera, Alex"));
+        assert_eq!(saved, "The drop is mostly in annual plans.\n\nI will write it up before Friday.");
+        assert_clean(&saved, &["James", "angry", "Rivera", "Thanks", "PM", "15:12"]);
+    }
+
+    // Slack on the web, English screen, checked with a real copy on
+    // 2026-09-30 (the shape only; names and words invented): `Name  [9:12 PM]`
+    // with two no-break spaces, and a header sometimes glued to the end of
+    // the previous message's last line. The first line has no header.
+    const SLACK_WEB_GLUED: &str = "来週の定例は火曜で大丈夫ですか
+森川 陽介\u{a0}\u{a0}[9:12 PM]
+火曜で大丈夫です。
+Mika Tanaka\u{a0}\u{a0}[9:12 PM]
+ありがとうございます
+森川 陽介\u{a0}\u{a0}[9:27 PM]
+議題は二つにします。\u{3000}採用と予算です。
+
+資料は前日までに共有します。
+Mika Tanaka\u{a0}\u{a0}[9:57 PM]
+了解です。
+予算の数字は私が用意します森川 陽介\u{a0}\u{a0}[10:04 PM]
+助かります。数字は月次でお願いします。Mika Tanaka\u{a0}\u{a0}[10:15 PM]
+承知しました。
+";
+
+    #[test]
+    fn slack_web_glued_headers() {
+        let r = read(SLACK_WEB_GLUED, &[]);
+        let (speakers, _) = talk(&r);
+        assert_eq!(speakers, ["森川 陽介", "Mika Tanaka"]);
+        let mika = kept(&r, Some("Mika Tanaka"));
+        assert_eq!(mika, "ありがとうございます\n\n了解です。\n予算の数字は私が用意します\n\n承知しました。");
+        assert_clean(&mika, &["森川", "助かります", "PM", "["]);
+        let me = kept(&r, Some("森川 陽介"));
+        assert_eq!(me, "火曜で大丈夫です。\n\n議題は二つにします。 採用と予算です。\n資料は前日までに共有します。\n\n助かります。数字は月次でお願いします。");
+        assert_clean(&me, &["Mika", "承知", "了解", "予算の数字は私", "PM"]);
+    }
+
+    // A header glued to a line whose name heads nothing else cannot be split
+    // safely: what follows is nobody's rather than the previous person's.
+    #[test]
+    fn a_glued_header_with_an_unknown_name_is_nobodys() {
+        let text = "森川 陽介  [9:12 PM]\n火曜で大丈夫です。\nMika Tanaka  [9:13 PM]\n了解です。数字は私が用意します。Sam Patel  [9:20 PM]\nSam の発言です。\n森川 陽介  [9:30 PM]\n助かります。\n";
+        let r = read(text, &[]);
+        let (_, messages) = talk(&r);
+        assert!(messages.iter().all(|m| !m.body.contains("Sam")), "{messages:?}");
+        assert_eq!(kept(&r, Some("森川 陽介")), "火曜で大丈夫です。\n\n助かります。");
+    }
+
+    // With only 24-hour times and no name heading a message anywhere, a
+    // `[15:12] Name` line cannot be told from `[10:24]text`: not split.
+    #[test]
+    fn clock_then_name_alone_is_unsure() {
+        let text = "[15:12] James Smith\nCan you send the numbers?\n[15:14] Alex Rivera\nSure, by noon.\n";
+        assert_eq!(read(text, &[]), Reading::Unsure);
     }
 
     #[test]
