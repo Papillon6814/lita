@@ -37,8 +37,19 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const profileInputRef = useRef<HTMLInputElement>(null);
   const profileItems = useRef<Array<HTMLButtonElement | null>>([]);
+  // Set after a successful switch; the button can only take focus once it is
+  // enabled again, i.e. after profileBusy clears.
+  const [refocusButton, setRefocusButton] = useState(false);
 
   useEffect(() => {
+    if (!refocusButton || profileBusy) return;
+    setRefocusButton(false);
+    profileButtonRef.current?.focus();
+  }, [refocusButton, profileBusy]);
+
+  useEffect(() => {
+    // Disabled items cannot take focus; wait until the change has finished.
+    if (profileBusy) return;
     if (profileMode === "create" || profileMode === "rename") {
       requestAnimationFrame(() => {
         profileInputRef.current?.focus();
@@ -50,7 +61,7 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
         profileItems.current[index < 0 ? 0 : index]?.focus();
       });
     }
-  }, [profileMode, profiles, selectedProfile.id]);
+  }, [profileMode, profiles, selectedProfile.id, profileBusy]);
 
   useEffect(() => {
     const closeOutside = (event: MouseEvent) => {
@@ -104,7 +115,7 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
     if (profileBusy) return;
     if (await onSelectProfile(id)) {
       setProfileMode("closed");
-      profileButtonRef.current?.focus();
+      setRefocusButton(true);
     }
   };
   const submitProfile = async (event: React.FormEvent) => {
