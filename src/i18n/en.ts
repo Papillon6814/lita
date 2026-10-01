@@ -34,7 +34,7 @@ export const en = {
   "action.signIn": "Sign in with Google",
   "action.signOut": "Sign out",
   "account.menu": "Account",
-  "profile.label": "Profile",
+  "account.menuWithProfile": "Account (profile: {name})",
   "profile.loading": "Loading profiles…",
   "profile.rename": "Rename…",
   "profile.create": "New profile",
@@ -347,4 +347,4 @@ export const en = {
   "queue.stopped.network": "Once you are back online it goes on from here.",
 } as const;
 
-export type MessageKey = keyof typeof en | "profile.label" | "profile.loading" | "profile.rename" | "profile.create" | "profile.createLabel" | "profile.renameLabel" | "profile.namePlaceholder" | "profile.createHint" | "profile.renameHint" | "profile.save";
+export type MessageKey = keyof typeof en | "profile.loading" | "profile.rename" | "profile.create" | "profile.createLabel" | "profile.renameLabel" | "profile.namePlaceholder" | "profile.createHint" | "profile.renameHint" | "profile.save";

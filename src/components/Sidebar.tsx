@@ -3,6 +3,7 @@ import type { ArticleStatus, CodexStatus, PublishingProfile, SessionStatus, UiEr
 import { t } from "../i18n";
 import type { Route } from "./Shell";
 import { ErrorNote } from "./ErrorNote";
+import { mockScene } from "../platform/mock";
 
  type Props = {
   route: Route;
@@ -29,10 +30,9 @@ export const FILTERS: (ArticleStatus | "all")[] = ["all", "draft"];
 type ProfileMenuMode = "closed" | "menu" | "create" | "rename";
 
 export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, codexChecking, onSignOut, onShowCodexSteps, updateAvailable, onUpdate, profiles, selectedProfile, onSelectProfile, onCreateProfile, onRenameProfile, profileBusy, profileError }: Props) {
-  const [open, setOpen] = useState(false);
-  const [profileMode, setProfileMode] = useState<ProfileMenuMode>("closed");
+  // Profiles are switched only from the account menu at the bottom (D-80).
+  const [profileMode, setProfileMode] = useState<ProfileMenuMode>(() => mockScene() === "profiles-menu" ? "menu" : mockScene() === "profiles-create" ? "create" : "closed");
   const [profileName, setProfileName] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const profileInputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +55,6 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
   useEffect(() => {
     const closeOutside = (event: MouseEvent) => {
       if (!profileRef.current?.contains(event.target as Node)) setProfileMode("closed");
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -70,12 +69,11 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
         setProfileMode("closed");
         profileButtonRef.current?.focus();
       }
-      if (open) setOpen(false);
     };
     document.addEventListener("mousedown", closeOutside);
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("mousedown", closeOutside); document.removeEventListener("keydown", escape); };
-  }, [profileMode, open]);
+  }, [profileMode]);
 
   const email = session?.status === "signed_in" ? session.email ?? "" : "";
   const codexOk = codex?.status === "ready";
@@ -88,12 +86,13 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
     : null;
   const inArticles = route.kind === "articles" || route.kind === "article" || route.kind === "topics";
   const filter = route.kind === "articles" ? route.filter : null;
+  // Profiles, then rename and new, then sign out.
+  const itemCount = profiles.length + 3;
   const itemKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const count = profiles.length + 2;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const delta = event.key === "ArrowDown" ? 1 : -1;
-      profileItems.current[(index + delta + count) % count]?.focus();
+      profileItems.current[(index + delta + itemCount) % itemCount]?.focus();
     }
     if (event.key === "Escape") {
       event.preventDefault();
@@ -125,42 +124,12 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
     setProfileMode("rename");
   };
   const closeForm = () => { setProfileName(""); setProfileMode("menu"); };
+  const itemRef = (index: number) => (element: HTMLButtonElement | null) => { profileItems.current[index] = element; };
 
   return (
     <nav className="sidebar" aria-label={t("nav.label")}>
       <div className="side-top">
         <b className="wordmark">Lita</b>
-        <div className="profile-picker" ref={profileRef}>
-          <span className="profile-label">{t("profile.label")}</span>
-          <button ref={profileButtonRef} type="button" className="profile-trigger" aria-haspopup="menu" aria-expanded={profileMode !== "closed"} disabled={profileBusy} onClick={() => { setProfileMode(profileMode === "closed" ? "menu" : "closed"); }}>
-            <span>{selectedProfile.name}</span><span aria-hidden="true">⌄</span>
-          </button>
-          {profileMode === "menu" && (
-            <div className="profile-menu" role="menu" aria-label={t("profile.label")}>
-              {profiles.map((profile, index) => (
-                <button key={profile.id} ref={(element) => { profileItems.current[index] = element; }} type="button" role="menuitemradio" aria-checked={profile.id === selectedProfile.id} className={profile.id === selectedProfile.id ? "profile-menu-item selected" : "profile-menu-item"} disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, index)} onClick={() => void chooseProfile(profile.id)}>
-                  <span>{profile.name}</span>{profile.id === selectedProfile.id && <span className="profile-check" aria-hidden="true">✓</span>}
-                </button>
-              ))}
-              <div className="profile-separator" />
-              <button ref={(element) => { profileItems.current[profiles.length] = element; }} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length)} onClick={openRename}>{t("profile.rename")}</button>
-              <button ref={(element) => { profileItems.current[profiles.length + 1] = element; }} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length + 1)} onClick={() => { setProfileName(""); setProfileMode("create"); }}>{t("profile.create")}</button>
-              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
-            </div>
-          )}
-          {(profileMode === "create" || profileMode === "rename") && (
-            <form className="profile-menu profile-form" onSubmit={(event) => void submitProfile(event)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeForm(); } }}>
-              <label className="profile-input-label" htmlFor="profile-name">{t(profileMode === "create" ? "profile.createLabel" : "profile.renameLabel")}</label>
-              <input ref={profileInputRef} id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder={t("profile.namePlaceholder")} required disabled={profileBusy} />
-              <p className="profile-hint">{t(profileMode === "create" ? "profile.createHint" : "profile.renameHint")}</p>
-              <div className="profile-form-actions">
-                <button type="submit" className="btn pri sm" disabled={profileBusy || !profileName.trim()}>{t(profileMode === "create" ? "profile.create" : "profile.save")}</button>
-                <button type="button" className="link" disabled={profileBusy} onClick={closeForm}>{t("action.cancel")}</button>
-              </div>
-              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
-            </form>
-          )}
-        </div>
         <button className={quietNew ? "btn sm new" : "btn pri sm new"} onClick={onGoTopics} disabled={profileBusy}>{t("topics.entry")}</button>
       </div>
 
@@ -181,11 +150,40 @@ export function Sidebar({ route, onRoute, onGoTopics, quietNew, session, codex, 
       <div className="side-bottom">
         {updateAvailable && <button className="pill quiet side-pill update-pill" onClick={onUpdate}>{t("update.pill", { v: updateAvailable })}</button>}
         {pill && <div className="pill warn side-pill"><span>{pill}</span><button className="link" onClick={onShowCodexSteps}>{t("action.seeSteps")}</button></div>}
-        <div className="acct-wrap" ref={ref}>
-          <button className="acct" aria-haspopup="menu" aria-expanded={open} aria-label={t("account.menu")} disabled={profileBusy} onClick={() => setOpen((value) => !value)}>
-            <span className="avatar" aria-hidden="true">{(email[0] ?? "?").toUpperCase()}</span><span className="acct-email">{email}</span>
+        <div className="acct-wrap" ref={profileRef}>
+          <button ref={profileButtonRef} type="button" className="acct" aria-haspopup="menu" aria-expanded={profileMode !== "closed"} aria-label={t("account.menuWithProfile", { name: selectedProfile.name })} disabled={profileBusy} onClick={() => { setProfileMode(profileMode === "closed" ? "menu" : "closed"); }}>
+            <span className="avatar" aria-hidden="true">{(email[0] ?? "?").toUpperCase()}</span>
+            <span className="acct-text"><span className="acct-profile">{selectedProfile.name}</span><span className="acct-email">{email}</span></span>
           </button>
-          {open && <div className="menu up" role="menu"><div className="menu-meta">{email}</div><div className="menu-meta">{codexOk ? t("status.codexOk") : t("status.codexNotOk")}</div><button role="menuitem" className="menu-item" onClick={() => { setOpen(false); onSignOut(); }}>{t("action.signOut")}</button></div>}
+          {profileMode === "menu" && (
+            <div className="profile-menu" role="menu" aria-label={t("account.menu")}>
+              {profiles.map((profile, index) => (
+                <button key={profile.id} ref={itemRef(index)} type="button" role="menuitemradio" aria-checked={profile.id === selectedProfile.id} className={profile.id === selectedProfile.id ? "profile-menu-item selected" : "profile-menu-item"} disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, index)} onClick={() => void chooseProfile(profile.id)}>
+                  <span className="profile-menu-name">{profile.name}</span>{profile.id === selectedProfile.id && <span className="profile-check" aria-hidden="true">✓</span>}
+                </button>
+              ))}
+              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
+              <div className="profile-separator" role="separator" />
+              <button ref={itemRef(profiles.length)} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length)} onClick={openRename}>{t("profile.rename")}</button>
+              <button ref={itemRef(profiles.length + 1)} type="button" role="menuitem" className="profile-menu-item profile-action" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length + 1)} onClick={() => { setProfileName(""); setProfileMode("create"); }}>{t("profile.create")}</button>
+              <div className="profile-separator" role="separator" />
+              <div className="menu-meta">{email}</div>
+              <div className="menu-meta">{codexOk ? t("status.codexOk") : t("status.codexNotOk")}</div>
+              <button ref={itemRef(profiles.length + 2)} type="button" role="menuitem" className="profile-menu-item" disabled={profileBusy} onKeyDown={(event) => itemKeyDown(event, profiles.length + 2)} onClick={() => { setProfileMode("closed"); onSignOut(); }}>{t("action.signOut")}</button>
+            </div>
+          )}
+          {(profileMode === "create" || profileMode === "rename") && (
+            <form className="profile-menu profile-form" onSubmit={(event) => void submitProfile(event)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeForm(); } }}>
+              <label className="profile-input-label" htmlFor="profile-name">{t(profileMode === "create" ? "profile.createLabel" : "profile.renameLabel")}</label>
+              <input ref={profileInputRef} id="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder={t("profile.namePlaceholder")} required disabled={profileBusy} />
+              <p className="profile-hint">{t(profileMode === "create" ? "profile.createHint" : "profile.renameHint")}</p>
+              <div className="profile-form-actions">
+                <button type="submit" className="btn pri sm" disabled={profileBusy || !profileName.trim()}>{t(profileMode === "create" ? "profile.create" : "profile.save")}</button>
+                <button type="button" className="link" disabled={profileBusy} onClick={closeForm}>{t("action.cancel")}</button>
+              </div>
+              {profileError && <div className="profile-error"><ErrorNote error={profileError} /></div>}
+            </form>
+          )}
         </div>
       </div>
     </nav>
