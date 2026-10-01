@@ -283,14 +283,11 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .sidebar { display: flex; flex-direction: column; gap: 18px; padding: 16px 14px; border-right: 1px solid var(--line); background: #fff; position: sticky; top: 0; height: 100vh; }
 .side-top { display: flex; flex-direction: column; gap: 7px; padding: 2px 6px 4px; }
 .side-top .wordmark { padding-bottom: 6px; }
-.profile-picker { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 0 6px 4px; }
-.profile-label { color: var(--mute); font-size: .82rem; }
-.profile-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
-.profile-trigger:hover, .profile-trigger[aria-expanded="true"] { border-color: var(--mint); background: var(--mint-soft); }
-.profile-trigger:disabled { opacity: .55; cursor: default; }
-.profile-menu { position: absolute; z-index: 10; top: calc(100% + 2px); left: 6px; width: min(270px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / .12); }
+/* The account menu and the name form open upward from the account button (D-80). */
+.profile-menu { position: absolute; z-index: 10; bottom: calc(100% + 6px); left: 0; width: min(270px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / .12); }
 .profile-menu-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
 .profile-menu-item:hover, .profile-menu-item:focus-visible { background: var(--soft); }
+.profile-menu-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-menu-item.selected { background: var(--mint-soft); color: var(--mint-ink); }
 .profile-menu-item:disabled { opacity: .55; cursor: default; }
 .profile-action { color: var(--mint-ink); }
@@ -318,8 +315,12 @@ h3.step .using { margin-left: auto; font-weight: 400; color: var(--mute); font-s
 .side-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
 .side-pill { flex-direction: column; align-items: flex-start; border-radius: var(--r-ctl); padding: 8px 10px; }
 .sidebar .acct { width: 100%; justify-content: flex-start; padding: 6px 8px; border-radius: var(--r-ctl); }
-.acct-email { font-size: 0.82rem; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.menu.up { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
+.sidebar .acct .avatar { flex: none; }
+.sidebar .acct:disabled { opacity: .55; cursor: default; }
+.acct-text { display: flex; flex-direction: column; min-width: 0; text-align: left; line-height: 1.35; }
+.acct-profile, .acct-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-profile { font-size: 0.9rem; color: var(--fg); }
+.acct-email { font-size: 0.78rem; color: var(--mute); }
 .main { min-width: 0; padding: 26px 36px 32px; max-width: 1180px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .page-head h2 { margin: 0; }

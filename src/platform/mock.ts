@@ -52,7 +52,9 @@
 // voice-sources-talk (the voice page with two rows added from conversations),
 // articles-queued (one writing, two waiting),
 // articles-queue-failed (one written, one not written, one waiting, and the
-// whole thing stopped). Add `&lang=en` to force English.
+// whole thing stopped), profiles-menu (two profiles, the account menu open),
+// profiles-create (two profiles, the new-profile name form open). Any scene
+// whose name contains "profiles" has a second profile. Add `&lang=en` to force English.
 // `&delay=<ms>` slows every read (the lists, one article, one voice), so the
 // loading rules can be watched: under 300 ms nothing is said at all.
 

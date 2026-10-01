@@ -36,7 +36,7 @@ export const ja: Record<MessageKey, string> = {
   "action.signIn": "Google でサインイン",
   "action.signOut": "サインアウト",
   "account.menu": "アカウント",
-  "profile.label": "プロフィール",
+  "account.menuWithProfile": "アカウント（プロフィール: {name}）",
   "profile.loading": "プロフィールを読み込んでいます…",
   "profile.rename": "名前を変更…",
   "profile.create": "新しいプロフィール",
